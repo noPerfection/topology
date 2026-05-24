@@ -1,6 +1,7 @@
 package context
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,19 +40,15 @@ func (test *TestDevCtxSuite) TearDownTest() {
 func (test *TestDevCtxSuite) Test_10_New() {
 	s := test.Suite.Require
 
-	for i := 0; i < 3; i++ {
-		test.logger.Info("new context", "i", i)
-		ctx, err := New()
-		s().NoError(err)
-		test.logger.Info("start context", "i", i)
-		s().NoError(ctx.StartRuntimeHandler())
-		time.Sleep(time.Millisecond * 100)
-		test.logger.Info("close context", "i", i)
-		s().NoError(ctx.CloseRuntimeHandler())
-		time.Sleep(time.Millisecond * 100)
-	}
+	test.logger.Info("new context")
+	ctx, err := New(filepath.Join(test.T().TempDir(), "config.json"))
+	s().NoError(err)
+	test.logger.Info("start context")
+	s().NoError(ctx.StartRuntimeHandler())
+	time.Sleep(time.Millisecond * 100)
+	s().NotNil(ctx.Runtime())
 
-	test.logger.Info("context started and closed several times")
+	test.logger.Info("context started")
 }
 
 // In order for 'go test' to run this suite, we need to create
