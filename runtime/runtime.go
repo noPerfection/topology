@@ -75,9 +75,6 @@ func (rt *Runtime) SetService(service config.Service) error {
 	}
 
 	if service.Type == config.IndependentType {
-		if _, err := rt.config.GetByType(config.IndependentType); err != nil {
-			return fmt.Errorf("rt.config.GetByType('%s'): %w", config.IndependentType, err)
-		}
 		if err := rt.setIndependentService(service); err != nil {
 			return err
 		}
