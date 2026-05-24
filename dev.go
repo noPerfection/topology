@@ -16,7 +16,7 @@ import (
 
 // A Context handles the config of the contexts
 type Context struct {
-	Config              *config.SdsService
+	Config              config.SdsService
 	depHandler          *dep_handler.DepHandler
 	depHandlerManager   manager_client.Interface
 	proxyClient         proxy_client.Interface
@@ -36,7 +36,7 @@ func NewDev(configPath string) (*Context, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
 	}
-	ctx.SetConfig(&appConfig)
+	ctx.Config = appConfig
 
 	return ctx, nil
 }
@@ -67,17 +67,8 @@ func (ctx *Context) DepClient() dep_client.Interface {
 	return ctx.depClient
 }
 
-// SetConfig sets the application configuration.
-func (ctx *Context) SetConfig(appConfig *config.SdsService) {
-	ctx.Config = appConfig
-}
-
 // SetProxyClient sets the client that works with proxies
 func (ctx *Context) SetProxyClient(proxyClient proxy_client.Interface) error {
-	if ctx.Config == nil {
-		return fmt.Errorf("no configuration")
-	}
-
 	ctx.proxyClient = proxyClient
 
 	return nil
@@ -170,9 +161,6 @@ func (ctx *Context) StartProxyHandler() error {
 	if len(ctx.serviceId) == 0 || len(ctx.serviceUrl) == 0 {
 		return fmt.Errorf("service parameters are not set. call Context.SetService first")
 	}
-	if ctx.Config == nil {
-		return fmt.Errorf("no configuration")
-	}
 	if ctx.proxyHandlerManager != nil {
 		return fmt.Errorf("proxy handler already started")
 	}
@@ -186,7 +174,7 @@ func (ctx *Context) StartProxyHandler() error {
 		return fmt.Errorf("dep_client.New: %w", err)
 	}
 
-	proxyHandler := proxy_handler.New(ctx.Config, depClient)
+	proxyHandler := proxy_handler.New(&ctx.Config, depClient)
 	proxyHandlerConfig := proxy_handler.HandlerConfig(ctx.serviceId)
 	proxyHandler.SetConfig(proxyHandlerConfig)
 	err = proxyHandler.SetLogger(proxyLogger)

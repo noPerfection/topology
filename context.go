@@ -2,14 +2,12 @@ package context
 
 import (
 	"fmt"
-	config "github.com/sds-framework/config-lib"
 	"github.com/sds-framework/dev-lib/dep_client"
 	"github.com/sds-framework/dev-lib/proxy_client"
 	"github.com/sds-framework/os-lib/arg"
 )
 
 type Interface interface {
-	SetConfig(p *config.SdsService)
 	SetProxyClient(p proxy_client.Interface) error
 	ProxyClient() proxy_client.Interface
 	Type() ContextType
