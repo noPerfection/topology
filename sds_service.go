@@ -69,6 +69,54 @@ func (a *SdsService) GetService(name string) (Service, error) {
 	return Service{}, fmt.Errorf("service('%s') not found", name)
 }
 
+// GetByType returns the first service of the given type from the app configuration.
+// If the service type is invalid or no service is found, return an error.
+func (a *SdsService) GetByType(serviceType Type) (*Service, error) {
+	if err := ValidateServiceType(serviceType); err != nil {
+		return nil, fmt.Errorf("ValidateServiceType: %w", err)
+	}
+
+	for i := range a.Services {
+		if a.Services[i].Type == serviceType {
+			return &a.Services[i], nil
+		}
+	}
+
+	return nil, fmt.Errorf("service of '%s' type not found", serviceType)
+}
+
+// FilterByType returns all services of the given type from the app configuration.
+// If the service type is invalid or no services are found, return an error.
+func (a *SdsService) FilterByType(serviceType Type) ([]*Service, error) {
+	if err := ValidateServiceType(serviceType); err != nil {
+		return nil, fmt.Errorf("ValidateServiceType: %w", err)
+	}
+
+	services := make([]*Service, 0)
+	for i := range a.Services {
+		if a.Services[i].Type == serviceType {
+			services = append(services, &a.Services[i])
+		}
+	}
+
+	if len(services) == 0 {
+		return nil, fmt.Errorf("no services of '%s' type found", serviceType)
+	}
+	return services, nil
+}
+
+// CountByType returns the amount of services of the given type.
+func (a *SdsService) CountByType(serviceType Type) int {
+	count := 0
+	for i := range a.Services {
+		if a.Services[i].Type == serviceType {
+			count++
+		}
+	}
+
+	return count
+}
+
 // SetService sets a new service into the configuration.
 func (a *SdsService) SetService(s Service) error {
 	if a == nil {

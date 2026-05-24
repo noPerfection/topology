@@ -41,6 +41,94 @@ func TestGetService(t *testing.T) {
 	}
 }
 
+func TestGetByType(t *testing.T) {
+	a := SdsService{}
+	services := []Service{
+		*New("api", IndependentType),
+		*New("worker", IndependentType),
+		*New("proxy", ProxyType),
+	}
+	for _, s := range services {
+		if err := a.SetService(s); err != nil {
+			t.Fatalf("SetService: %v", err)
+		}
+	}
+
+	if _, err := a.GetByType(Type("invalid")); err == nil {
+		t.Fatal("GetByType with invalid type returned nil error")
+	}
+	if _, err := a.GetByType(ExtensionType); err == nil {
+		t.Fatal("GetByType with missing type returned nil error")
+	}
+
+	found, err := a.GetByType(IndependentType)
+	if err != nil {
+		t.Fatalf("GetByType independent: %v", err)
+	}
+	if found.Name != "api" {
+		t.Fatalf("Name = %q, want api", found.Name)
+	}
+}
+
+func TestFilterByType(t *testing.T) {
+	a := SdsService{}
+	services := []Service{
+		*New("api", IndependentType),
+		*New("worker", IndependentType),
+		*New("proxy", ProxyType),
+	}
+	for _, s := range services {
+		if err := a.SetService(s); err != nil {
+			t.Fatalf("SetService: %v", err)
+		}
+	}
+
+	if _, err := a.FilterByType(Type("invalid")); err == nil {
+		t.Fatal("FilterByType with invalid type returned nil error")
+	}
+	if _, err := a.FilterByType(ExtensionType); err == nil {
+		t.Fatal("FilterByType with missing type returned nil error")
+	}
+
+	found, err := a.FilterByType(IndependentType)
+	if err != nil {
+		t.Fatalf("FilterByType independent: %v", err)
+	}
+	if len(found) != 2 {
+		t.Fatalf("len(found) = %d, want 2", len(found))
+	}
+	if found[0].Name != "api" {
+		t.Fatalf("first service = %q, want api", found[0].Name)
+	}
+	if found[1].Name != "worker" {
+		t.Fatalf("second service = %q, want worker", found[1].Name)
+	}
+}
+
+func TestCountByType(t *testing.T) {
+	a := SdsService{}
+	services := []Service{
+		*New("api", IndependentType),
+		*New("worker", IndependentType),
+		*New("proxy", ProxyType),
+	}
+	for _, s := range services {
+		if err := a.SetService(s); err != nil {
+			t.Fatalf("SetService: %v", err)
+		}
+	}
+
+	if count := a.CountByType(IndependentType); count != 2 {
+		t.Fatalf("CountByType independent = %d, want 2", count)
+	}
+	if count := a.CountByType(ExtensionType); count != 0 {
+		t.Fatalf("CountByType extension = %d, want 0", count)
+	}
+	if count := a.CountByType(Type("invalid")); count != 0 {
+		t.Fatalf("CountByType invalid = %d, want 0", count)
+	}
+}
+
 func TestSetService(t *testing.T) {
 	a := SdsService{}
 	first := New("api", IndependentType)
