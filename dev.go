@@ -8,23 +8,15 @@ import (
 	"github.com/sds-framework/dev-lib/dep_client"
 	"github.com/sds-framework/dev-lib/dep_handler"
 	"github.com/sds-framework/dev-lib/dep_manager"
-	"github.com/sds-framework/dev-lib/proxy_client"
-	"github.com/sds-framework/dev-lib/proxy_handler"
 	"github.com/sds-framework/handler-lib/manager_client"
-	"github.com/sds-framework/log-lib"
 )
 
 // A Context handles the config of the contexts
 type Context struct {
-	Config              config.SdsService
-	depHandler          *dep_handler.DepHandler
-	depHandlerManager   manager_client.Interface
-	proxyClient         proxy_client.Interface
-	proxyHandler        *proxy_handler.ProxyHandler
-	proxyHandlerManager manager_client.Interface
-	serviceId           string
-	serviceUrl          string
-	depClient           *dep_client.Client
+	Config            config.SdsService
+	depHandler        *dep_handler.DepHandler
+	depHandlerManager manager_client.Interface
+	depClient         *dep_client.Client
 }
 
 // NewDev creates Developer context.
@@ -42,15 +34,11 @@ func NewDev(configPath string) (*Context, error) {
 }
 
 func (ctx *Context) IsRunning() bool {
-	return ctx.depHandlerManager != nil && ctx.proxyHandlerManager != nil
+	return ctx.depHandlerManager != nil
 }
 
 func (ctx *Context) IsDepManagerRunning() bool {
 	return ctx.depHandlerManager != nil
-}
-
-func (ctx *Context) IsProxyHandlerRunning() bool {
-	return ctx.proxyHandlerManager != nil
 }
 
 func (ctx *Context) SetDepClient(dc dep_client.Interface) error {
@@ -67,34 +55,13 @@ func (ctx *Context) DepClient() dep_client.Interface {
 	return ctx.depClient
 }
 
-// SetProxyClient sets the client that works with proxies
-func (ctx *Context) SetProxyClient(proxyClient proxy_client.Interface) error {
-	ctx.proxyClient = proxyClient
-
-	return nil
-}
-
-// ProxyClient returns the client that works with proxies
-func (ctx *Context) ProxyClient() proxy_client.Interface {
-	return ctx.proxyClient
-}
-
 // Type returns the context type. Useful to identify contexts in the generic functions.
 func (ctx *Context) Type() ContextType {
 	return DevContext
 }
 
-// Close the dep and proxy handlers. The dep manager client is not closed.
+// Close the dep handler. The dep manager client is not closed.
 func (ctx *Context) Close() error {
-	if ctx.proxyHandlerManager != nil {
-		if ctx.proxyHandlerManager != nil {
-			if err := ctx.proxyHandlerManager.Close(); err != nil {
-				return fmt.Errorf("ctx.proxyHandlerManager.Close: %w", err)
-			}
-		}
-		ctx.proxyHandlerManager = nil
-	}
-
 	if ctx.depHandlerManager != nil {
 		if err := ctx.depHandlerManager.Close(); err != nil {
 			return fmt.Errorf("ctx.depHandlerManager.Close: %w", err)
@@ -103,12 +70,6 @@ func (ctx *Context) Close() error {
 	}
 
 	return nil
-}
-
-// SetService sets the service id and url for which this context belongs too.
-func (ctx *Context) SetService(id string, url string) {
-	ctx.serviceId = id
-	ctx.serviceUrl = url
 }
 
 // StartDepManager starts the dependency manager
@@ -151,54 +112,6 @@ func (ctx *Context) StartDepManager() error {
 	err = ctx.SetDepClient(depClient)
 	if err != nil {
 		return fmt.Errorf("ctx.SetDepClient: %w", err)
-	}
-
-	return nil
-}
-
-// StartProxyHandler starts the proxy handler
-func (ctx *Context) StartProxyHandler() error {
-	if len(ctx.serviceId) == 0 || len(ctx.serviceUrl) == 0 {
-		return fmt.Errorf("service parameters are not set. call Context.SetService first")
-	}
-	if ctx.proxyHandlerManager != nil {
-		return fmt.Errorf("proxy handler already started")
-	}
-	proxyLogger, err := log.New("proxy-handler", true)
-	if err != nil {
-		return fmt.Errorf("log.New('proxy-handler'): %w", err)
-	}
-
-	depClient, err := dep_client.New()
-	if err != nil {
-		return fmt.Errorf("dep_client.New: %w", err)
-	}
-
-	proxyHandler := proxy_handler.New(&ctx.Config, depClient)
-	proxyHandlerConfig := proxy_handler.HandlerConfig(ctx.serviceId)
-	proxyHandler.SetConfig(proxyHandlerConfig)
-	err = proxyHandler.SetLogger(proxyLogger)
-	if err != nil {
-		return fmt.Errorf("proxyHandler.SetLogger: %w", err)
-	}
-	proxyHandler.SetServiceId(ctx.serviceId)
-	err = proxyHandler.Start()
-	if err != nil {
-		return fmt.Errorf("proxyHandler.Start: %w", err)
-	}
-	ctx.proxyHandler = proxyHandler
-
-	ctx.proxyHandlerManager, err = manager_client.New(proxyHandlerConfig)
-	if err != nil {
-		return fmt.Errorf("manager_client.New('proxyHandlerConfig'): %w", err)
-	}
-	proxyClient, err := proxy_client.New(ctx.serviceId)
-	if err != nil {
-		return fmt.Errorf("proxy_client.New('%s'): %w", ctx.serviceId, err)
-	}
-	err = ctx.SetProxyClient(proxyClient)
-	if err != nil {
-		return fmt.Errorf("ctx.SetProxyClient: %w", err)
 	}
 
 	return nil

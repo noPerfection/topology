@@ -3,21 +3,15 @@ package context
 import (
 	"fmt"
 	"github.com/sds-framework/dev-lib/dep_client"
-	"github.com/sds-framework/dev-lib/proxy_client"
 	"github.com/sds-framework/os-lib/arg"
 )
 
 type Interface interface {
-	SetProxyClient(p proxy_client.Interface) error
-	ProxyClient() proxy_client.Interface
 	Type() ContextType
 	StartDepManager() error
-	StartProxyHandler() error
-	Close() error // Close the dep and proxy handlers. The dep manager client is not closed.
+	Close() error // Close the dep handler. The dep manager client is not closed.
 	IsRunning() bool
 	IsDepManagerRunning() bool
-	IsProxyHandlerRunning() bool
-	SetService(string, string) // SetService sets the service parameters
 	SetDepClient(p dep_client.Interface) error
 	DepClient() dep_client.Interface
 }

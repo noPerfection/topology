@@ -10,6 +10,3 @@
 [submodule "_test_services/with-error"]
 	path = _test_services/with-error
 	url = https://github.com/sds-framework/test-manager.git
-[submodule "_test_services/proxy"]
-	path = _test_services/proxy
-	url = https://github.com/sds-framework/test-manager.git
