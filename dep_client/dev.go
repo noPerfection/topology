@@ -24,7 +24,6 @@ type Interface interface {
 	CloseDep(depClient *clientConfig.Client) error
 	Uninstall(url string, localSrc string, localBin string) error
 	Run(url string, id string, parent *clientConfig.Client, localBin string) error
-	Install(url string, localSrc string) error
 	Running(depClient *clientConfig.Client) (bool, error)
 	Installed(url string, localBin string) (bool, error)
 }
@@ -122,28 +121,6 @@ func (c *Client) Run(url string, id string, parent *clientConfig.Client, localBi
 	reply, err := c.socket.Request(&req)
 	if err != nil {
 		return fmt.Errorf("socket.Submit('%s'): %w", dep_handler.RunDep, err)
-	}
-
-	if !reply.IsOK() {
-		return fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
-	}
-
-	return nil
-}
-
-// Install the dependency from the source code. It compiles it.
-func (c *Client) Install(url, localSrc string) error {
-	req := message.Request{
-		Command:    dep_handler.InstallDep,
-		Parameters: key_value.New().Set("url", url),
-	}
-	if len(localSrc) > 0 {
-		req.Parameters.Set("local_src", localSrc)
-	}
-
-	reply, err := c.socket.Request(&req)
-	if err != nil {
-		return fmt.Errorf("socket.Submit('%s'): %w", dep_handler.InstallDep, err)
 	}
 
 	if !reply.IsOK() {

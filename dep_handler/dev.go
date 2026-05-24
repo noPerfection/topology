@@ -18,7 +18,6 @@ const (
 	Category     = "dep_handler"   // handler category
 	DepInstalled = "dep-installed" // the command to check is dependency installed
 	DepRunning   = "dep-running"   // the command to check is dependency running
-	InstallDep   = "install-dep"   // the command to install the dependency
 	RunDep       = "run-dep"       // the command to run the dependency
 	UninstallDep = "uninstall-dep" // the command to remove the dependency binary. if possible, then remove the source code as well.
 	CloseDep     = "close-dep"     // the command to stop the running dependency
@@ -27,7 +26,6 @@ const (
 type DepHandler struct {
 	handler base.Interface
 	manager dep_manager.Interface
-	logger  *log.Logger
 }
 
 // ServiceConfig returns the socket configuration of the handler
@@ -53,7 +51,6 @@ func New(manager dep_manager.Interface) (*DepHandler, error) {
 	return &DepHandler{
 		manager: manager,
 		handler: handler,
-		logger:  logger,
 	}, nil
 }
 
@@ -108,45 +105,6 @@ func (h *DepHandler) onDepRunning(req message.RequestInterface) message.ReplyInt
 
 	params := key_value.New().Set("running", running)
 	return req.Ok(params)
-}
-
-// onInstallDep installs the dependency. if it comes with the source code, then build that as well.
-//
-// Requires:
-//
-//   - 'url' string type
-//
-//   - 'branch' string type, optionally
-//
-//   - 'local_src' string type, optionally
-//
-//     returns nothing.
-//
-// todo create a publisher that publishes the result of the installation, so user won't wait until installation.
-func (h *DepHandler) onInstallDep(req message.RequestInterface) message.ReplyInterface {
-	url, err := req.RouteParameters().StringValue("url")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.StringValue('url'): %v", err))
-	}
-
-	optionalBranch, _ := req.RouteParameters().StringValue("branch")
-	optionalLocalSrc, _ := req.RouteParameters().StringValue("local_src")
-
-	dep, err := dep_manager.NewDep(url, optionalLocalSrc, "")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("dep_manager.NewDep('%s', '%s', ''): %v", url, optionalLocalSrc, err))
-	}
-	h.manager.Lint(dep)
-	if len(optionalBranch) > 0 {
-		dep.SetBranch(optionalBranch)
-	}
-
-	err = h.manager.Install(dep, h.logger)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("h.manager.Install: %v", err))
-	}
-
-	return req.Ok(key_value.New())
 }
 
 // onRunDep runs the dependency.
@@ -266,9 +224,6 @@ func (h *DepHandler) Start() error {
 	}
 	if err := h.handler.Route(DepRunning, h.onDepRunning); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", DepRunning, err)
-	}
-	if err := h.handler.Route(InstallDep, h.onInstallDep); err != nil {
-		return fmt.Errorf("h.handler.Route('%s'): %v", InstallDep, err)
 	}
 	if err := h.handler.Route(RunDep, h.onRunDep); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", RunDep, err)

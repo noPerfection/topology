@@ -99,15 +99,10 @@ func (test *TestDepHandlerSuite) TearDownTest() {
 	time.Sleep(time.Millisecond * 100)
 }
 
-// Test_10_Install checks InstallDep and DepInstalled
-// This is the first part of Install.
-// The second part of Install is building.
-//
-// Tests DepManager.downloadSrc and srcExist.
-func (test *TestDepHandlerSuite) Test_10_Install() {
+// Test_10_Installed checks DepInstalled.
+func (test *TestDepHandlerSuite) Test_10_Installed() {
 	s := test.Suite.Require
 
-	// installation must fail since nothing installed
 	req := message.Request{
 		Command:    DepInstalled,
 		Parameters: key_value.New().Set("url", test.url),
@@ -118,35 +113,12 @@ func (test *TestDepHandlerSuite) Test_10_Install() {
 	res, err := rep.ReplyParameters().BoolValue("installed")
 	s().NoError(err)
 	s().False(res)
-
-	// There should be a source code
-	installReq := message.Request{
-		Command:    InstallDep,
-		Parameters: key_value.New().Set("url", test.url),
-	}
-	rep, err = test.client.Request(&installReq)
-	s().NoError(err)
-	s().True(rep.IsOK())
-
-	// wait a bit until its installed
-	time.Sleep(time.Millisecond * 100)
-
-	//
-	// Testing the installed after installation
-	//
-	rep, err = test.client.Request(&req)
-	s().NoError(err)
-	s().True(rep.IsOK())
-	res, err = rep.ReplyParameters().BoolValue("installed")
-	s().NoError(err)
-	s().True(res)
 }
 
-// Test_11_Uninstall deletes the binary and source code installed at Test_11_Install
+// Test_11_Uninstall deletes the dependency binary and source code when present.
 func (test *TestDepHandlerSuite) Test_11_Uninstall() {
 	s := test.Suite.Require
 
-	// The binary must be installed to uninstall
 	req := message.Request{
 		Command:    DepInstalled,
 		Parameters: key_value.New().Set("url", test.url),
@@ -156,7 +128,7 @@ func (test *TestDepHandlerSuite) Test_11_Uninstall() {
 	s().True(rep.IsOK())
 	res, err := rep.ReplyParameters().BoolValue("installed")
 	s().NoError(err)
-	s().True(res)
+	s().False(res)
 
 	// Uninstall
 	uninstallReq := message.Request{
@@ -194,15 +166,6 @@ func (test *TestDepHandlerSuite) Test_11_Uninstall() {
 //	src, err := source.New(test.url)
 //	s().NoError(err)
 //	src.SetBranch("server") // the sample server is written in this branch.
-//
-//	// First, install the dependency
-//	installReq := message.Request{
-//		Command:    InstallDep,
-//		Parameters: key_value.New().Set("src", src),
-//	}
-//	rep, err := test.client.Request(&installReq)
-//	s().NoError(err)
-//	s().True(rep.IsOK())
 //
 //	// Let's run it
 //	runReq := message.Request{

@@ -94,42 +94,22 @@ func (test *TestDepClientSuite) TearDownTest() {
 	time.Sleep(time.Millisecond * 100)
 }
 
-// Test_10_Install checks InstallDep and DepInstalled
-// This is the first part of Install.
-// The second part of Install is building.
-//
-// Tests DepManager.downloadSrc and srcExist.
-func (test *TestDepClientSuite) Test_10_Install() {
+// Test_10_Installed checks DepInstalled.
+func (test *TestDepClientSuite) Test_10_Installed() {
 	s := test.Suite.Require
 
-	// installation must fail since nothing installed
 	installed, err := test.client.Installed(test.url, "")
 	s().NoError(err)
 	s().False(installed)
-
-	// There should be a source code
-	err = test.client.Install(test.url, "")
-	s().NoError(err)
-
-	// wait a bit until its installed
-	time.Sleep(time.Millisecond * 100)
-
-	//
-	// Testing the installed after installation
-	//
-	installed, err = test.client.Installed(test.url, "")
-	s().NoError(err)
-	s().True(installed)
 }
 
-// Test_11_Uninstall deletes the binary and source code installed at Test_11_Install
+// Test_11_Uninstall deletes the dependency binary and source code when present.
 func (test *TestDepClientSuite) Test_11_Uninstall() {
 	s := test.Suite.Require
 
-	// The binary must be installed to uninstall
 	installed, err := test.client.Installed(test.url, "")
 	s().NoError(err)
-	s().True(installed)
+	s().False(installed)
 
 	// Uninstall
 	err = test.client.Uninstall(test.url, "", "")
@@ -158,10 +138,6 @@ func (test *TestDepClientSuite) Test_11_Uninstall() {
 //	src, err := source.New(test.url)
 //	s().NoError(err)
 //	src.SetBranch("server") // the sample server is written in this branch.
-//
-//	// First, install the dependency
-//	err = test.client.Install(src)
-//	s().NoError(err)
 //
 //	// Let's run the dependency
 //	test.logger.Info("request to run the dependency", "srcUrl", src.Url, "id", test.id)

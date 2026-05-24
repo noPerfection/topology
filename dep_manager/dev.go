@@ -219,52 +219,6 @@ func (manager *DepManager) Installed(dep *Dep) bool {
 	return exist
 }
 
-// Install method builds the binary from the source code.
-// The binary exists, then its over-written.
-// The Dep binary must be manageable.
-// If the Dep source code is manageable, then missing source code is downloaded as well.
-//
-// Returns an error in two cases:
-//   - If the dependency binary is not manageable by the DepManager.
-//   - If no source code was given, and source code is not manageable by the DepManager.
-func (manager *DepManager) Install(dep *Dep, parent *log.Logger) error {
-	if manager == nil || dep == nil || parent == nil {
-		return fmt.Errorf("nil")
-	}
-
-	if !dep.IsLinted() {
-		return fmt.Errorf("depManager is not linted. Call DepManager.Lint(Dep) first")
-	}
-
-	if !dep.manageableBin {
-		return fmt.Errorf("can not install as the binary is not manageable by the DepManager")
-	}
-
-	logger := parent.Child("install", "srcUrl", dep.Url)
-	// check for a source exist
-	srcExist, err := manager.srcExist(dep)
-	if err != nil {
-		return fmt.Errorf("dep_manager.srcExist(%s): %w", dep.Url, err)
-	}
-
-	if !srcExist {
-		if !dep.manageableSrc {
-			return fmt.Errorf("no source code at '%s' path. and it's not manageable by DepManager", dep.srcPath)
-		}
-		err = manager.downloadSrc(dep, logger)
-		if err != nil {
-			return fmt.Errorf("downloadSrc: %w", err)
-		}
-	}
-
-	err = manager.build(dep, logger)
-	if err != nil {
-		return fmt.Errorf("build: %w", err)
-	}
-
-	return nil
-}
-
 // The srcExist checks is the source code exist or not.
 // Since it is a private method, it assumes that depManager was linted.
 func (manager *DepManager) srcExist(dep *Dep) (bool, error) {
@@ -369,7 +323,7 @@ func (manager *DepManager) Run(dep *Dep, id string, optionalParent ...*clientCon
 
 	ok = manager.Installed(dep)
 	if !ok {
-		return fmt.Errorf("no binary. Call DepManager.Install(Dep, log.Logger) first")
+		return fmt.Errorf("no binary")
 	}
 
 	configFlag := fmt.Sprintf("--url=%s", dep.Url)

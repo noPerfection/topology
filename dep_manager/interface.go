@@ -2,7 +2,6 @@ package dep_manager
 
 import (
 	clientConfig "github.com/sds-framework/client-lib/config"
-	"github.com/sds-framework/log-lib"
 )
 
 // The Interface of the dependency manager.
@@ -12,9 +11,6 @@ import (
 type Interface interface {
 	// Installed checks is the service binary exists
 	Installed(dep *Dep) bool
-
-	// Install the dependency from the source code. It compiles it.
-	Install(dep *Dep, logger *log.Logger) error
 
 	// Run the dependency with the given id and parent.
 	Run(dep *Dep, id string, optionalParent ...*clientConfig.Client) error

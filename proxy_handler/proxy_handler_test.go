@@ -23,7 +23,6 @@ import (
 type MockedDepManager struct {
 	installedFail bool
 	installed     bool
-	installFail   bool
 	runFail       bool
 	runningFail   bool
 	running       bool
@@ -48,13 +47,6 @@ func (depClient *MockedDepManager) Uninstall(string, string, string) error {
 func (depClient *MockedDepManager) Run(string, string, *clientConfig.Client, string) error {
 	if depClient.runFail {
 		return fmt.Errorf("run fail")
-	}
-	return nil
-}
-
-func (depClient *MockedDepManager) Install(string, string) error {
-	if depClient.installFail {
-		return fmt.Errorf("install fail")
 	}
 	return nil
 }
@@ -427,23 +419,9 @@ func (test *TestProxyHandlerSuite) Test_19_ProxyHandler_onStartProxies() {
 	// the proxy1 is the first, not the last. so it must return an empty result
 	//
 
-	// first it tests without a config a set in the services
-	// first make sure that installation fails
-	mockedDepManager.installedFail = true
-	reply := handler.onStartLastProxies(req)
-	s().False(reply.IsOK())
-
-	// then, make sure that install fail
-	mockedDepManager.installedFail = false
-	mockedDepManager.installed = false
-	mockedDepManager.installFail = true
-	reply = handler.onStartLastProxies(req)
-	s().False(reply.IsOK())
-
-	// then make sure that run fails
-	mockedDepManager.installFail = false
+	// first make sure that run fails
 	mockedDepManager.runFail = true
-	reply = handler.onStartLastProxies(req)
+	reply := handler.onStartLastProxies(req)
 	s().False(reply.IsOK())
 
 	// finally, the code must be working

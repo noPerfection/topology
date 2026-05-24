@@ -284,18 +284,6 @@ func (proxyHandler *ProxyHandler) onStartLastProxies(req message.RequestInterfac
 	for i := range proxies {
 		proxy := proxies[i]
 
-		installed, err := depManager.Installed(proxy.Url, proxy.LocalBin)
-		if err != nil {
-			return req.Fail(fmt.Sprintf("depManager.Installed('%s'): %v", proxy.Url, err))
-		}
-
-		if !installed {
-			err = depManager.Install(proxy.Url, proxy.LocalSrc)
-			if err != nil {
-				return req.Fail(fmt.Sprintf("depManager.Install: %v", err))
-			}
-		}
-
 		if err := depManager.Run(proxy.Url, proxy.Id, nil, proxy.LocalBin); err != nil {
 			return req.Fail(fmt.Sprintf("depManager.Run('%s', '%s'): %v", proxy.Url, proxy.Id, err))
 		}
