@@ -22,7 +22,6 @@ type Interface interface {
 	Attempt(attempt uint8)
 
 	CloseDep(depClient *clientConfig.Client) error
-	Uninstall(url string, localSrc string, localBin string) error
 	Run(url string, id string, parent *clientConfig.Client, localBin string) error
 	Running(depClient *clientConfig.Client) (bool, error)
 }
@@ -78,27 +77,6 @@ func (c *Client) CloseDep(depClient *clientConfig.Client) error {
 
 	if !reply.IsOK() {
 		return fmt.Errorf("c.socket.Requeset(request='%v'): reply failed with: %s", req, reply.ErrorMessage())
-	}
-
-	return nil
-}
-
-// Uninstall the dependency.
-func (c *Client) Uninstall(url, localSrc, localBin string) error {
-	req := message.Request{
-		Command:    dep_handler.UninstallDep,
-		Parameters: key_value.New().Set("url", url),
-	}
-	if len(localSrc) > 0 {
-		req.Parameters.Set("local_src", localSrc)
-	}
-	if len(localBin) > 0 {
-		req.Parameters.Set("local_bin", localBin)
-	}
-
-	err := c.socket.Submit(&req)
-	if err != nil {
-		return fmt.Errorf("socket.Submit('%s'): %w", dep_handler.UninstallDep, err)
 	}
 
 	return nil

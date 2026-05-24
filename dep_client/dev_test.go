@@ -94,18 +94,6 @@ func (test *TestDepClientSuite) TearDownTest() {
 	time.Sleep(time.Millisecond * 100)
 }
 
-// Test_11_Uninstall deletes the dependency binary and source code when present.
-func (test *TestDepClientSuite) Test_11_Uninstall() {
-	s := test.Suite.Require
-
-	// Uninstall
-	err := test.client.Uninstall(test.url, "", "")
-	s().NoError(err)
-
-	// wait a bit for effect
-	time.Sleep(time.Millisecond * 100)
-}
-
 //// Test_13_Run tests DepRunning, RunDep and CloseDep commands.
 //func (test *TestDepClientSuite) Test_13_Run() {
 //	s := test.Suite.Require
@@ -152,11 +140,6 @@ func (test *TestDepClientSuite) Test_11_Uninstall() {
 //	s().NoError(err)
 //	s().False(running)
 //
-//	test.logger.Info("uninstall the dependency")
-//
-//	// Clean out the installed files
-//	err = test.client.Uninstall(src)
-//	s().NoError(err)
 //}
 
 // In order for 'go test' to run this suite, we need to create

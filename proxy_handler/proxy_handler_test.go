@@ -38,10 +38,6 @@ func (depClient *MockedDepManager) CloseDep(*clientConfig.Client) error {
 	return nil
 }
 
-func (depClient *MockedDepManager) Uninstall(string, string, string) error {
-	return nil
-}
-
 func (depClient *MockedDepManager) Run(string, string, *clientConfig.Client, string) error {
 	if depClient.runFail {
 		return fmt.Errorf("run fail")

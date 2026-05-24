@@ -11,11 +11,6 @@ import (
 type Interface interface {
 	// Run the dependency with the given id and parent.
 	Run(dep *Dep, id string, optionalParent ...*clientConfig.Client) error
-	// Uninstall the dependency.
-	Uninstall(dep *Dep) error
-
-	// Lint sets the flags in the Dep if this depManager is managed by the DepManager
-	Lint(*Dep)
 
 	// Running checks is the service running or not
 	Running(*clientConfig.Client) (bool, error)

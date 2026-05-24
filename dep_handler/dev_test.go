@@ -7,8 +7,6 @@ import (
 
 	"github.com/sds-framework/client-lib"
 	clientConfig "github.com/sds-framework/client-lib/config"
-	"github.com/sds-framework/datatype-lib/data_type/key_value"
-	"github.com/sds-framework/datatype-lib/message"
 	"github.com/sds-framework/dev-lib/dep_manager"
 	handlerConfig "github.com/sds-framework/handler-lib/config"
 	"github.com/sds-framework/handler-lib/manager_client"
@@ -99,23 +97,6 @@ func (test *TestDepHandlerSuite) TearDownTest() {
 	time.Sleep(time.Millisecond * 100)
 }
 
-// Test_11_Uninstall deletes the dependency binary and source code when present.
-func (test *TestDepHandlerSuite) Test_11_Uninstall() {
-	s := test.Suite.Require
-
-	// Uninstall
-	uninstallReq := message.Request{
-		Command:    UninstallDep,
-		Parameters: key_value.New().Set("url", test.url),
-	}
-	rep, err := test.client.Request(&uninstallReq)
-	s().NoError(err)
-	s().True(rep.IsOK())
-
-	// wait a bit for effect
-	time.Sleep(time.Millisecond * 100)
-}
-
 //
 //// Test_13_Start tests DepRunning, RunDep and CloseDep commands.
 //func (test *TestDepHandlerSuite) Test_13_Start() {
@@ -181,11 +162,6 @@ func (test *TestDepHandlerSuite) Test_11_Uninstall() {
 //	s().NoError(err)
 //	s().False(result)
 //
-//	// Clean out the installed files
-//	installReq.Command = UninstallDep
-//	rep, err = test.client.Request(&installReq)
-//	s().NoError(err)
-//	s().True(rep.IsOK())
 //}
 
 // In order for 'go test' to run this suite, we need to create

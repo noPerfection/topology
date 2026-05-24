@@ -3,15 +3,9 @@ package dep_manager
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/sds-framework/client-lib"
 	clientConfig "github.com/sds-framework/client-lib/config"
 	"github.com/sds-framework/datatype-lib/data_type/key_value"
@@ -28,12 +22,9 @@ const DefaultTimeout = time.Second
 type Dep struct {
 	*source.Src
 
-	srcPath       string
-	binPath       string
-	manageableSrc bool
-	manageableBin bool // if a binary was set by the user, then it's not updatable or deletable
-	cmd           *exec.Cmd
-	done          chan error // signalizes when the service finished
+	binPath string
+	cmd     *exec.Cmd
+	done    chan error // signalizes when the service finished
 }
 
 // A DepManager Manager builds, runs or stops the dependency services
@@ -86,62 +77,17 @@ func New() *DepManager {
 	}
 }
 
-// IsLinted returns true if the Dep was linted with the DepManager.
-func (dep *Dep) IsLinted() bool {
-	// srcPath is set by Dep.Lint() method only.
-	return len(dep.binPath) > 0 && len(dep.srcPath) > 0
-}
-
 func (dep *Dep) copy() *Dep {
 	// no check against errors, as the Dep must have the valid source.
 	src, _ := source.New(dep.Url, dep.LocalUrl())
 
 	instance := &Dep{
-		Src:           src,
-		srcPath:       dep.srcPath,
-		binPath:       dep.binPath,
-		manageableBin: dep.manageableBin,
-		manageableSrc: dep.manageableSrc,
-		done:          make(chan error, 1),
+		Src:     src,
+		binPath: dep.binPath,
+		done:    make(chan error, 1),
 	}
 
 	return instance
-}
-
-// Lint sets the fields of Dep as for caching.
-// The two primary flags are whether the Dep is managed by DepManager or not.
-//
-// The Dep source code is manageable if it doesn't have Dep.LocalUrl().
-// The Dep binary is manageable if it binary path is not within the DepManager.Bin directory
-func (manager *DepManager) Lint(dep *Dep) {
-	if manager == nil || dep == nil {
-		return
-	}
-	if dep.IsLinted() {
-		return
-	}
-
-	// local bin was given
-	if len(dep.binPath) > 0 {
-		dir, _ := path.DirAndFileName(dep.binPath)
-		i := strings.Index(dir, manager.Bin)
-		dep.manageableBin = i == 0
-	} else {
-		dep.binPath = path.BinPath(manager.Bin, urlToFileName(dep.Url))
-		dep.manageableBin = true
-	}
-
-	// local source code was given
-	if len(dep.LocalUrl()) > 0 {
-		dep.srcPath = dep.LocalUrl()
-
-		dir, _ := path.DirAndFileName(dep.srcPath)
-		i := strings.Index(dir, manager.Src)
-		dep.manageableSrc = i == 0
-	} else {
-		dep.srcPath = filepath.Join(manager.Src, urlToFileName(dep.Url))
-		dep.manageableSrc = true
-	}
 }
 
 func (manager *DepManager) SetPaths(srcPath string, binPath string) error {
@@ -211,22 +157,12 @@ func (manager *DepManager) binExist(dep *Dep) bool {
 		return false
 	}
 
-	if !dep.IsLinted() {
+	if len(dep.binPath) == 0 {
 		return false
 	}
 
 	exist, _ := path.FileExist(dep.binPath)
 	return exist
-}
-
-// The srcExist checks is the source code exist or not.
-// Since it is a private method, it assumes that depManager was linted.
-func (manager *DepManager) srcExist(dep *Dep) (bool, error) {
-	exists, err := path.DirExist(dep.srcPath)
-	if err != nil {
-		return false, fmt.Errorf("path.DirExists('%s'): %w", dep.srcPath, err)
-	}
-	return exists, nil
 }
 
 // Running checks whether the given client running or not.
@@ -257,27 +193,6 @@ func (manager *DepManager) Running(c *clientConfig.Client) (bool, error) {
 	}
 
 	return true, nil
-}
-
-// The build the application from source code.
-// If the Dep is not manageable by DepManager, it returns an error.
-//
-// Since it's a private method, it assumes the depManager is linted, and its binary is manageable by DepManager.
-func (manager *DepManager) build(dep *Dep, logger *log.Logger) error {
-	err := cleanBuild(dep.srcPath, logger)
-	if err != nil {
-		return fmt.Errorf("cleanBuild(%s): %w", dep.srcPath, err)
-	}
-
-	cmd := exec.Command("go", "build", "-o", dep.binPath)
-	cmd.Stdout = logger.Child("build", "binUrl", dep.binPath)
-	cmd.Dir = dep.srcPath
-	cmd.Stderr = logger.Child("buildErr", "binUrl", dep.binPath)
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("cmd.Start: %w", err)
-	}
-	return nil
 }
 
 // OnStop returns a signal through the channel when the dependency spawned by the DepManager stops.
@@ -312,8 +227,8 @@ func (manager *DepManager) Run(dep *Dep, id string, optionalParent ...*clientCon
 		return fmt.Errorf("too many optional parameters, either no parameter or 1 parameter required")
 	}
 
-	if !dep.IsLinted() {
-		return fmt.Errorf("depManager is not linted. Call DepManager.Lint(Dep) first")
+	if len(dep.binPath) == 0 {
+		return fmt.Errorf("no binary")
 	}
 
 	_, ok := manager.runningDeps[id]
@@ -380,143 +295,4 @@ func (manager *DepManager) wait(id string) {
 		manager.runningDeps[id].done <- err
 		delete(manager.runningDeps, id)
 	}()
-}
-
-// downloadSrc gets the remote source code using Git.
-//
-// Since this is a private function, the callers must make sure that depManager is linted and no value is nil.
-//
-// The Dep may have a local src code.
-// This method doesn't check for that.
-// Therefore, if the Dep has a LocalUrl(), then don't call this method.
-func (manager *DepManager) downloadSrc(dep *Dep, logger *log.Logger) error {
-	if !dep.manageableSrc {
-		return fmt.Errorf("source is not manageable by the DepManager")
-	}
-
-	options := &git.CloneOptions{
-		URL:      dep.GitUrl,
-		Progress: logger.Child("download"),
-	}
-
-	if len(dep.Branch) > 0 {
-		options.ReferenceName = plumbing.NewBranchReferenceName(dep.Branch)
-	}
-
-	_, err := git.PlainClone(dep.srcPath, false, options)
-
-	if err != nil {
-		return fmt.Errorf("git.PlainClone --url %s --o %s: %w", dep.Url, dep.srcPath, err)
-	}
-
-	return nil
-}
-
-// The deleteSrc deletes the source code.
-// Since this method is private, it assumes that depManager is linted and manageable.
-func (manager *DepManager) deleteSrc(dep *Dep) error {
-	err := os.RemoveAll(dep.srcPath)
-	if err != nil {
-		return fmt.Errorf("os.RemoveAll('%s'): %s", dep.srcPath, err)
-	}
-
-	return nil
-}
-
-// deleteBin deletes the binary from the directory.
-// If there is no binary, it will throw an error.
-// If attempt to delete failed, it will throw an error.
-//
-// This method is private, so it assumes Dep is linted by the caller.
-func (manager *DepManager) deleteBin(dep *Dep) error {
-	if !dep.manageableBin {
-		return fmt.Errorf("depManager binary is not manageable by the DepManager")
-	}
-
-	if !manager.binExist(dep) {
-		return fmt.Errorf("depManager '%s' not installed", dep.Url)
-	}
-
-	if err := os.Remove(dep.binPath); err != nil {
-		return fmt.Errorf("os.Remove('%s'): %w", dep.binPath, err)
-	}
-
-	return nil
-}
-
-// Uninstall deletes the dependency source code, and its binary.
-// Trying to uninstall already running application will fail.
-//
-// Uninstall will omit if no binary or source code exists.
-// Uninstall won't take effect if depManager is not manageable.
-func (manager *DepManager) Uninstall(dep *Dep) error {
-	if manager == nil || dep == nil {
-		return fmt.Errorf("nil")
-	}
-
-	if !dep.IsLinted() {
-		return fmt.Errorf("depManager is not linted. Call DepManager.Lint(Dep) first")
-	}
-
-	if !dep.manageableBin && !dep.manageableSrc {
-		return nil
-	}
-
-	if dep.manageableSrc {
-		exist, err := manager.srcExist(dep)
-		if err != nil {
-			return fmt.Errorf("dep_manager.exist(%s): %w", dep.Url, err)
-		}
-
-		if exist {
-			err := manager.deleteSrc(dep)
-			if err != nil {
-				return fmt.Errorf("source.deleteSrc: %w", err)
-			}
-		}
-	}
-
-	if dep.manageableBin {
-		exist := manager.binExist(dep)
-		if exist {
-			err := manager.deleteBin(dep)
-			if err != nil {
-				return fmt.Errorf("source.deleteBin('%s'): %w", dep.Url, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// calls `go mod tidy`
-func cleanBuild(srcUrl string, logger *log.Logger) error {
-	cmd := exec.Command("go", "mod", "tidy")
-	cmd.Stdout = logger.Child("clean")
-	cmd.Dir = srcUrl
-	cmd.Stderr = logger.Child("cleanErr")
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("cmd.Start: %w", err)
-	}
-
-	return nil
-}
-
-// urlToFileName converts the given url to the file name. Simply it replaces the slashes with dots.
-//
-// Url returns the full url to connect to the orchestra.
-//
-// The orchestra url is defined from the main service's url.
-//
-// For example:
-//
-//	serviceUrl = "github.com/sds-framework/sample-service"
-//	contextUrl = "orchestra.github.com.ahmetson.sample-service"
-//
-// This controllerName is set as the handler's name in the config.
-// Then the handler package will generate an inproc:// url based on the handler name.
-func urlToFileName(url string) string {
-	str := strings.ReplaceAll(strings.ReplaceAll(url, "/", "."), "\\", ".")
-	return regexp.MustCompile(`[^a-zA-Z0-9-_.]+`).ReplaceAllString(str, "")
 }

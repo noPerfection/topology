@@ -15,11 +15,10 @@ import (
 )
 
 const (
-	Category     = "dep_handler"   // handler category
-	DepRunning   = "dep-running"   // the command to check is dependency running
-	RunDep       = "run-dep"       // the command to run the dependency
-	UninstallDep = "uninstall-dep" // the command to remove the dependency binary. if possible, then remove the source code as well.
-	CloseDep     = "close-dep"     // the command to stop the running dependency
+	Category   = "dep_handler" // handler category
+	DepRunning = "dep-running" // the command to check is dependency running
+	RunDep     = "run-dep"     // the command to run the dependency
+	CloseDep   = "close-dep"   // the command to stop the running dependency
 )
 
 type DepHandler struct {
@@ -120,45 +119,10 @@ func (h *DepHandler) onRunDep(req message.RequestInterface) message.ReplyInterfa
 	if err != nil {
 		return req.Fail(fmt.Sprintf("dep_manager.NewDep('%s', '', '%s'): %v", url, optionalLocalBin, err))
 	}
-	h.manager.Lint(dep)
 
 	err = h.manager.Run(dep, id, &parent)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.manager.Start(url: '%s', id: '%s'): %v", url, id, err))
-	}
-
-	return req.Ok(key_value.New())
-}
-
-// onUninstallDep uninstalls the dependency binary. if it comes with the source code, then deletes source code as well.
-//
-// Requires:
-//
-//   - 'url' string type.
-//   - 'local_src' string type, optionally.
-//   - 'local_bin' string type, optionally.
-//
-// returns nothing.
-//
-// todo creates a publisher that publishes the result of the installation, so user won't wait until installation.
-func (h *DepHandler) onUninstallDep(req message.RequestInterface) message.ReplyInterface {
-	url, err := req.RouteParameters().StringValue("url")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.StringValue('url'): %v", err))
-	}
-
-	localSrc, _ := req.RouteParameters().StringValue("local_src")
-	localBin, _ := req.RouteParameters().StringValue("local_bin")
-
-	dep, err := dep_manager.NewDep(url, localSrc, localBin)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("dep_manager.NewDep('%s', '%s', '%s'): %v", url, localSrc, localBin, err))
-	}
-	h.manager.Lint(dep)
-
-	err = h.manager.Uninstall(dep)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("h.manager.Uninstall: %v", err))
 	}
 
 	return req.Ok(key_value.New())
@@ -198,9 +162,6 @@ func (h *DepHandler) Start() error {
 	}
 	if err := h.handler.Route(RunDep, h.onRunDep); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", RunDep, err)
-	}
-	if err := h.handler.Route(UninstallDep, h.onUninstallDep); err != nil {
-		return fmt.Errorf("h.handler.Route('%s'): %v", UninstallDep, err)
 	}
 	if err := h.handler.Route(CloseDep, h.onCloseDep); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", CloseDep, err)
