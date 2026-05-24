@@ -3,14 +3,15 @@ package proxy_handler
 
 import (
 	"fmt"
-	configClient "github.com/ahmetson/config-lib/client"
-	"github.com/ahmetson/config-lib/service"
-	"github.com/ahmetson/datatype-lib/data_type/key_value"
-	"github.com/ahmetson/datatype-lib/message"
-	"github.com/ahmetson/dev-lib/dep_client"
-	"github.com/ahmetson/handler-lib/base"
-	handlerConfig "github.com/ahmetson/handler-lib/config"
 	"slices"
+
+	config "github.com/sds-framework/config-lib"
+	"github.com/sds-framework/datatype-lib/data_type/key_value"
+	"github.com/sds-framework/datatype-lib/message"
+	"github.com/sds-framework/dev-lib/dep_client"
+	service "github.com/sds-framework/dev-lib/proxy_config"
+	"github.com/sds-framework/handler-lib/base"
+	handlerConfig "github.com/sds-framework/handler-lib/config"
 )
 
 const (
@@ -35,7 +36,7 @@ type ProxyHandler struct {
 	proxyChains []*service.ProxyChain
 	proxyUnits  map[*service.Rule][]*service.Unit
 	depClient   dep_client.Interface
-	engine      configClient.Interface
+	Config      *config.SdsService
 	serviceId   string
 }
 
@@ -53,13 +54,13 @@ func HandlerConfig(serviceId string) *handlerConfig.Handler {
 }
 
 // New returns a proxy handler
-func New(engine configClient.Interface, depClient dep_client.Interface) *ProxyHandler {
+func New(appConfig *config.SdsService, depClient dep_client.Interface) *ProxyHandler {
 	newHandler := base.New()
 	return &ProxyHandler{
 		Handler:     newHandler,
 		proxyChains: make([]*service.ProxyChain, 0),
 		proxyUnits:  make(map[*service.Rule][]*service.Unit, 0),
-		engine:      engine,
+		Config:      appConfig,
 		depClient:   depClient,
 	}
 }
@@ -145,12 +146,7 @@ func (proxyHandler *ProxyHandler) onProxyChainByRule(req message.RequestInterfac
 			Destination: service.NewServiceDestination(), // service.NewServiceDestination returns empty rule
 		}
 	}
-	proxyChainKv, err := key_value.NewFromInterface(proxyChain)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("key_value.NewFromInterface('proxy_chain', rule='%v'): %v", rule, err))
-	}
-
-	params := key_value.New().Set("proxy_chain", proxyChainKv)
+	params := key_value.New().Set("proxy_chain", proxyChain)
 
 	return req.Ok(params)
 }
@@ -212,16 +208,7 @@ func (proxyHandler *ProxyHandler) onProxyChainsByLastId(req message.RequestInter
 		}
 	}
 
-	proxyChainKvs := make([]key_value.KeyValue, len(proxyChains))
-	for i := range proxyChains {
-		proxyChainKv, err := key_value.NewFromInterface(proxyChains[i])
-		if err != nil {
-			return req.Fail(fmt.Sprintf("key_value.NewFromInterface(proxyChains[%d]): %v", i, err))
-		}
-		proxyChainKvs[i] = proxyChainKv
-	}
-
-	params := key_value.New().Set("proxy_chains", proxyChainKvs)
+	params := key_value.New().Set("proxy_chains", proxyChains)
 
 	return req.Ok(params)
 }
@@ -243,7 +230,7 @@ func (proxyHandler *ProxyHandler) onUnits(req message.RequestInterface) message.
 		return req.Fail("the 'rule' parameter is not valid")
 	}
 
-	unitKvs := make([]key_value.KeyValue, 0)
+	units := make([]*service.Unit, 0)
 
 	for firstRule := range proxyHandler.proxyUnits {
 		if !service.IsEqualRule(firstRule, &rule) {
@@ -251,16 +238,12 @@ func (proxyHandler *ProxyHandler) onUnits(req message.RequestInterface) message.
 		}
 		for i := range proxyHandler.proxyUnits[firstRule] {
 			unit := proxyHandler.proxyUnits[firstRule][i]
-			unitKv, err := key_value.NewFromInterface(unit)
-			if err != nil {
-				return req.Fail(fmt.Sprintf("key_value.NewFromInterface(units[%d], rule='%v'): %v", i, rule, err))
-			}
-			unitKvs = append(unitKvs, unitKv)
+			units = append(units, unit)
 		}
 		break
 	}
 
-	params := key_value.New().Set("units", unitKvs)
+	params := key_value.New().Set("units", units)
 
 	return req.Ok(params)
 }
@@ -270,16 +253,7 @@ func (proxyHandler *ProxyHandler) onUnits(req message.RequestInterface) message.
 func (proxyHandler *ProxyHandler) onLastProxies(req message.RequestInterface) message.ReplyInterface {
 	proxies := service.LastProxies(proxyHandler.proxyChains)
 
-	proxyKvs := make([]key_value.KeyValue, len(proxies))
-	for i := range proxies {
-		kv, err := key_value.NewFromInterface(proxies[i])
-		if err != nil {
-			return req.Fail(fmt.Sprintf("key_value.NewFromInterface(proxies[%d]): %v", i, err))
-		}
-		proxyKvs[i] = kv
-	}
-
-	params := key_value.New().Set("proxies", proxyKvs)
+	params := key_value.New().Set("proxies", proxies)
 
 	return req.Ok(params)
 }
@@ -289,8 +263,8 @@ func (proxyHandler *ProxyHandler) onStartLastProxies(req message.RequestInterfac
 	if len(proxyHandler.serviceId) == 0 {
 		return req.Fail("serviceId not set. call ProxyHandler.SetServiceId first")
 	}
-	if proxyHandler.engine == nil {
-		return req.Fail("config engine is not set")
+	if proxyHandler.Config == nil {
+		return req.Fail("config is not set")
 	}
 	if proxyHandler.depClient == nil {
 		return req.Fail("dependency manager is not set")
@@ -303,38 +277,12 @@ func (proxyHandler *ProxyHandler) onStartLastProxies(req message.RequestInterfac
 		return req.Ok(key_value.New())
 	}
 
-	serviceConfig, err := proxyHandler.engine.Service(proxyHandler.serviceId)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("engine.Service('%s'): %v", proxyHandler.serviceId, err))
+	if _, err := proxyHandler.Config.GetService(proxyHandler.serviceId); err != nil {
+		return req.Fail(fmt.Sprintf("config.GetService('%s'): %v", proxyHandler.serviceId, err))
 	}
 
-	// todo make sure to run in concurrency to run multiple proxies on parallel
 	for i := range proxies {
 		proxy := proxies[i]
-
-		if serviceConfig.SourceExist(proxy.Id) {
-			proxySource := serviceConfig.SourceById(proxy.Id)
-			if proxySource == nil || proxySource.Manager == nil {
-				continue
-			}
-
-			running, err := depManager.Running(proxySource.Manager)
-			if err != nil {
-				return req.Fail(fmt.Sprintf("depManager.Running('%s'): %v", proxy.Id, err))
-			}
-
-			// todo make sure to update the client parameters with the rule units
-			// todo if it's running, then compare the parameters of the service and proxy for the changes
-			if running {
-				continue
-			}
-
-			if err := depManager.Run(proxy.Url, proxy.Id, serviceConfig.Manager, proxy.LocalBin); err != nil {
-				return req.Fail(fmt.Sprintf("depManager.Run('%s', '%s'): %v", proxy.Url, proxy.Id, err))
-			}
-
-			continue
-		}
 
 		installed, err := depManager.Installed(proxy.Url, proxy.LocalBin)
 		if err != nil {
@@ -348,7 +296,7 @@ func (proxyHandler *ProxyHandler) onStartLastProxies(req message.RequestInterfac
 			}
 		}
 
-		if err := depManager.Run(proxy.Url, proxy.Id, serviceConfig.Manager, proxy.LocalBin); err != nil {
+		if err := depManager.Run(proxy.Url, proxy.Id, nil, proxy.LocalBin); err != nil {
 			return req.Fail(fmt.Sprintf("depManager.Run('%s', '%s'): %v", proxy.Url, proxy.Id, err))
 		}
 	}
@@ -361,16 +309,7 @@ func (proxyHandler *ProxyHandler) onProxyChains(req message.RequestInterface) me
 	proxyChains := make([]*service.ProxyChain, 0, len(proxyHandler.proxyChains))
 	proxyChains = append(proxyChains, proxyHandler.proxyChains...)
 
-	proxyChainKvs := make([]key_value.KeyValue, len(proxyChains))
-	for i := range proxyChains {
-		proxyChainKv, err := key_value.NewFromInterface(proxyChains[i])
-		if err != nil {
-			return req.Fail(fmt.Sprintf("key_value.NewFromInterface(proxyChains[%d]): %v", i, err))
-		}
-		proxyChainKvs[i] = proxyChainKv
-	}
-
-	params := key_value.New().Set("proxy_chains", proxyChainKvs)
+	params := key_value.New().Set("proxy_chains", proxyChains)
 
 	return req.Ok(params)
 }
@@ -420,42 +359,11 @@ func (proxyHandler *ProxyHandler) closeProxies() error {
 	if len(proxyHandler.serviceId) == 0 {
 		return fmt.Errorf("serviceId not set. call ProxyHandler.SetServiceId first")
 	}
-	if proxyHandler.engine == nil {
+	if proxyHandler.Config == nil {
 		return nil
 	}
 	if proxyHandler.depClient == nil {
 		return nil
-	}
-
-	serviceConfig, err := proxyHandler.engine.Service(proxyHandler.serviceId)
-	if err != nil {
-		// todo when the errors implemented make sure that error is NoStart
-		//return fmt.Errorf("engine.Service('%s'): %w", proxyHandler.serviceId, err)
-		return nil
-	}
-
-	if len(serviceConfig.Sources) == 0 {
-		return nil
-	}
-	depManager := proxyHandler.depClient
-
-	for i := range serviceConfig.Sources {
-		sourceRule := serviceConfig.Sources[i]
-
-		if len(sourceRule.Proxies) == 0 {
-			continue
-		}
-		for j := range sourceRule.Proxies {
-			sourceProxy := sourceRule.Proxies[j]
-
-			if sourceProxy.Manager == nil {
-				continue
-			}
-
-			if err := depManager.CloseDep(sourceProxy.Manager); err != nil {
-				return fmt.Errorf("depManager.CloseDep('%s'): %w", sourceProxy.Id, err)
-			}
-		}
 	}
 
 	return nil

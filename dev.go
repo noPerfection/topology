@@ -3,26 +3,25 @@ package context
 
 import (
 	"fmt"
-	configClient "github.com/ahmetson/config-lib/client"
-	configHandler "github.com/ahmetson/config-lib/handler"
-	"github.com/ahmetson/dev-lib/dep_client"
-	"github.com/ahmetson/dev-lib/dep_handler"
-	"github.com/ahmetson/dev-lib/dep_manager"
-	"github.com/ahmetson/dev-lib/proxy_client"
-	"github.com/ahmetson/dev-lib/proxy_handler"
-	"github.com/ahmetson/handler-lib/manager_client"
-	"github.com/ahmetson/log-lib"
+
+	config "github.com/sds-framework/config-lib"
+	"github.com/sds-framework/dev-lib/dep_client"
+	"github.com/sds-framework/dev-lib/dep_handler"
+	"github.com/sds-framework/dev-lib/dep_manager"
+	"github.com/sds-framework/dev-lib/proxy_client"
+	"github.com/sds-framework/dev-lib/proxy_handler"
+	"github.com/sds-framework/handler-lib/manager_client"
+	"github.com/sds-framework/log-lib"
 )
 
 // A Context handles the config of the contexts
 type Context struct {
-	configClient        configClient.Interface
+	Config              *config.SdsService
 	depHandler          *dep_handler.DepHandler
 	depHandlerManager   manager_client.Interface
 	proxyClient         proxy_client.Interface
 	proxyHandler        *proxy_handler.ProxyHandler
 	proxyHandlerManager manager_client.Interface
-	engineStarted       bool // is the config engine started or not?
 	serviceId           string
 	serviceUrl          string
 	depClient           *dep_client.Client
@@ -30,24 +29,20 @@ type Context struct {
 
 // NewDev creates Developer context.
 // Loads it with the Dev Configuration and Dev DepManager Manager.
-func NewDev() (*Context, error) {
+func NewDev(configPath string) (*Context, error) {
 	ctx := &Context{}
 
-	socket, err := configClient.New()
+	appConfig, err := config.Load(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("configClient.New: %w", err)
+		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
 	}
-	ctx.SetConfig(socket)
+	ctx.SetConfig(&appConfig)
 
 	return ctx, nil
 }
 
 func (ctx *Context) IsRunning() bool {
-	return ctx.engineStarted && ctx.depHandlerManager != nil && ctx.proxyHandlerManager != nil
-}
-
-func (ctx *Context) IsConfigRunning() bool {
-	return ctx.engineStarted
+	return ctx.depHandlerManager != nil && ctx.proxyHandlerManager != nil
 }
 
 func (ctx *Context) IsDepManagerRunning() bool {
@@ -72,22 +67,14 @@ func (ctx *Context) DepClient() dep_client.Interface {
 	return ctx.depClient
 }
 
-// SetConfig sets the config engine of the given type.
-// For the development context, it could be config-lib that reads the local file system.
-//
-// Setting up the configuration prepares the context by creating directories.
-func (ctx *Context) SetConfig(socket configClient.Interface) {
-	ctx.configClient = socket
-}
-
-// Config returns the config engine in the context.
-func (ctx *Context) Config() configClient.Interface {
-	return ctx.configClient
+// SetConfig sets the application configuration.
+func (ctx *Context) SetConfig(appConfig *config.SdsService) {
+	ctx.Config = appConfig
 }
 
 // SetProxyClient sets the client that works with proxies
 func (ctx *Context) SetProxyClient(proxyClient proxy_client.Interface) error {
-	if ctx.configClient == nil {
+	if ctx.Config == nil {
 		return fmt.Errorf("no configuration")
 	}
 
@@ -106,7 +93,7 @@ func (ctx *Context) Type() ContextType {
 	return DevContext
 }
 
-// Close the dep handler and config handler. The dep manager client is not closed
+// Close the dep and proxy handlers. The dep manager client is not closed.
 func (ctx *Context) Close() error {
 	if ctx.proxyHandlerManager != nil {
 		if ctx.proxyHandlerManager != nil {
@@ -124,13 +111,6 @@ func (ctx *Context) Close() error {
 		ctx.depHandlerManager = nil
 	}
 
-	if ctx.engineStarted {
-		if err := ctx.Config().Close(); err != nil {
-			return fmt.Errorf("ctx.Config.Close: %w", err)
-		}
-		ctx.engineStarted = false
-	}
-
 	return nil
 }
 
@@ -140,45 +120,14 @@ func (ctx *Context) SetService(id string, url string) {
 	ctx.serviceUrl = url
 }
 
-// StartConfig starts the config engine.
-func (ctx *Context) StartConfig() error {
-	if ctx.engineStarted {
-		return fmt.Errorf("config engine already started")
-	}
-
-	engine, err := configHandler.New()
-	if err != nil {
-		return fmt.Errorf("configHandler.New: %w", err)
-	}
-
-	if err := engine.Start(); err != nil {
-		return fmt.Errorf("configHandler.Start: %w", err)
-	}
-
-	ctx.engineStarted = true
-
-	return nil
-}
-
 // StartDepManager starts the dependency manager
 func (ctx *Context) StartDepManager() error {
-	if !ctx.engineStarted {
-		return fmt.Errorf("config engine not started. call StartConfig first")
-	}
 	if ctx.depHandlerManager != nil {
 		return fmt.Errorf("dep manager already started")
 	}
-	// Set the development context parameters
-	if err := SetDevDefaults(ctx.configClient); err != nil {
-		return fmt.Errorf("config.SetDevDefaults: %w", err)
-	}
-	binPath, err := ctx.configClient.String(BinKey)
+	srcPath, binPath, err := DevDefaultPaths()
 	if err != nil {
-		return fmt.Errorf("configClient.String(%s): %w", BinKey, err)
-	}
-	srcPath, err := ctx.configClient.String(SrcKey)
-	if err != nil {
-		return fmt.Errorf("configClient.String(%s): %w", SrcKey, err)
+		return fmt.Errorf("DevDefaultPaths: %w", err)
 	}
 
 	//
@@ -221,8 +170,8 @@ func (ctx *Context) StartProxyHandler() error {
 	if len(ctx.serviceId) == 0 || len(ctx.serviceUrl) == 0 {
 		return fmt.Errorf("service parameters are not set. call Context.SetService first")
 	}
-	if !ctx.engineStarted {
-		return fmt.Errorf("config engine not started. call StartConfig first")
+	if ctx.Config == nil {
+		return fmt.Errorf("no configuration")
 	}
 	if ctx.proxyHandlerManager != nil {
 		return fmt.Errorf("proxy handler already started")
@@ -237,7 +186,7 @@ func (ctx *Context) StartProxyHandler() error {
 		return fmt.Errorf("dep_client.New: %w", err)
 	}
 
-	proxyHandler := proxy_handler.New(ctx.configClient, depClient)
+	proxyHandler := proxy_handler.New(ctx.Config, depClient)
 	proxyHandlerConfig := proxy_handler.HandlerConfig(ctx.serviceId)
 	proxyHandler.SetConfig(proxyHandlerConfig)
 	err = proxyHandler.SetLogger(proxyLogger)

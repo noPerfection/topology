@@ -2,17 +2,18 @@ package dep_handler
 
 import (
 	"fmt"
-	"github.com/ahmetson/client-lib"
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/datatype-lib/data_type/key_value"
-	"github.com/ahmetson/datatype-lib/message"
-	"github.com/ahmetson/dev-lib/dep_manager"
-	handlerConfig "github.com/ahmetson/handler-lib/config"
-	"github.com/ahmetson/handler-lib/manager_client"
-	"github.com/ahmetson/log-lib"
-	"github.com/ahmetson/os-lib/path"
 	"testing"
 	"time"
+
+	"github.com/sds-framework/client-lib"
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/datatype-lib/data_type/key_value"
+	"github.com/sds-framework/datatype-lib/message"
+	"github.com/sds-framework/dev-lib/dep_manager"
+	handlerConfig "github.com/sds-framework/handler-lib/config"
+	"github.com/sds-framework/handler-lib/manager_client"
+	"github.com/sds-framework/log-lib"
+	"github.com/sds-framework/os-lib/path"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -67,7 +68,7 @@ func (test *TestDepHandlerSuite) SetupTest() {
 	time.Sleep(time.Millisecond * 100)
 
 	// A valid source code that we want to download
-	test.url = "github.com/ahmetson/test-manager"
+	test.url = "github.com/sds-framework/test-manager"
 
 	test.id = "test-manager"
 	test.parent = &clientConfig.Client{

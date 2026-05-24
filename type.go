@@ -10,4 +10,5 @@ const (
 	UnknownContext ContextType = "unknown"
 
 	ContextFlag = "context"
+	ConfigFlag  = "config"
 )

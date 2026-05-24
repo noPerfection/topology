@@ -3,14 +3,15 @@ package dep_handler
 
 import (
 	"fmt"
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/datatype-lib/data_type/key_value"
-	"github.com/ahmetson/datatype-lib/message"
-	"github.com/ahmetson/dev-lib/dep_manager"
-	"github.com/ahmetson/handler-lib/base"
-	handlerConfig "github.com/ahmetson/handler-lib/config"
-	"github.com/ahmetson/handler-lib/replier"
-	"github.com/ahmetson/log-lib"
+
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/datatype-lib/data_type/key_value"
+	"github.com/sds-framework/datatype-lib/message"
+	"github.com/sds-framework/dev-lib/dep_manager"
+	"github.com/sds-framework/handler-lib/base"
+	handlerConfig "github.com/sds-framework/handler-lib/config"
+	"github.com/sds-framework/handler-lib/replier"
+	"github.com/sds-framework/log-lib"
 )
 
 const (

@@ -4,9 +4,10 @@ package source
 
 import (
 	"fmt"
-	"github.com/ahmetson/os-lib/path"
-	"github.com/asaskevich/govalidator"
 	"net/url"
+
+	"github.com/asaskevich/govalidator"
+	"github.com/sds-framework/os-lib/path"
 )
 
 // The Src struct is used to fetch the source code.

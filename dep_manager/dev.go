@@ -3,21 +3,22 @@ package dep_manager
 
 import (
 	"fmt"
-	"github.com/ahmetson/client-lib"
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/datatype-lib/data_type/key_value"
-	"github.com/ahmetson/datatype-lib/message"
-	"github.com/ahmetson/dev-lib/source"
-	"github.com/ahmetson/log-lib"
-	"github.com/ahmetson/os-lib/path"
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/sds-framework/client-lib"
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/datatype-lib/data_type/key_value"
+	"github.com/sds-framework/datatype-lib/message"
+	"github.com/sds-framework/dev-lib/source"
+	"github.com/sds-framework/log-lib"
+	"github.com/sds-framework/os-lib/path"
 )
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
@@ -556,7 +557,7 @@ func cleanBuild(srcUrl string, logger *log.Logger) error {
 //
 // For example:
 //
-//	serviceUrl = "github.com/ahmetson/sample-service"
+//	serviceUrl = "github.com/sds-framework/sample-service"
 //	contextUrl = "orchestra.github.com.ahmetson.sample-service"
 //
 // This controllerName is set as the handler's name in the config.

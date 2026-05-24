@@ -1,8 +1,9 @@
 package source
 
 import (
-	"github.com/ahmetson/log-lib"
 	"testing"
+
+	"github.com/sds-framework/log-lib"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -22,7 +23,7 @@ type TestDepSuite struct {
 // Make sure that Account is set to five
 // before each test
 func (test *TestDepSuite) SetupTest() {
-	test.url = "github.com/ahmetson/test-manager"
+	test.url = "github.com/sds-framework/test-manager"
 
 	// Make sure that the folders don't exist. They will be added later
 	test.src = &Src{
@@ -36,8 +37,8 @@ func (test *TestDepSuite) Test_0_ConvertToGitUrl() {
 	s := &test.Suite
 
 	// valid
-	url := "github.com/ahmetson/test"
-	expected := "https://github.com/ahmetson/test.git"
+	url := "github.com/sds-framework/test"
+	expected := "https://github.com/sds-framework/test.git"
 	gitUrl, err := convertToGitUrl(url)
 	s.NoError(err)
 	s.Equal(expected, gitUrl)
@@ -59,7 +60,7 @@ func (test *TestDepSuite) Test_1_New() {
 	s := &test.Suite
 
 	// If we create the DepManager manager with 'NewDev,' it will create the folders.
-	expected := "https://github.com/ahmetson/test-manager.git"
+	expected := "https://github.com/sds-framework/test-manager.git"
 	src, err := New(test.src.Url)
 	s.NoError(err)
 

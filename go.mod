@@ -1,14 +1,14 @@
-module github.com/ahmetson/dev-lib
+module github.com/sds-framework/dev-lib
 
 go 1.19
 
 require (
-	github.com/ahmetson/client-lib v0.0.0-20230908063005-a2ac06918e8c
-	github.com/ahmetson/config-lib v0.0.0-20230908094846-24b233553470
-	github.com/ahmetson/datatype-lib v0.0.0-20230927201942-0cc58292a7a3
-	github.com/ahmetson/handler-lib v0.0.0-20230908055435-ceab4155ee16
-	github.com/ahmetson/log-lib v0.0.0-20230908112453-62afbc558b65
-	github.com/ahmetson/os-lib v0.0.0-20230902092125-71ae94a18268
+	github.com/sds-framework/client-lib v0.0.0-20260519122907-8d1f99d41b57
+	github.com/sds-framework/config-lib v0.0.0-20260524063103-5db1102193d5
+	github.com/sds-framework/datatype-lib v0.0.0-20260519113206-6acc97659255
+	github.com/sds-framework/handler-lib v0.0.0-20260520152432-316a3cca1151
+	github.com/sds-framework/log-lib v0.0.0-20260519113119-b6fe63f7315e
+	github.com/sds-framework/os-lib v0.0.0-20260521183157-f0aa0d7add8a
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 	github.com/go-git/go-git/v5 v5.8.0
 	github.com/stretchr/testify v1.8.4

@@ -1,8 +1,8 @@
 package dep_manager
 
 import (
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/log-lib"
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/log-lib"
 )
 
 // The Interface of the dependency manager.

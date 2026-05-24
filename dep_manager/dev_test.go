@@ -2,15 +2,16 @@ package dep_manager
 
 import (
 	"fmt"
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/log-lib"
-	"github.com/ahmetson/os-lib/path"
-	cp "github.com/otiai10/copy"
-	"github.com/pebbe/zmq4"
-	"github.com/stretchr/testify/suite"
 	"os"
 	"path/filepath"
 	"testing"
+
+	cp "github.com/otiai10/copy"
+	"github.com/pebbe/zmq4"
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/log-lib"
+	"github.com/sds-framework/os-lib/path"
+	"github.com/stretchr/testify/suite"
 )
 
 // todo for public functions test with the nil values
@@ -55,7 +56,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 	}
 
 	// A valid source code that we want to download
-	test.url = "github.com/ahmetson/test-manager"
+	test.url = "github.com/sds-framework/test-manager"
 
 	test.id = "test-manager"
 	test.parent = &clientConfig.Client{
@@ -99,7 +100,7 @@ func (test *TestDepManagerSuite) Test_0_New() {
 
 // Test_1_UrlToFileName tests the utility function that converts the URL into the file name.
 func (test *TestDepManagerSuite) Test_1_UrlToFileName() {
-	url := "github.com/ahmetson/test-ext"
+	url := "github.com/sds-framework/test-ext"
 	fileName := "github.com.ahmetson.test-ext"
 	test.Require().Equal(urlToFileName(url), fileName)
 
@@ -107,11 +108,11 @@ func (test *TestDepManagerSuite) Test_1_UrlToFileName() {
 	test.Require().Equal(urlToFileName(invalid), fileName)
 
 	// with semicolon
-	url = "::github.com/ahmetson/test-ext"
+	url = "::github.com/sds-framework/test-ext"
 	test.Require().Equal(urlToFileName(url), fileName)
 
 	// with space
-	url = "::github.com/ahmetson/  test-ext  "
+	url = "::github.com/sds-framework/  test-ext  "
 	test.Require().Equal(urlToFileName(url), fileName)
 }
 
@@ -120,7 +121,7 @@ func (test *TestDepManagerSuite) Test_1_UrlToFileName() {
 func (test *TestDepManagerSuite) Test_12_NewDep() {
 	s := test.Require
 
-	url := "github.com/ahmetson/test-manager"
+	url := "github.com/sds-framework/test-manager"
 	expectedSrcPath := filepath.Join(test.depManager.Src, "github.com.ahmetson.test-manager")
 	expectedBinPath := path.BinPath(test.depManager.Bin, "github.com.ahmetson.test-manager")
 	localSrcPath := path.AbsDir(test.currentDir, "_localSrc")
@@ -234,7 +235,7 @@ func (test *TestDepManagerSuite) Test_13_downloadSrc() {
 	//
 	// Testing the failures
 	//
-	url := "github.com/ahmetson/no-repo" // this repo doesn't exist
+	url := "github.com/sds-framework/no-repo" // this repo doesn't exist
 	dep, err = NewDep(url, "", "")
 	s().NoError(err)
 	err = test.depManager.downloadSrc(dep, test.logger)

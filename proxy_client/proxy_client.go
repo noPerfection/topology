@@ -3,13 +3,14 @@ package proxy_client
 
 import (
 	"fmt"
-	"github.com/ahmetson/client-lib"
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/config-lib/service"
-	"github.com/ahmetson/datatype-lib/data_type/key_value"
-	"github.com/ahmetson/datatype-lib/message"
-	"github.com/ahmetson/dev-lib/proxy_handler"
-	handlerConfig "github.com/ahmetson/handler-lib/config"
+
+	"github.com/sds-framework/client-lib"
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/datatype-lib/data_type/key_value"
+	"github.com/sds-framework/datatype-lib/message"
+	service "github.com/sds-framework/dev-lib/proxy_config"
+	"github.com/sds-framework/dev-lib/proxy_handler"
+	handlerConfig "github.com/sds-framework/handler-lib/config"
 )
 
 type Interface interface {

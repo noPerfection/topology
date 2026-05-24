@@ -2,24 +2,21 @@ package context
 
 import (
 	"fmt"
-	configClient "github.com/ahmetson/config-lib/client"
-	"github.com/ahmetson/dev-lib/dep_client"
-	"github.com/ahmetson/dev-lib/proxy_client"
-	"github.com/ahmetson/os-lib/arg"
+	config "github.com/sds-framework/config-lib"
+	"github.com/sds-framework/dev-lib/dep_client"
+	"github.com/sds-framework/dev-lib/proxy_client"
+	"github.com/sds-framework/os-lib/arg"
 )
 
 type Interface interface {
-	SetConfig(p configClient.Interface)
-	Config() configClient.Interface
+	SetConfig(p *config.SdsService)
 	SetProxyClient(p proxy_client.Interface) error
 	ProxyClient() proxy_client.Interface
 	Type() ContextType
-	StartConfig() error
 	StartDepManager() error
 	StartProxyHandler() error
-	Close() error // Close the dep handler and config handler. The dep manager client is not closed
+	Close() error // Close the dep and proxy handlers. The dep manager client is not closed.
 	IsRunning() bool
-	IsConfigRunning() bool
 	IsDepManagerRunning() bool
 	IsProxyHandlerRunning() bool
 	SetService(string, string) // SetService sets the service parameters
@@ -27,19 +24,30 @@ type Interface interface {
 	DepClient() dep_client.Interface
 }
 
-// A New orchestra. Optionally pass the type of the context.
+// A New orchestra. Optionally pass the config path and/or type of the context.
 // Or the context type could be retrieved from the config.ContextFlag.
-func New(ctxTypes ...ContextType) (Interface, error) {
+func New(args ...string) (Interface, error) {
 	ctxType := DevContext // default is used a dev context
+	configPath := ""
 
-	if len(ctxTypes) > 0 {
-		ctxType = ctxTypes[0]
-	} else if arg.FlagExist(ContextFlag) {
+	for _, value := range args {
+		if value == DevContext || value == UnknownContext {
+			ctxType = value
+			continue
+		}
+
+		configPath = value
+	}
+
+	if len(args) == 0 && arg.FlagExist(ContextFlag) {
 		ctxType = arg.FlagValue(ContextFlag)
+	}
+	if len(configPath) == 0 && arg.FlagExist(ConfigFlag) {
+		configPath = arg.FlagValue(ConfigFlag)
 	}
 
 	if ctxType == DevContext {
-		return NewDev()
+		return NewDev(configPath)
 	}
 
 	return nil, fmt.Errorf("only %s supported, not %s", DevContext, ctxType)

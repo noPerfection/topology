@@ -1,10 +1,11 @@
 package context
 
 import (
-	"github.com/ahmetson/log-lib"
-	"github.com/stretchr/testify/suite"
 	"testing"
 	"time"
+
+	"github.com/sds-framework/log-lib"
+	"github.com/stretchr/testify/suite"
 )
 
 // Define the suite, and absorb the built-in basic suite
@@ -43,7 +44,6 @@ func (test *TestDevCtxSuite) Test_10_New() {
 		ctx, err := New()
 		s().NoError(err)
 		test.logger.Info("start context", "i", i)
-		s().NoError(ctx.StartConfig())
 		s().NoError(ctx.StartDepManager())
 		time.Sleep(time.Millisecond * 100)
 		test.logger.Info("close context", "i", i)

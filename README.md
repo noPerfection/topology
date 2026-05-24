@@ -59,7 +59,7 @@ The cloud providers also have their own configurations.
 
 **The task of the engine is to use the best solution with minimum setup in each environment.**
 
-*More information about a configuration engine is available on [config-lib](https://github.com/ahmetson/config-lib).*
+*More information about a configuration engine is available on [config-lib](https://github.com/sds-framework/config-lib).*
 
 ## Dependency manager
 
@@ -133,7 +133,7 @@ In the example above, the database driver may depend on the authentication servi
 In the SDS framework, a service manages the dependencies that have direct messaging with it.
 If the dependency has an own set of dependencies, then it's none of primary service businesses.
 
-Again, refer to the [config-lib](https://github.com/ahmetson/config-lib)
+Again, refer to the [config-lib](https://github.com/sds-framework/config-lib)
 
 ---
 

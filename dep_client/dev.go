@@ -2,13 +2,14 @@ package dep_client
 
 import (
 	"fmt"
-	"github.com/ahmetson/client-lib"
-	clientConfig "github.com/ahmetson/client-lib/config"
-	"github.com/ahmetson/datatype-lib/data_type/key_value"
-	"github.com/ahmetson/datatype-lib/message"
-	"github.com/ahmetson/dev-lib/dep_handler"
-	handlerConfig "github.com/ahmetson/handler-lib/config"
 	"time"
+
+	"github.com/sds-framework/client-lib"
+	clientConfig "github.com/sds-framework/client-lib/config"
+	"github.com/sds-framework/datatype-lib/data_type/key_value"
+	"github.com/sds-framework/datatype-lib/message"
+	"github.com/sds-framework/dev-lib/dep_handler"
+	handlerConfig "github.com/sds-framework/handler-lib/config"
 )
 
 type Client struct {
