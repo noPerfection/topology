@@ -1,10 +1,10 @@
-package dep_manager
+package runtime
 
 import (
 	clientConfig "github.com/sds-framework/client-lib/config"
 )
 
-// The Interface of the dependency manager.
+// Interface is implemented by the dependency runtime.
 //
 // It doesn't have the `Stop` command.
 // Because, stopping must be done by the remote call from other services.

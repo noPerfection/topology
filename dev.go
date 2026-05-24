@@ -7,7 +7,7 @@ import (
 	config "github.com/sds-framework/config-lib"
 	"github.com/sds-framework/dev-lib/dep_client"
 	"github.com/sds-framework/dev-lib/dep_handler"
-	"github.com/sds-framework/dev-lib/dep_manager"
+	"github.com/sds-framework/dev-lib/runtime"
 	"github.com/sds-framework/handler-lib/manager_client"
 )
 
@@ -20,7 +20,7 @@ type Context struct {
 }
 
 // NewDev creates Developer context.
-// Loads it with the Dev Configuration and Dev DepManager Manager.
+// Loads it with the Dev Configuration.
 func NewDev(configPath string) (*Context, error) {
 	ctx := &Context{}
 
@@ -83,13 +83,13 @@ func (ctx *Context) StartDepManager() error {
 	}
 
 	//
-	// Start the dependency manager
+	// Start the dependency runtime
 	//
-	depManager := dep_manager.New()
-	if err := depManager.SetPaths(binPath, srcPath); err != nil {
-		return fmt.Errorf("depManager.SetPaths('%s', '%s'): %w", binPath, srcPath, err)
+	depRuntime := runtime.New()
+	if err := depRuntime.SetPaths(binPath, srcPath); err != nil {
+		return fmt.Errorf("depRuntime.SetPaths('%s', '%s'): %w", binPath, srcPath, err)
 	}
-	ctx.depHandler, err = dep_handler.New(depManager)
+	ctx.depHandler, err = dep_handler.New(depRuntime)
 	if err != nil {
 		return fmt.Errorf("dep_handler.New: %w", err)
 	}

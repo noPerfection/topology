@@ -7,7 +7,7 @@ import (
 
 	"github.com/sds-framework/client-lib"
 	clientConfig "github.com/sds-framework/client-lib/config"
-	"github.com/sds-framework/dev-lib/dep_manager"
+	"github.com/sds-framework/dev-lib/runtime"
 	handlerConfig "github.com/sds-framework/handler-lib/config"
 	"github.com/sds-framework/handler-lib/manager_client"
 	"github.com/sds-framework/log-lib"
@@ -49,11 +49,11 @@ func (test *TestDepHandlerSuite) SetupTest() {
 	binPath := path.AbsDir(currentDir, "_sds/bin")
 
 	// Make sure that the folders don't exist. They will be added later
-	manager := dep_manager.New()
-	err = manager.SetPaths(srcPath, binPath)
+	depRuntime := runtime.New()
+	err = depRuntime.SetPaths(srcPath, binPath)
 	s().NoError(err)
 
-	test.depHandler, err = New(manager)
+	test.depHandler, err = New(depRuntime)
 	s().NoError(err)
 
 	// Start the handler

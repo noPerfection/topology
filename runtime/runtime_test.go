@@ -1,4 +1,4 @@
-package dep_manager
+package runtime
 
 import (
 	"fmt"
@@ -22,7 +22,7 @@ type TestDepManagerSuite struct {
 	suite.Suite
 
 	logger       *log.Logger
-	depManager   *DepManager          // the manager to test
+	runtime      *Runtime             // the runtime to test
 	currentDir   string               // executable to store the binaries and source codes
 	url          string               // dependency source code
 	id           string               // the id of the dependency
@@ -46,7 +46,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 	binPath := path.AbsDir(currentDir, "_sds/bin")
 
 	// Make sure that the folders don't exist. They will be added later
-	test.depManager = &DepManager{
+	test.runtime = &Runtime{
 		Src:         srcPath,
 		Bin:         binPath,
 		runningDeps: make(map[string]*Dep, 0),
@@ -66,34 +66,34 @@ func (test *TestDepManagerSuite) SetupTest() {
 	test.localTestDir = filepath.Join("../_test_services")
 }
 
-// Test_0_New tests the creation of the DepManager managers with the DepManager.SetPaths method.
+// Test_0_New tests the creation of the Runtime with the Runtime.SetPaths method.
 func (test *TestDepManagerSuite) Test_0_New() {
 	s := test.Require
 
-	fmt.Printf("Test.New: %s bin is nil dep manager: %v\n", test.depManager.Bin, test.depManager == nil)
+	fmt.Printf("Test.New: %s bin is nil runtime: %v\n", test.runtime.Bin, test.runtime == nil)
 
 	// Before testing, we make sure that the files don't exist
-	exist, err := path.DirExist(test.depManager.Bin)
+	exist, err := path.DirExist(test.runtime.Bin)
 	s().NoError(err)
 	s().False(exist)
 
-	exist, err = path.DirExist(test.depManager.Src)
+	exist, err = path.DirExist(test.runtime.Src)
 	s().NoError(err)
 	s().False(exist)
 
-	// If we create the DepManager manager with 'New,' it will create the folders.
-	depManager := New()
-	err = depManager.SetPaths(test.depManager.Src, test.depManager.Bin)
+	// If we create the Runtime with 'New,' it will create the folders.
+	depRuntime := New()
+	err = depRuntime.SetPaths(test.runtime.Src, test.runtime.Bin)
 	s().NoError(err)
 
 	// Now we can check for the directories
-	exist, _ = path.DirExist(depManager.Src)
+	exist, _ = path.DirExist(depRuntime.Src)
 	s().True(exist)
 
-	exist, _ = path.DirExist(depManager.Bin)
+	exist, _ = path.DirExist(depRuntime.Bin)
 	s().True(exist)
 
-	test.depManager = depManager
+	test.runtime = depRuntime
 }
 
 // Test_12_NewDep tests NewDep function.
@@ -102,7 +102,7 @@ func (test *TestDepManagerSuite) Test_12_NewDep() {
 
 	localSrcPath := path.AbsDir(test.currentDir, "_localSrc")
 
-	// default dep managed by the DepManager
+	// default dep managed by the Runtime
 	dep, err := NewDep(test.url, "", "")
 	s().NoError(err)
 	s().Len(dep.LocalUrl(), 0)
@@ -160,52 +160,52 @@ func (test *TestDepManagerSuite) Test_20_Run() {
 	s().NoError(err)
 
 	// no running files
-	_, ok := test.depManager.runningDeps[test.id]
+	_, ok := test.runtime.runningDeps[test.id]
 	s().False(ok)
 
 	// running nil values must exist
-	var depManager *DepManager
-	err = depManager.Run(dep, test.id, test.parent)
+	var depRuntime *Runtime
+	err = depRuntime.Run(dep, test.id, test.parent)
 	s().Error(err)
 
-	err = test.depManager.Run(nil, test.id, test.parent)
+	err = test.runtime.Run(nil, test.id, test.parent)
 	s().Error(err) // missing dep
-	err = test.depManager.Run(dep, "", test.parent)
+	err = test.runtime.Run(dep, "", test.parent)
 	s().Error(err) // missing id
-	err = test.depManager.Run(dep, test.id, nil)
+	err = test.runtime.Run(dep, test.id, nil)
 	s().Error(err) // missing parent
 
 	noBinDep, err := NewDep(test.url, "", "")
 	s().NoError(err)
-	err = test.depManager.Run(noBinDep, test.id, test.parent)
+	err = test.runtime.Run(noBinDep, test.id, test.parent)
 	s().Error(err) // no binary
 
 	// the binary doesn't exist
 	invalidDep, err := NewDep(test.url, "", localBin)
 	s().NoError(err)
 	invalidDep.binPath = invalidBin
-	err = test.depManager.Run(invalidDep, test.id, test.parent)
+	err = test.runtime.Run(invalidDep, test.id, test.parent)
 	s().Error(err) // no binary
 
 	// Let's run it, it should exit immediately
-	err = test.depManager.Run(dep, test.id, test.parent)
+	err = test.runtime.Run(dep, test.id, test.parent)
 	s().NoError(err)
 
-	_, ok = test.depManager.runningDeps[test.id]
+	_, ok = test.runtime.runningDeps[test.id]
 	s().True(ok)
 
 	// trying to run again must fail
-	err = test.depManager.Run(dep, test.id, test.parent)
+	err = test.runtime.Run(dep, test.id, test.parent)
 	s().Error(err)
 
 	// clean out
-	_, ok = test.depManager.runningDeps[test.id]
+	_, ok = test.runtime.runningDeps[test.id]
 	if ok {
-		onStop := test.depManager.OnStop(test.id)
+		onStop := test.runtime.OnStop(test.id)
 		err = <-onStop
 		s().NoError(err)
 
-		_, running := test.depManager.runningDeps[test.id]
+		_, running := test.runtime.runningDeps[test.id]
 		s().False(running)
 	}
 }
@@ -222,25 +222,25 @@ func (test *TestDepManagerSuite) Test_21_RunError() {
 	dep.SetBranch("error-exit") // this branch intentionally exits the program with an error.
 
 	// First, make sure that developer built the binary
-	exist := test.depManager.binExist(dep)
+	exist := test.runtime.binExist(dep)
 	s().True(exist)
 
 	// Let's run it
-	err = test.depManager.Run(dep, test.id, test.parent)
+	err = test.runtime.Run(dep, test.id, test.parent)
 	s().NoError(err)
 
 	// make sure that it exists
-	_, ok := test.depManager.runningDeps[test.id]
+	_, ok := test.runtime.runningDeps[test.id]
 	s().True(ok)
 
-	stopChan := test.depManager.OnStop(test.id)
+	stopChan := test.runtime.OnStop(test.id)
 	s().NotNil(stopChan)
 
 	err = <-stopChan
 	s().Error(err)
 
-	// the closed service is removed from DepManager
-	_, ok = test.depManager.runningDeps[test.id]
+	// the closed service is removed from Runtime
+	_, ok = test.runtime.runningDeps[test.id]
 	s().False(ok)
 
 }
@@ -263,23 +263,23 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 
 	// First, install the manager
 	// Let's run it
-	err = test.depManager.Run(dep, test.id, test.parent)
+	err = test.runtime.Run(dep, test.id, test.parent)
 	s().NoError(err)
-	s().NotNil(test.depManager.runningDeps[test.id]) // cmd == nil indicates that the program was closed
+	s().NotNil(test.runtime.runningDeps[test.id]) // cmd == nil indicates that the program was closed
 
 	// Check is the service running
-	running, err := test.depManager.Running(client)
+	running, err := test.runtime.Running(client)
 	s().NoError(err)
 	s().True(running)
 
 	// service is running two seconds. after that running should return false
-	onStop := test.depManager.OnStop(test.id)
+	onStop := test.runtime.OnStop(test.id)
 	s().NotNil(onStop)
 	err = <-onStop
 	s().NoError(err)
 
-	s().Nil(test.depManager.runningDeps[test.id]) // cmd == nil indicates that the program was closed
-	running, err = test.depManager.Running(client)
+	s().Nil(test.runtime.runningDeps[test.id]) // cmd == nil indicates that the program was closed
+	running, err = test.runtime.Running(client)
 	s().NoError(err)
 	s().False(running)
 }

@@ -1,5 +1,5 @@
-// Package dep_manager tracks the dependency manager in the local context.
-package dep_manager
+// Package runtime contains the dependency runtime for the dev context.
+package runtime
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 )
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
-// DepManager.Running method uses this value before considering the socket as not running.
+// Runtime.Running method uses this value before considering the socket as not running.
 const DefaultTimeout = time.Second
 
 type Dep struct {
@@ -27,8 +27,8 @@ type Dep struct {
 	done    chan error // signalizes when the service finished
 }
 
-// A DepManager Manager builds, runs or stops the dependency services
-type DepManager struct {
+// Runtime runs, stops, and checks dependency services.
+type Runtime struct {
 	runningDeps map[string]*Dep
 	timeout     time.Duration
 
@@ -36,7 +36,7 @@ type DepManager struct {
 	Bin string `json:"SERVICE_DEPS_BIN"`
 }
 
-// NewDep returns a dependency parameters. Pass empty strings if the dependency is managed by the DepManager.
+// NewDep returns dependency parameters.
 func NewDep(url, localSrc, localBin string) (*Dep, error) {
 	src, err := source.New(url, localSrc)
 	if err != nil {
@@ -64,12 +64,12 @@ func NewDep(url, localSrc, localBin string) (*Dep, error) {
 	return dep, nil
 }
 
-// New source manager in the Dev context.
+// New creates a dependency runtime in the Dev context.
 //
 // It will prepare the directories for source codes and binary.
 // If preparation fails, it will throw an error.
-func New() *DepManager {
-	return &DepManager{
+func New() *Runtime {
+	return &Runtime{
 		Src:         "",
 		Bin:         "",
 		runningDeps: make(map[string]*Dep, 0),
@@ -90,7 +90,7 @@ func (dep *Dep) copy() *Dep {
 	return instance
 }
 
-func (manager *DepManager) SetPaths(srcPath string, binPath string) error {
+func (rt *Runtime) SetPaths(srcPath string, binPath string) error {
 	if err := path.MakeDir(binPath); err != nil {
 		return fmt.Errorf("path.MakeDir(%s): %w", binPath, err)
 	}
@@ -98,18 +98,18 @@ func (manager *DepManager) SetPaths(srcPath string, binPath string) error {
 		return fmt.Errorf("path.MakeDir(%s): %w", srcPath, err)
 	}
 
-	manager.Src = srcPath
-	manager.Bin = binPath
+	rt.Src = srcPath
+	rt.Bin = binPath
 
 	return nil
 }
 
 // Close the dependency
-func (manager *DepManager) Close(c *clientConfig.Client) error {
+func (rt *Runtime) Close(c *clientConfig.Client) error {
 	// Make sure it's running
-	running, err := manager.Running(c)
+	running, err := rt.Running(c)
 	if err != nil {
-		return fmt.Errorf("manager.Running(client='%v'): %w", *c, err)
+		return fmt.Errorf("runtime.Running(client='%v'): %w", *c, err)
 	}
 	if !running {
 		return nil
@@ -125,20 +125,20 @@ func (manager *DepManager) Close(c *clientConfig.Client) error {
 		Parameters: key_value.New(),
 	}
 
-	sock.Timeout(manager.timeout).Attempt(1)
+	sock.Timeout(rt.timeout).Attempt(1)
 
 	_, err = sock.Request(closeRequest)
 	if err == nil {
 		return fmt.Errorf("socket.Request('close'): must exist with error since service closed before replying back")
 	}
 
-	running, err = manager.Running(c)
+	running, err = rt.Running(c)
 	if err != nil {
-		return fmt.Errorf("socket.Request('close'): manager.Running(client='%v'): %w", *c, err)
+		return fmt.Errorf("socket.Request('close'): runtime.Running(client='%v'): %w", *c, err)
 	}
 
 	if running {
-		return fmt.Errorf("manager is running even after closing")
+		return fmt.Errorf("runtime is running even after closing")
 	}
 
 	err = sock.Close()
@@ -151,9 +151,9 @@ func (manager *DepManager) Close(c *clientConfig.Client) error {
 
 // binExist checks that the binary exists.
 //
-// Whether the depManager is manageable or not doesn't matter.
-func (manager *DepManager) binExist(dep *Dep) bool {
-	if manager == nil || dep == nil {
+// Whether the runtime is manageable or not doesn't matter.
+func (rt *Runtime) binExist(dep *Dep) bool {
+	if rt == nil || dep == nil {
 		return false
 	}
 
@@ -168,14 +168,14 @@ func (manager *DepManager) binExist(dep *Dep) bool {
 // Running checks whether the given client running or not.
 // If the service is running on another process or on another node,
 // then that service should expose the port.
-func (manager *DepManager) Running(c *clientConfig.Client) (bool, error) {
+func (rt *Runtime) Running(c *clientConfig.Client) (bool, error) {
 	c.UrlFunc(clientConfig.Url)
 
 	sock, err := client.New(c)
 	if err != nil {
 		return false, fmt.Errorf("client.New: %w", err)
 	}
-	sock.Attempt(1).Timeout(manager.timeout)
+	sock.Attempt(1).Timeout(rt.timeout)
 
 	req := &message.Request{
 		Command:    "heartbeat",
@@ -195,10 +195,10 @@ func (manager *DepManager) Running(c *clientConfig.Client) (bool, error) {
 	return true, nil
 }
 
-// OnStop returns a signal through the channel when the dependency spawned by the DepManager stops.
+// OnStop returns a signal through the channel when the dependency spawned by the Runtime stops.
 // If the dep is not existing, then it will simply return error.
-func (manager *DepManager) OnStop(id string) chan error {
-	dep, ok := manager.runningDeps[id]
+func (rt *Runtime) OnStop(id string) chan error {
+	dep, ok := rt.runningDeps[id]
 	if !ok {
 		return nil
 	}
@@ -214,13 +214,13 @@ func (manager *DepManager) OnStop(id string) chan error {
 // If it fails to run, then it will return an error.
 //
 // Note that, services can crash during the initialization.
-// In that case, you should use DepManager.OnStop method.
+// In that case, you should use Runtime.OnStop method.
 //
 // If a parent is given, it's passed as ParentFlag.
 // Todo, move all Flags from service-lib to config-lig.
 // Todo, use the ParentFlag from the config lig
-func (manager *DepManager) Run(dep *Dep, id string, optionalParent ...*clientConfig.Client) error {
-	if manager == nil || dep == nil || len(id) == 0 {
+func (rt *Runtime) Run(dep *Dep, id string, optionalParent ...*clientConfig.Client) error {
+	if rt == nil || dep == nil || len(id) == 0 {
 		return fmt.Errorf("nil or no id")
 	}
 	if len(optionalParent) > 1 {
@@ -231,12 +231,12 @@ func (manager *DepManager) Run(dep *Dep, id string, optionalParent ...*clientCon
 		return fmt.Errorf("no binary")
 	}
 
-	_, ok := manager.runningDeps[id]
+	_, ok := rt.runningDeps[id]
 	if ok {
 		return fmt.Errorf("the dep with id '%s' already running", id)
 	}
 
-	ok = manager.binExist(dep)
+	ok = rt.binExist(dep)
 	if !ok {
 		return fmt.Errorf("no binary")
 	}
@@ -259,7 +259,7 @@ func (manager *DepManager) Run(dep *Dep, id string, optionalParent ...*clientCon
 
 	instance := dep.copy()
 
-	manager.runningDeps[id] = instance
+	rt.runningDeps[id] = instance
 
 	logger, err := log.New(id, false)
 	if err != nil {
@@ -279,20 +279,20 @@ func (manager *DepManager) Run(dep *Dep, id string, optionalParent ...*clientCon
 	}
 
 	instance.cmd = cmd
-	manager.wait(id)
+	rt.wait(id)
 
 	return nil
 }
 
 // The wait is invoked if the spawned dependency stops.
 // The dependencies are running asynchronously.
-// In order to call this function, you must use the DepManager.Close() method.
+// In order to call this function, you must use the Runtime.Close() method.
 // If the Close signal was sent to the spawned child, then
 // this method will be called automatically by the operating system.
-func (manager *DepManager) wait(id string) {
+func (rt *Runtime) wait(id string) {
 	go func() {
-		err := manager.runningDeps[id].cmd.Wait() // it can return an error
-		manager.runningDeps[id].done <- err
-		delete(manager.runningDeps, id)
+		err := rt.runningDeps[id].cmd.Wait() // it can return an error
+		rt.runningDeps[id].done <- err
+		delete(rt.runningDeps, id)
 	}()
 }

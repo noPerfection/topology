@@ -7,7 +7,7 @@ import (
 	clientConfig "github.com/sds-framework/client-lib/config"
 	"github.com/sds-framework/datatype-lib/data_type/key_value"
 	"github.com/sds-framework/datatype-lib/message"
-	"github.com/sds-framework/dev-lib/dep_manager"
+	"github.com/sds-framework/dev-lib/runtime"
 	"github.com/sds-framework/handler-lib/base"
 	handlerConfig "github.com/sds-framework/handler-lib/config"
 	"github.com/sds-framework/handler-lib/replier"
@@ -23,7 +23,7 @@ const (
 
 type DepHandler struct {
 	handler base.Interface
-	manager dep_manager.Interface
+	runtime runtime.Interface
 }
 
 // ServiceConfig returns the socket configuration of the handler
@@ -32,10 +32,10 @@ func ServiceConfig() *handlerConfig.Handler {
 }
 
 // New dep handler returned
-func New(manager dep_manager.Interface) (*DepHandler, error) {
+func New(depRuntime runtime.Interface) (*DepHandler, error) {
 	handler := replier.New()
 
-	logger, err := log.New("dep_manager", true)
+	logger, err := log.New("dep_runtime", true)
 	if err != nil {
 		return nil, fmt.Errorf("log.New('dep-handler'): %w", err)
 	}
@@ -47,7 +47,7 @@ func New(manager dep_manager.Interface) (*DepHandler, error) {
 	}
 
 	return &DepHandler{
-		manager: manager,
+		runtime: depRuntime,
 		handler: handler,
 	}, nil
 }
@@ -71,9 +71,9 @@ func (h *DepHandler) onDepRunning(req message.RequestInterface) message.ReplyInt
 
 	c.UrlFunc(clientConfig.Url)
 
-	running, err := h.manager.Running(&c)
+	running, err := h.runtime.Running(&c)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.manager.Running: %v", err))
+		return req.Fail(fmt.Sprintf("h.runtime.Running: %v", err))
 	}
 
 	params := key_value.New().Set("running", running)
@@ -115,14 +115,14 @@ func (h *DepHandler) onRunDep(req message.RequestInterface) message.ReplyInterfa
 
 	optionalLocalBin, _ := req.RouteParameters().StringValue("local_bin")
 
-	dep, err := dep_manager.NewDep(url, "", optionalLocalBin)
+	dep, err := runtime.NewDep(url, "", optionalLocalBin)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("dep_manager.NewDep('%s', '', '%s'): %v", url, optionalLocalBin, err))
+		return req.Fail(fmt.Sprintf("runtime.NewDep('%s', '', '%s'): %v", url, optionalLocalBin, err))
 	}
 
-	err = h.manager.Run(dep, id, &parent)
+	err = h.runtime.Run(dep, id, &parent)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.manager.Start(url: '%s', id: '%s'): %v", url, id, err))
+		return req.Fail(fmt.Sprintf("h.runtime.Run(url: '%s', id: '%s'): %v", url, id, err))
 	}
 
 	return req.Ok(key_value.New())
@@ -147,9 +147,9 @@ func (h *DepHandler) onCloseDep(req message.RequestInterface) message.ReplyInter
 
 	c.UrlFunc(clientConfig.Url)
 
-	err = h.manager.Close(&c)
+	err = h.runtime.Close(&c)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.manager.Close: %v", err))
+		return req.Fail(fmt.Sprintf("h.runtime.Close: %v", err))
 	}
 
 	return req.Ok(key_value.New())
