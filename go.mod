@@ -37,3 +37,5 @@ require (
 	github.com/pebbe/zmq4 v1.2.10
 	golang.org/x/sys v0.12.0 // indirect
 )
+
+replace github.com/sds-framework/config-lib => ./config
