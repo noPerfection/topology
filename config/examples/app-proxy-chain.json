@@ -1,0 +1,85 @@
+{
+  "services": [
+    {
+      "type": "Independent",
+      "name": "public_api",
+      "handlers": [
+        {
+          "type": "Replier",
+          "category": "public-api",
+          "socket": {
+            "id": "public_1",
+            "port": 4101
+          },
+          "command-deps": [
+            {
+              "command": "call-user-api",
+              "proxies": [
+                "auth_proxy",
+                "audit_proxy"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Proxy",
+      "name": "auth_proxy",
+      "handlers": [
+        {
+          "type": "Replier",
+          "category": "auth-proxy",
+          "socket": {
+            "id": "auth_1",
+            "port": 4201
+          },
+          "command-deps": [
+            {
+              "command": "authorize",
+              "proxies": [
+                "audit_proxy"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Proxy",
+      "name": "audit_proxy",
+      "handlers": [
+        {
+          "type": "Replier",
+          "category": "audit-proxy",
+          "socket": {
+            "id": "audit_1",
+            "port": 4301
+          },
+          "command-deps": [
+            {
+              "command": "record-audit",
+              "extensions": [
+                "user_service"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Independent",
+      "name": "user_service",
+      "handlers": [
+        {
+          "type": "Replier",
+          "category": "user-service",
+          "socket": {
+            "id": "user_api_1",
+            "port": 4401
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+# SDS Configuration
+
+This module provides Go types and JSON helpers for an application configuration made of services.
+
+It is a static data library only:
+
+- `config` defines service metadata (`Service`, `Handler`, `Socket`, `CommandDep`)
+- `config` defines the top-level `SdsService` struct (`services: [...]`), `Load`, and `SdsService.Save`
+
+There is no runtime config server, engine, or client API in this module.
+
+## App structure
+
+```json
+{
+  "services": [
+    {
+      "type": "Independent",
+      "name": "public_api",
+      "handlers": [
+        {
+          "type": "Replier",
+          "category": "public-api",
+          "socket": {
+            "id": "public_1",
+            "port": 4101
+          },
+          "command-deps": [
+            {
+              "command": "call-user-api",
+              "proxies": ["auth_proxy", "audit_proxy"]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a full proxy-chain example.
+
+## Usage
+
+```go
+import (
+    config "github.com/sds-framework/config-lib"
+)
+
+a, err := config.Load("app.json")
+if err != nil {
+    panic(err)
+}
+
+svc, err := a.GetService("public_api")
+if err != nil {
+    panic(err)
+}
+
+updated := svc
+updated.Handlers = append(updated.Handlers, config.Handler{
+    Type:     config.ReplierType,
+    Category: "public-api",
+    Socket:   config.Socket{Id: "public_2", Port: 4102},
+})
+if err := a.SetService(updated); err != nil {
+    panic(err)
+}
+
+if err := a.Save(); err != nil {
+    panic(err)
+}
+```
+
+## Service Types
+
+Use `config.New(name, serviceType)` to create a service skeleton, then fill handlers and command dependency metadata.
+
+Supported service types:
+
+- `Independent`
+- `Proxy`
+- `Extension`
+
+Supported handler types:
+
+- `SyncReplier`
+- `Replier`
+- `Publisher`
+- `Pair`
+
+Each handler must define a `category`, which consumers can use to group and classify handlers.
+
+Each `command-deps` entry must name a `command` and at least one routing target: `proxies` and/or `extensions`. A command without dependencies is invalid.
+
+Proxy chains are declared in handler `command-deps` metadata as lists of service names (`proxies: [...]`). Terminal services that only receive routed traffic do not need `command-deps`.
+
+## Packages removed from this module
+
+Previous versions included a dev runtime layer (`engine`, `handler`, `client`, `watch`) for serving config over SDS sockets. That runtime API has been removed. Consumers should load JSON with `config.Load` and save it with `SdsService.Save`.
