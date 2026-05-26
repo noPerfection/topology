@@ -58,6 +58,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 		config: &config.SdsService{
 			Services: []config.Service{
 				{
+					Type:         config.ProxyType,
 					Name:         "test-manager",
 					StartCommand: "test",
 					Handlers: []config.Handler{
@@ -138,6 +139,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 	test.runtime = New(&cfg)
 
 	service := config.Service{
+		Type:         config.ProxyType,
 		Name:         "extra-service",
 		StartCommand: "echo extra",
 		Handlers: []config.Handler{
@@ -151,7 +153,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 			},
 		},
 	}
-	err = test.runtime.AddService(service)
+	err = test.runtime.AddService(config.InlineTarget(service))
 	s().NoError(err)
 
 	got, err := test.runtime.config.GetService("extra-service")
@@ -167,13 +169,79 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 	err = test.runtime.RemoveService("missing")
 	s().Error(err)
 
-	err = test.runtime.AddService(config.Service{
+	err = test.runtime.AddService(config.InlineTarget(config.Service{
+		Type:         config.ProxyType,
 		Name:         "plain-service",
 		StartCommand: "echo plain",
-	})
+	}))
 	s().NoError(err)
 	err = test.runtime.RemoveService("plain-service")
 	s().Error(err)
+}
+
+func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
+	s := test.Require
+
+	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
+	cfg, err := config.Load(cfgPath)
+	s().NoError(err)
+	s().NoError(cfg.SetService(test.runtime.config.Services[0]))
+	test.runtime = New(&cfg)
+
+	err = test.runtime.AddService(config.RefTarget("test-manager"))
+	s().NoError(err)
+
+	err = test.runtime.AddService(config.RefTarget("missing-service"))
+	s().Error(err)
+
+	err = test.runtime.AddService(config.InlineTarget(config.Service{
+		Type: config.ProxyType,
+		Name: "duplicate-socket",
+		Handlers: []config.Handler{
+			{
+				Type:     config.ReplierType,
+				Category: ManagerHandlerCategory,
+				Socket:   config.Socket{Id: "test-manager", Port: 6000},
+			},
+		},
+	}))
+	s().Error(err)
+
+	err = test.runtime.AddService(config.InlineTarget(config.Service{
+		Type: config.ProxyType,
+		Name: "nested-parent",
+		Handlers: []config.Handler{
+			{
+				Type:     config.ReplierType,
+				Category: ManagerHandlerCategory,
+				Socket:   config.Socket{Id: "nested-parent-manager", Port: 6100},
+				CommandDeps: []config.CommandDep{
+					{
+						Command: "proxy",
+						Proxies: []config.DepTarget{
+							config.InlineTarget(config.Service{
+								Type: config.ProxyType,
+								Name: "nested-child",
+								Handlers: []config.Handler{
+									{
+										Type:     config.ReplierType,
+										Category: ManagerHandlerCategory,
+										Socket:   config.Socket{Id: "nested-child-manager", Port: 6101},
+									},
+								},
+							}),
+						},
+					},
+				},
+			},
+		},
+	}))
+	s().NoError(err)
+
+	_, err = test.runtime.config.GetService("nested-parent")
+	s().NoError(err)
+	_, err = test.runtime.config.GetService("nested-child")
+	s().NoError(err)
 }
 
 // Test_20_Run runs the given binary.

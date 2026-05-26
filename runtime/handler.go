@@ -120,23 +120,23 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 	return req.Ok(datatype.New().Set("id", id))
 }
 
-// onAddService registers a service in the runtime configuration.
-// Requires 'service' of the config.Service type.
+// onAddService registers a service target in the runtime configuration.
+// Requires 'service' as either a service name or inline config.Service object.
 func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
 	}
 
-	var service config.Service
-	err = kv.Interface(&service)
+	var target config.DepTarget
+	err = kv.Interface(&target)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
 
-	err = h.runtime.AddService(service)
+	err = h.runtime.AddService(target)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.AddService('%s'): %v", service.Name, err))
+		return req.Fail(fmt.Sprintf("h.runtime.AddService('%s'): %v", target.Name(), err))
 	}
 
 	return req.Ok(datatype.New())

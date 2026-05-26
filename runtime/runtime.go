@@ -37,16 +37,91 @@ type Runtime struct {
 	timeout          time.Duration
 }
 
-// AddService registers a service in the runtime configuration.
-func (rt *Runtime) AddService(service config.Service) error {
+// AddService registers a service target in the runtime configuration.
+// A ref target must already resolve in the configuration, while an inline
+// target and any inline dependencies are registered recursively.
+func (rt *Runtime) AddService(target config.DepTarget) error {
 	if rt == nil || rt.config == nil {
 		return fmt.Errorf("nil config")
+	}
+	if err := config.ValidateDepTarget(target); err != nil {
+		return fmt.Errorf("config.ValidateDepTarget: %w", err)
+	}
+
+	if target.Ref != "" {
+		if err := rt.validateServiceRef(target.Ref, make(map[string]bool)); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	if err := rt.addInlineService(target.Inline, make(map[string]bool), rt.usedSockets()); err != nil {
+		return err
+	}
+
+	return rt.config.Save()
+}
+
+func (rt *Runtime) validateServiceRef(serviceName string, visiting map[string]bool) error {
+	service, err := rt.config.GetService(serviceName)
+	if err != nil {
+		return fmt.Errorf("rt.config.GetService('%s'): %w", serviceName, err)
+	}
+	if visiting[service.Name] {
+		return fmt.Errorf("cycle detected at service '%s'", service.Name)
+	}
+	visiting[service.Name] = true
+	defer delete(visiting, service.Name)
+	if err := service.ValidateTypes(); err != nil {
+		return fmt.Errorf("service.ValidateTypes('%s'): %w", service.Name, err)
+	}
+
+	for _, handler := range service.Handlers {
+		for _, dep := range handler.CommandDeps {
+			for _, target := range dep.Proxies {
+				if err := rt.validateDepTargetExists(target, visiting); err != nil {
+					return fmt.Errorf("service '%s' command '%s' proxy: %w", service.Name, dep.Command, err)
+				}
+			}
+			for _, target := range dep.Extensions {
+				if err := rt.validateDepTargetExists(target, visiting); err != nil {
+					return fmt.Errorf("service '%s' command '%s' extension: %w", service.Name, dep.Command, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (rt *Runtime) validateDepTargetExists(target config.DepTarget, visiting map[string]bool) error {
+	if err := config.ValidateDepTarget(target); err != nil {
+		return err
+	}
+	if target.Ref != "" {
+		return rt.validateServiceRef(target.Ref, visiting)
+	}
+	if _, err := rt.config.GetService(target.Inline.Name); err != nil {
+		return fmt.Errorf("inline service '%s' is not registered: %w", target.Inline.Name, err)
+	}
+	return rt.validateServiceRef(target.Inline.Name, visiting)
+}
+
+func (rt *Runtime) addInlineService(service *config.Service, visiting map[string]bool, reservedSockets map[string]string) error {
+	if service == nil {
+		return fmt.Errorf("service is nil")
 	}
 	if len(service.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
-	if err := config.ValidateServiceType(service.Type); err != nil {
-		return fmt.Errorf("config.ValidateServiceType('%s'): %w", service.Type, err)
+	if visiting[service.Name] {
+		return fmt.Errorf("cycle detected at service '%s'", service.Name)
+	}
+	visiting[service.Name] = true
+	defer delete(visiting, service.Name)
+
+	if err := service.ValidateTypes(); err != nil {
+		return fmt.Errorf("service.ValidateTypes('%s'): %w", service.Name, err)
 	}
 	if service.Type == config.IndependentType {
 		return fmt.Errorf("independent service can not be added")
@@ -54,12 +129,82 @@ func (rt *Runtime) AddService(service config.Service) error {
 	if _, err := rt.config.GetService(service.Name); err == nil {
 		return fmt.Errorf("service('%s') already added", service.Name)
 	}
+	if err := rt.reserveAvailableSockets(service, reservedSockets); err != nil {
+		return err
+	}
 
-	if err := rt.config.SetService(service); err != nil {
+	for _, handler := range service.Handlers {
+		for _, dep := range handler.CommandDeps {
+			for _, target := range dep.Proxies {
+				if err := rt.addOrValidateNestedTarget(target, visiting, reservedSockets); err != nil {
+					return fmt.Errorf("service '%s' command '%s' proxy: %w", service.Name, dep.Command, err)
+				}
+			}
+			for _, target := range dep.Extensions {
+				if err := rt.addOrValidateNestedTarget(target, visiting, reservedSockets); err != nil {
+					return fmt.Errorf("service '%s' command '%s' extension: %w", service.Name, dep.Command, err)
+				}
+			}
+		}
+	}
+
+	if err := rt.config.SetService(*service); err != nil {
 		return fmt.Errorf("rt.config.SetService: %w", err)
 	}
 
-	return rt.config.Save()
+	return nil
+}
+
+func (rt *Runtime) addOrValidateNestedTarget(target config.DepTarget, visiting map[string]bool, reservedSockets map[string]string) error {
+	if err := config.ValidateDepTarget(target); err != nil {
+		return err
+	}
+	if target.Ref != "" {
+		return rt.validateServiceRef(target.Ref, visiting)
+	}
+	return rt.addInlineService(target.Inline, visiting, reservedSockets)
+}
+
+func (rt *Runtime) usedSockets() map[string]string {
+	used := make(map[string]string)
+	for _, service := range rt.config.Services {
+		for _, handler := range service.Handlers {
+			key, err := socketKey(handler.Socket)
+			if err != nil {
+				continue
+			}
+			used[key] = fmt.Sprintf("service('%s') handler('%s')", service.Name, handler.Category)
+		}
+	}
+	return used
+}
+
+func (rt *Runtime) reserveAvailableSockets(service *config.Service, reserved map[string]string) error {
+	seen := make(map[string]struct{})
+	for _, handler := range service.Handlers {
+		key, err := socketKey(handler.Socket)
+		if err != nil {
+			return fmt.Errorf("service('%s') handler('%s'): %w", service.Name, handler.Category, err)
+		}
+		if _, exists := seen[key]; exists {
+			return fmt.Errorf("service('%s') has duplicate socket '%s'", service.Name, key)
+		}
+		seen[key] = struct{}{}
+
+		if owner, exists := reserved[key]; exists {
+			return fmt.Errorf("service('%s') handler('%s') socket '%s' is already used by %s", service.Name, handler.Category, key, owner)
+		}
+		reserved[key] = fmt.Sprintf("service('%s') handler('%s')", service.Name, handler.Category)
+	}
+
+	return nil
+}
+
+func socketKey(socket config.Socket) (string, error) {
+	if socket.Id == "" {
+		return "", fmt.Errorf("socket id is empty")
+	}
+	return fmt.Sprintf("%s:%d", socket.Id, socket.Port), nil
 }
 
 // SetService updates an existing service in the runtime configuration.

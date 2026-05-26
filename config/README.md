@@ -4,7 +4,7 @@ This module provides Go types and JSON helpers for an application configuration 
 
 It is a static data library only:
 
-- `config` defines service metadata (`Service`, `Handler`, `Socket`, `CommandDep`)
+- `config` defines service metadata (`Service`, `Handler`, `Socket`, `CommandDep`, `DepTarget`)
 - `config` defines the top-level `SdsService` struct (`services: [...]`), `Load`, and `SdsService.Save`
 
 There is no runtime config server, engine, or client API in this module.
@@ -93,7 +93,20 @@ Each handler must define a `category`, which consumers can use to group and clas
 
 Each `command-deps` entry must name a `command` and at least one routing target: `proxies` and/or `extensions`. A command without dependencies is invalid.
 
-Proxy chains are declared in handler `command-deps` metadata as lists of service names (`proxies: [...]`). Terminal services that only receive routed traffic do not need `command-deps`.
+Each entry in `proxies` or `extensions` is a `DepTarget`: either a service name string (reference into `services`) or an inline service object. `config.Load` calls `Normalize()` to register inline services and verify references.
+
+```json
+"proxies": [
+  "auth_proxy",
+  {
+    "type": "Proxy",
+    "name": "inline_audit",
+    "handlers": [ ... ]
+  }
+]
+```
+
+Proxy chains are declared in handler `command-deps` metadata. Terminal services that only receive routed traffic do not need `command-deps`.
 
 ## Packages removed from this module
 

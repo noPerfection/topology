@@ -59,14 +59,14 @@ func TestValidateCommandDep(t *testing.T) {
 
 	if err := ValidateCommandDep(CommandDep{
 		Command: "call-user-api",
-		Proxies: []string{"auth_proxy"},
+		Proxies: []DepTarget{RefTarget("auth_proxy")},
 	}); err != nil {
 		t.Fatalf("ValidateCommandDep with proxies: %v", err)
 	}
 
 	if err := ValidateCommandDep(CommandDep{
 		Command:    "get-user",
-		Extensions: []string{"user_service"},
+		Extensions: []DepTarget{RefTarget("user_service")},
 	}); err != nil {
 		t.Fatalf("ValidateCommandDep with extensions: %v", err)
 	}

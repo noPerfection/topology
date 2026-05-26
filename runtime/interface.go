@@ -11,7 +11,7 @@ import (
 // Because, stopping must be done by the remote call from other services.
 type Interface interface {
 	// AddService registers a service in the runtime configuration.
-	AddService(service config.Service) error
+	AddService(target config.DepTarget) error
 
 	// SetService updates an existing service in the runtime configuration.
 	SetService(service config.Service) error

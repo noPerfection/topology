@@ -35,6 +35,10 @@ func Load(filePath string) (SdsService, error) {
 		return SdsService{}, fmt.Errorf("json.Unmarshal: %w", err)
 	}
 
+	if err := appConfig.Normalize(); err != nil {
+		return SdsService{}, fmt.Errorf("Normalize: %w", err)
+	}
+
 	return appConfig, nil
 }
 

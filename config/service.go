@@ -6,9 +6,9 @@ import (
 )
 
 type CommandDep struct {
-	Command    string   `json:"command"`
-	Proxies    []string `json:"proxies,omitempty"`
-	Extensions []string `json:"extensions,omitempty"`
+	Command    string      `json:"command"`
+	Proxies    []DepTarget `json:"proxies,omitempty"`
+	Extensions []DepTarget `json:"extensions,omitempty"`
 }
 
 type Socket struct {
@@ -156,6 +156,17 @@ func ValidateCommandDep(dep CommandDep) error {
 	}
 	if len(dep.Proxies) == 0 && len(dep.Extensions) == 0 {
 		return fmt.Errorf("command('%s') must declare proxies or extensions", dep.Command)
+	}
+
+	for i, target := range dep.Proxies {
+		if err := ValidateDepTarget(target); err != nil {
+			return fmt.Errorf("proxies[%d]: %w", i, err)
+		}
+	}
+	for i, target := range dep.Extensions {
+		if err := ValidateDepTarget(target); err != nil {
+			return fmt.Errorf("extensions[%d]: %w", i, err)
+		}
 	}
 
 	return nil

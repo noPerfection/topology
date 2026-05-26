@@ -5,10 +5,10 @@ import (
 	"time"
 
 	config "github.com/noPerfection/context/config"
-	"github.com/noPerfection/protocol/client"
-	clientConfig "github.com/noPerfection/protocol/client/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/message"
+	"github.com/noPerfection/protocol/client"
+	clientConfig "github.com/noPerfection/protocol/client/config"
 	handlerConfig "github.com/noPerfection/protocol/handler/config"
 )
 
@@ -22,7 +22,7 @@ type ClientInterface interface {
 	Attempt(attempt uint8)
 
 	StopService(serviceName string) error
-	AddService(service config.Service) error
+	AddService(target config.DepTarget) error
 	SetService(service config.Service) error
 	RemoveService(serviceName string) error
 	StartService(serviceName string, parent *clientConfig.Client) (string, error)
@@ -84,12 +84,12 @@ func (c *Client) StopService(serviceName string) error {
 	return nil
 }
 
-// AddService registers a service in the runtime configuration.
-func (c *Client) AddService(service config.Service) error {
+// AddService registers a service target in the runtime configuration.
+func (c *Client) AddService(target config.DepTarget) error {
 	req := message.Request{
 		Command: AddService,
 		Parameters: datatype.New().
-			Set("service", service),
+			Set("service", target),
 	}
 
 	reply, err := c.socket.Request(&req)
