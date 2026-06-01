@@ -2,7 +2,7 @@
   "services": [
     {
       "type": "Independent",
-      "name": "public_api",
+      "name": "main",
       "handler-deps": [
         {
           "name": "public-api",
@@ -15,9 +15,9 @@
       "handlers": [
         {
           "type": "Replier",
-          "category": "public-api",
+          "category": "main",
           "endpoint": {
-            "id": "public_1",
+            "id": "localhost",
             "port": 4101
           }
         }
@@ -31,7 +31,7 @@
           "type": "Replier",
           "category": "auth-proxy",
           "endpoint": {
-            "id": "auth_1",
+            "id": "localhost",
             "port": 4201
           },
           "command-deps": [
