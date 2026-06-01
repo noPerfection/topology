@@ -7,8 +7,9 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
-type CommandDep struct {
-	Command    string      `json:"command"`
+type DepService struct {
+	// For command deps its command, for handler deps its handler catego
+	Name       string      `json:"name"`
 	Proxies    []DepTarget `json:"proxies,omitempty"`
 	Extensions []DepTarget `json:"extensions,omitempty"`
 }
@@ -17,7 +18,7 @@ type Handler struct {
 	Type        HandlerType      `json:"type"`
 	Category    string           `json:"category"`
 	Endpoint    message.Endpoint `json:"endpoint"`
-	CommandDeps []CommandDep     `json:"command-deps,omitempty"`
+	CommandDeps []DepService     `json:"command-deps,omitempty"`
 }
 
 // Service type defined in the config.
@@ -27,11 +28,12 @@ type Handler struct {
 //   - Name of the service
 //   - Handlers that are listed in the service
 type Service struct {
-	Type         Type      `json:"type"`
-	Name         string    `json:"name"`
-	ModuleUrl    string    `json:"module-url,omitempty"`
-	StartCommand string    `json:"start-command,omitempty"`
-	Handlers     []Handler `json:"handlers"`
+	Type         Type         `json:"type"`
+	Name         string       `json:"name"`
+	ModuleUrl    string       `json:"module-url,omitempty"`
+	StartCommand string       `json:"start-command,omitempty"`
+	HandlerDeps  []DepService `json:"handler-deps,omitempty"`
+	Handlers     []Handler    `json:"handlers"`
 }
 
 // New generates a service configuration.
@@ -54,6 +56,12 @@ func ValidateService(service Service) error {
 
 	needsModuleURL := false
 	needsStartCommand := false
+	for i, dep := range service.HandlerDeps {
+		if err := ValidateDepService(dep); err != nil {
+			return fmt.Errorf("ValidateHandlerDep[%d]: %v", i, err)
+		}
+	}
+
 	for i, h := range service.Handlers {
 		if err := ValidateHandlerType(h.Type); err != nil {
 			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
@@ -73,8 +81,8 @@ func ValidateService(service Service) error {
 		}
 
 		for _, dep := range h.CommandDeps {
-			if err := ValidateCommandDep(dep); err != nil {
-				return fmt.Errorf("ValidateCommandDep[%d]: %v", i, err)
+			if err := ValidateDepService(dep); err != nil {
+				return fmt.Errorf("ValidateCommandDepService[%d]: %v", i, err)
 			}
 		}
 	}
@@ -177,13 +185,13 @@ func (s *Service) RemoveHandler(endpoint message.Endpoint) error {
 	return nil
 }
 
-// ValidateCommandDep checks that a command dependency declares routing targets.
-func ValidateCommandDep(dep CommandDep) error {
-	if len(dep.Command) == 0 {
-		return fmt.Errorf("command argument is empty")
+// ValidateDepService checks that a dependency declares a name and routing targets.
+func ValidateDepService(dep DepService) error {
+	if len(dep.Name) == 0 {
+		return fmt.Errorf("name argument is empty")
 	}
 	if len(dep.Proxies) == 0 && len(dep.Extensions) == 0 {
-		return fmt.Errorf("command('%s') must declare proxies or extensions", dep.Command)
+		return fmt.Errorf("dep service('%s') must declare proxies or extensions", dep.Name)
 	}
 
 	for i, target := range dep.Proxies {

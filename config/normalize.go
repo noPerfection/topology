@@ -2,8 +2,8 @@ package config
 
 import "fmt"
 
-// Normalize registers inline services from command-deps into Services and
-// validates that every dependency target name resolves to a known service.
+// Normalize registers inline services from handler-deps and command-deps into
+// Services and validates that every dependency target name resolves.
 func (a *NoPerfection) Normalize() error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
@@ -36,11 +36,18 @@ func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bo
 		return err
 	}
 
+	for di := range service.HandlerDeps {
+		dep := &service.HandlerDeps[di]
+		if err := a.normalizeDepService(dep, visiting); err != nil {
+			return fmt.Errorf("handler-deps category %q: %w", dep.Name, err)
+		}
+	}
+
 	for hi := range service.Handlers {
 		for di := range service.Handlers[hi].CommandDeps {
 			dep := &service.Handlers[hi].CommandDeps[di]
-			if err := a.normalizeCommandDep(dep, visiting); err != nil {
-				return fmt.Errorf("command %q: %w", dep.Command, err)
+			if err := a.normalizeDepService(dep, visiting); err != nil {
+				return fmt.Errorf("command %q: %w", dep.Name, err)
 			}
 		}
 	}
@@ -51,8 +58,8 @@ func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bo
 	return nil
 }
 
-func (a *NoPerfection) normalizeCommandDep(dep *CommandDep, visiting map[string]bool) error {
-	if err := ValidateCommandDep(*dep); err != nil {
+func (a *NoPerfection) normalizeDepService(dep *DepService, visiting map[string]bool) error {
+	if err := ValidateDepService(*dep); err != nil {
 		return err
 	}
 
@@ -86,19 +93,31 @@ func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string
 
 func (a *NoPerfection) validateDepRefs() error {
 	for _, service := range a.Services {
+		for _, dep := range service.HandlerDeps {
+			if err := a.validateDepServiceRefs(dep); err != nil {
+				return fmt.Errorf("service %q handler-deps category %q: %w", service.Name, dep.Name, err)
+			}
+		}
 		for _, handler := range service.Handlers {
 			for _, dep := range handler.CommandDeps {
-				for _, target := range dep.Proxies {
-					if err := a.validateDepRef(target); err != nil {
-						return fmt.Errorf("service %q command %q proxy: %w", service.Name, dep.Command, err)
-					}
-				}
-				for _, target := range dep.Extensions {
-					if err := a.validateDepRef(target); err != nil {
-						return fmt.Errorf("service %q command %q extension: %w", service.Name, dep.Command, err)
-					}
+				if err := a.validateDepServiceRefs(dep); err != nil {
+					return fmt.Errorf("service %q command %q: %w", service.Name, dep.Name, err)
 				}
 			}
+		}
+	}
+	return nil
+}
+
+func (a *NoPerfection) validateDepServiceRefs(dep DepService) error {
+	for _, target := range dep.Proxies {
+		if err := a.validateDepRef(target); err != nil {
+			return fmt.Errorf("proxy: %w", err)
+		}
+	}
+	for _, target := range dep.Extensions {
+		if err := a.validateDepRef(target); err != nil {
+			return fmt.Errorf("extension: %w", err)
 		}
 	}
 	return nil

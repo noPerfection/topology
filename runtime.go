@@ -104,21 +104,34 @@ func (rt *Runtime) validateServiceRef(serviceName string, visiting map[string]bo
 		return fmt.Errorf("service.ValidateTypes('%s'): %w", service.Name, err)
 	}
 
+	for _, dep := range service.HandlerDeps {
+		if err := rt.validateDepServiceTargets(dep, visiting); err != nil {
+			return fmt.Errorf("service '%s' handler-deps category '%s': %w", service.Name, dep.Name, err)
+		}
+	}
+
 	for _, handler := range service.Handlers {
 		for _, dep := range handler.CommandDeps {
-			for _, target := range dep.Proxies {
-				if err := rt.validateDepTargetExists(target, visiting); err != nil {
-					return fmt.Errorf("service '%s' command '%s' proxy: %w", service.Name, dep.Command, err)
-				}
-			}
-			for _, target := range dep.Extensions {
-				if err := rt.validateDepTargetExists(target, visiting); err != nil {
-					return fmt.Errorf("service '%s' command '%s' extension: %w", service.Name, dep.Command, err)
-				}
+			if err := rt.validateDepServiceTargets(dep, visiting); err != nil {
+				return fmt.Errorf("service '%s' command '%s': %w", service.Name, dep.Name, err)
 			}
 		}
 	}
 
+	return nil
+}
+
+func (rt *Runtime) validateDepServiceTargets(dep config.DepService, visiting map[string]bool) error {
+	for _, target := range dep.Proxies {
+		if err := rt.validateDepTargetExists(target, visiting); err != nil {
+			return fmt.Errorf("proxy: %w", err)
+		}
+	}
+	for _, target := range dep.Extensions {
+		if err := rt.validateDepTargetExists(target, visiting); err != nil {
+			return fmt.Errorf("extension: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -161,17 +174,16 @@ func (rt *Runtime) addInlineService(service *config.Service, visiting map[string
 		return err
 	}
 
+	for _, dep := range service.HandlerDeps {
+		if err := rt.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
+			return fmt.Errorf("service '%s' handler-deps category '%s': %w", service.Name, dep.Name, err)
+		}
+	}
+
 	for _, handler := range service.Handlers {
 		for _, dep := range handler.CommandDeps {
-			for _, target := range dep.Proxies {
-				if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
-					return fmt.Errorf("service '%s' command '%s' proxy: %w", service.Name, dep.Command, err)
-				}
-			}
-			for _, target := range dep.Extensions {
-				if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
-					return fmt.Errorf("service '%s' command '%s' extension: %w", service.Name, dep.Command, err)
-				}
+			if err := rt.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
+				return fmt.Errorf("service '%s' command '%s': %w", service.Name, dep.Name, err)
 			}
 		}
 	}
@@ -180,6 +192,20 @@ func (rt *Runtime) addInlineService(service *config.Service, visiting map[string
 		return fmt.Errorf("rt.config.SetService: %w", err)
 	}
 
+	return nil
+}
+
+func (rt *Runtime) addOrValidateDepServiceTargets(dep config.DepService, visiting map[string]bool, reservedEndpoints map[string]string) error {
+	for _, target := range dep.Proxies {
+		if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
+			return fmt.Errorf("proxy: %w", err)
+		}
+	}
+	for _, target := range dep.Extensions {
+		if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
+			return fmt.Errorf("extension: %w", err)
+		}
+	}
 	return nil
 }
 

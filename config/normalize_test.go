@@ -19,9 +19,9 @@ func TestNormalizeInlineService(t *testing.T) {
 						Type:     ReplierType,
 						Category: "public-api",
 						Endpoint: message.NewEndpoint("public_1", 4101),
-						CommandDeps: []CommandDep{
+						CommandDeps: []DepService{
 							{
-								Command: "call-user-api",
+								Name: "call-user-api",
 								Proxies: []DepTarget{
 									InlineTarget(*New("nested_proxy", ProxyType)),
 								},
@@ -52,6 +52,49 @@ func TestNormalizeInlineService(t *testing.T) {
 	}
 }
 
+func TestNormalizeServiceHandlerDeps(t *testing.T) {
+	app := NoPerfection{
+		Services: []Service{
+			{
+				Type: IndependentType,
+				Name: "api",
+				Handlers: []Handler{
+					{
+						Type:     ReplierType,
+						Category: "api",
+						Endpoint: message.NewEndpoint("api_1", 4101),
+					},
+				},
+				HandlerDeps: []DepService{
+					{
+						Name: "api",
+						Proxies: []DepTarget{
+							InlineTarget(Service{
+								Type: ProxyType,
+								Name: "inline_proxy",
+								Handlers: []Handler{
+									{
+										Type:     ReplierType,
+										Category: "inline",
+										Endpoint: message.NewEndpoint("inline_1", 4201),
+									},
+								},
+							}),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.Normalize(); err != nil {
+		t.Fatalf("Normalize: %v", err)
+	}
+	if _, err := app.GetService("inline_proxy"); err != nil {
+		t.Fatalf("GetService inline_proxy: %v", err)
+	}
+}
+
 func TestNormalizeMissingRef(t *testing.T) {
 	app := NoPerfection{
 		Services: []Service{
@@ -63,9 +106,9 @@ func TestNormalizeMissingRef(t *testing.T) {
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
-						CommandDeps: []CommandDep{
+						CommandDeps: []DepService{
 							{
-								Command: "route",
+								Name:    "route",
 								Proxies: []DepTarget{RefTarget("missing_proxy")},
 							},
 						},
@@ -80,6 +123,34 @@ func TestNormalizeMissingRef(t *testing.T) {
 	}
 }
 
+func TestNormalizeMissingHandlerDepRef(t *testing.T) {
+	app := NoPerfection{
+		Services: []Service{
+			{
+				Type: IndependentType,
+				Name: "api",
+				Handlers: []Handler{
+					{
+						Type:     ReplierType,
+						Category: "api",
+						Endpoint: message.NewEndpoint("api_1", 4101),
+					},
+				},
+				HandlerDeps: []DepService{
+					{
+						Name:    "api",
+						Proxies: []DepTarget{RefTarget("missing_proxy")},
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.Normalize(); err == nil {
+		t.Fatal("Normalize with missing handler-deps ref returned nil error")
+	}
+}
+
 func TestLoadWithMixedDepTargets(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "app.json")
@@ -88,6 +159,12 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
     {
       "type": "Independent",
       "name": "api",
+      "handler-deps": [
+        {
+          "name": "api",
+          "proxies": ["auth_proxy"]
+        }
+      ],
       "handlers": [
         {
           "type": "Replier",
@@ -95,7 +172,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
           "endpoint": {"id": "api_1", "port": 4101},
           "command-deps": [
             {
-              "command": "route",
+              "name": "route",
               "proxies": [
                 "auth_proxy",
                 {
@@ -153,5 +230,9 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 	}
 	if dep.Proxies[1].Inline == nil || dep.Proxies[1].Inline.Name != "inline_proxy" {
 		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Inline)
+	}
+	handlerDep := app.Services[0].HandlerDeps[0]
+	if handlerDep.Proxies[0].Ref != "auth_proxy" {
+		t.Fatalf("handler-deps first proxy ref = %q, want auth_proxy", handlerDep.Proxies[0].Ref)
 	}
 }

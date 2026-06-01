@@ -114,23 +114,45 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	}
 }
 
-func TestValidateCommandDep(t *testing.T) {
-	if err := ValidateCommandDep(CommandDep{Command: "orphan"}); err == nil {
-		t.Fatal("ValidateCommandDep without proxies or extensions returned nil error")
+func TestValidateDepService(t *testing.T) {
+	if err := ValidateDepService(DepService{Name: "orphan"}); err == nil {
+		t.Fatal("ValidateDepService without proxies or extensions returned nil error")
 	}
 
-	if err := ValidateCommandDep(CommandDep{
-		Command: "call-user-api",
+	if err := ValidateDepService(DepService{
+		Name:    "call-user-api",
 		Proxies: []DepTarget{RefTarget("auth_proxy")},
 	}); err != nil {
-		t.Fatalf("ValidateCommandDep with proxies: %v", err)
+		t.Fatalf("ValidateDepService with proxies: %v", err)
 	}
 
-	if err := ValidateCommandDep(CommandDep{
-		Command:    "get-user",
+	if err := ValidateDepService(DepService{
+		Name:       "get-user",
 		Extensions: []DepTarget{RefTarget("user_service")},
 	}); err != nil {
-		t.Fatalf("ValidateCommandDep with extensions: %v", err)
+		t.Fatalf("ValidateDepService with extensions: %v", err)
+	}
+}
+
+func TestServiceValidateHandlerDeps(t *testing.T) {
+	serviceConfig, handlerOfType, _, _ := testService()
+	serviceConfig.Handlers = []Handler{handlerOfType}
+	serviceConfig.HandlerDeps = []DepService{{Name: "orphan"}}
+
+	if err := ValidateService(*serviceConfig); err == nil {
+		t.Fatal("ValidateService with invalid handler-deps returned nil error")
+	}
+
+	serviceConfig.HandlerDeps = []DepService{
+		{
+			Name: "public",
+			Proxies: []DepTarget{
+				RefTarget("auth_proxy"),
+			},
+		},
+	}
+	if err := ValidateService(*serviceConfig); err != nil {
+		t.Fatalf("ValidateService with handler-deps: %v", err)
 	}
 }
 

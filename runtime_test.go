@@ -218,9 +218,9 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				Type:     config.ReplierType,
 				Category: ManagerHandlerCategory,
 				Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
-				CommandDeps: []config.CommandDep{
+				CommandDeps: []config.DepService{
 					{
-						Command: "proxy",
+						Name: "proxy",
 						Proxies: []config.DepTarget{
 							config.InlineTarget(config.Service{
 								Type: config.ProxyType,
@@ -244,6 +244,42 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	_, err = test.runtime.config.GetService("nested-parent")
 	s().NoError(err)
 	_, err = test.runtime.config.GetService("nested-child")
+	s().NoError(err)
+
+	err = test.runtime.AddService(config.InlineTarget(config.Service{
+		Type: config.ProxyType,
+		Name: "service-level-parent",
+		HandlerDeps: []config.DepService{
+			{
+				Name: "manager",
+				Proxies: []config.DepTarget{
+					config.InlineTarget(config.Service{
+						Type: config.ProxyType,
+						Name: "service-level-child",
+						Handlers: []config.Handler{
+							{
+								Type:     config.ReplierType,
+								Category: ManagerHandlerCategory,
+								Endpoint: message.NewEndpoint("service-level-child-manager", 6201),
+							},
+						},
+					}),
+				},
+			},
+		},
+		Handlers: []config.Handler{
+			{
+				Type:     config.ReplierType,
+				Category: ManagerHandlerCategory,
+				Endpoint: message.NewEndpoint("service-level-parent-manager", 6200),
+			},
+		},
+	}))
+	s().NoError(err)
+
+	_, err = test.runtime.config.GetService("service-level-parent")
+	s().NoError(err)
+	_, err = test.runtime.config.GetService("service-level-child")
 	s().NoError(err)
 }
 
