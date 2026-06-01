@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/message"
 )
 
@@ -27,13 +28,15 @@ type Handler struct {
 //   - Type is the type of service. For example, ProxyType, IndependentType or ExtensionType
 //   - Name of the service
 //   - Handlers that are listed in the service
+//   - Parameters optional service-local metadata (not validated)
 type Service struct {
-	Type         Type         `json:"type"`
-	Name         string       `json:"name"`
-	ModuleUrl    string       `json:"module-url,omitempty"`
-	StartCommand string       `json:"start-command,omitempty"`
-	HandlerDeps  []DepService `json:"handler-deps,omitempty"`
-	Handlers     []Handler    `json:"handlers"`
+	Type         Type              `json:"type"`
+	Name         string            `json:"name"`
+	ModuleUrl    string            `json:"module-url,omitempty"`
+	StartCommand string            `json:"start-command,omitempty"`
+	HandlerDeps  []DepService      `json:"handler-deps,omitempty"`
+	Handlers     []Handler         `json:"handlers"`
+	Parameters   datatype.KeyValue `json:"parameters,omitempty"`
 }
 
 // New generates a service configuration.

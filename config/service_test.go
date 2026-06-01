@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"testing"
 
+	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/message"
 )
 
@@ -131,6 +133,69 @@ func TestValidateDepService(t *testing.T) {
 		Extensions: []DepTarget{RefTarget("user_service")},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with extensions: %v", err)
+	}
+}
+
+func TestServiceParametersNotValidated(t *testing.T) {
+	serviceConfig, handlerOfType, _, _ := testService()
+	serviceConfig.Handlers = []Handler{handlerOfType}
+	serviceConfig.Parameters = datatype.New().Set("region", "eu-west")
+
+	if err := ValidateService(*serviceConfig); err != nil {
+		t.Fatalf("ValidateService with parameters: %v", err)
+	}
+}
+
+func TestServiceParametersJSONRoundTrip(t *testing.T) {
+	data := []byte(`{
+		"type": "Proxy",
+		"name": "worker",
+		"parameters": {
+			"region": "eu-west",
+			"replicas": 3
+		},
+		"handlers": [{
+			"type": "Replier",
+			"category": "manager",
+			"endpoint": {"id": "worker_1", "port": 6001}
+		}]
+	}`)
+
+	var service Service
+	if err := json.Unmarshal(data, &service); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	region, err := service.Parameters.StringValue("region")
+	if err != nil {
+		t.Fatalf("Parameters.StringValue('region'): %v", err)
+	}
+	if region != "eu-west" {
+		t.Fatalf("region = %q, want eu-west", region)
+	}
+
+	replicas, err := service.Parameters.Uint64Value("replicas")
+	if err != nil {
+		t.Fatalf("Parameters.Uint64Value('replicas'): %v", err)
+	}
+	if replicas != 3 {
+		t.Fatalf("replicas = %d, want 3", replicas)
+	}
+
+	out, err := json.Marshal(service)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+
+	var roundTrip Service
+	if err := json.Unmarshal(out, &roundTrip); err != nil {
+		t.Fatalf("json.Unmarshal round trip: %v", err)
+	}
+	if roundTrip.Parameters == nil {
+		t.Fatal("Parameters is nil after round trip")
+	}
+	if got, err := roundTrip.Parameters.StringValue("region"); err != nil || got != "eu-west" {
+		t.Fatalf("round trip region = %q, err = %v", got, err)
 	}
 }
 
