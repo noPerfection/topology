@@ -9,7 +9,9 @@ import (
 
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
-	"github.com/noPerfection/protocol/client"
+	"github.com/noPerfection/protocol/client/sync_replier"
+	"github.com/noPerfection/protocol/handler/base"
+	handlerConfig "github.com/noPerfection/protocol/handler/config"
 	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/message"
 	"github.com/noPerfection/runtime/config"
@@ -375,24 +377,21 @@ func (rt *Runtime) StopService(serviceName string) error {
 		return nil
 	}
 
-	sock, err := rt.managerClient(&service)
+	managerControl, err := rt.managerControl(&service)
 	if err != nil {
 		return err
 	}
-	defer sock.Close()
+	defer managerControl.Close()
 
-	closeRequest := &message.Request{
-		Command:    control.HandlerClose,
-		Parameters: datatype.New(),
+	managerControl.Timeout(rt.timeout)
+	managerControl.Attempt(1)
+	if err := managerControl.HandlerClose(); err != nil {
+		return fmt.Errorf("managerControl.HandlerClose: %w", err)
 	}
-
-	sock.Timeout(rt.timeout).Attempt(1)
-
-	_, _ = sock.Request(closeRequest)
 
 	running, err = rt.IsServiceRunning(serviceName)
 	if err != nil {
-		return fmt.Errorf("socket.Request('%s'): runtime.IsServiceRunning('%s'): %w", control.HandlerClose, serviceName, err)
+		return fmt.Errorf("managerControl.HandlerClose: runtime.IsServiceRunning('%s'): %w", serviceName, err)
 	}
 
 	if running {
@@ -419,28 +418,21 @@ func (rt *Runtime) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
-	sock, err := rt.managerClient(&service)
+	managerControl, err := rt.managerControl(&service)
 	if err != nil {
 		return false, err
 	}
-	sock.Attempt(1).Timeout(rt.timeout)
+	defer managerControl.Close()
 
-	req := &message.Request{
-		Command:    "heartbeat",
-		Parameters: datatype.New(),
-	}
+	managerControl.Attempt(1)
+	managerControl.Timeout(rt.timeout)
 
-	_, err = sock.Request(req)
+	status, err := managerControl.HandlerStatus()
 	if err != nil {
 		return false, nil
 	}
 
-	closeErr := sock.Close()
-	if closeErr != nil {
-		return false, fmt.Errorf("socket.Close: %w", err)
-	}
-
-	return true, nil
+	return status == base.SocketReady, nil
 }
 
 // OnStop returns a signal through the channel when the process spawned by the Runtime stops.
@@ -495,22 +487,25 @@ func (rt *Runtime) refreshServiceCount(serviceName string) {
 	rt.sameServices[serviceName] = count
 }
 
-func (rt *Runtime) managerClient(service *config.Service) (*client.Socket, error) {
+func (rt *Runtime) managerControl(service *config.Service) (*sync_replier.BaseControl, error) {
 	handler, err := service.HandlerByCategory(ManagerHandlerCategory)
 	if err != nil {
 		return nil, fmt.Errorf("no manager found in the '%s' service, please set its config", service.Name)
 	}
 
-	socket, err := client.New(
+	controlConfig := control.CreateInternalConfig(handlerConfig.New(
+		handlerConfig.HandlerType(handler.Type),
 		handler.Endpoint.Id,
+		handler.Category,
 		handler.Endpoint.Port,
-		client.HandlerType(handler.Type),
-	)
+	))
+
+	managerControl, err := sync_replier.NewBaseControl(controlConfig.Id, controlConfig.Port)
 	if err != nil {
-		return nil, fmt.Errorf("client.New: %w", err)
+		return nil, fmt.Errorf("sync_replier.NewBaseControl: %w", err)
 	}
 
-	return socket, nil
+	return managerControl, nil
 }
 
 // StartService runs the service start command.
