@@ -7,6 +7,7 @@ import (
 
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/os/path"
+	"github.com/noPerfection/protocol/message"
 	config "github.com/noPerfection/runtime/config"
 	"github.com/stretchr/testify/suite"
 )
@@ -73,10 +74,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 						{
 							Type:     config.ReplierType,
 							Category: ManagerHandlerCategory,
-							Socket: config.Socket{
-								Id:   "test-manager",
-								Port: 6000,
-							},
+							Endpoint: message.NewEndpoint("test-manager", 6000),
 						},
 					},
 				},
@@ -154,10 +152,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 			{
 				Type:     config.ReplierType,
 				Category: ManagerHandlerCategory,
-				Socket: config.Socket{
-					Id:   "extra-service-manager",
-					Port: 6001,
-				},
+				Endpoint: message.NewEndpoint("extra-service-manager", 6001),
 			},
 		},
 	}
@@ -209,7 +204,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 			{
 				Type:     config.ReplierType,
 				Category: ManagerHandlerCategory,
-				Socket:   config.Socket{Id: "test-manager", Port: 6000},
+				Endpoint: message.NewEndpoint("test-manager", 6000),
 			},
 		},
 	}))
@@ -222,7 +217,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 			{
 				Type:     config.ReplierType,
 				Category: ManagerHandlerCategory,
-				Socket:   config.Socket{Id: "nested-parent-manager", Port: 6100},
+				Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
 				CommandDeps: []config.CommandDep{
 					{
 						Command: "proxy",
@@ -234,7 +229,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 									{
 										Type:     config.ReplierType,
 										Category: ManagerHandlerCategory,
-										Socket:   config.Socket{Id: "nested-child-manager", Port: 6101},
+										Endpoint: message.NewEndpoint("nested-child-manager", 6101),
 									},
 								},
 							}),

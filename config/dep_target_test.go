@@ -35,7 +35,7 @@ func TestDepTargetJSONInline(t *testing.T) {
 		"handlers": [{
 			"type": "Replier",
 			"category": "audit",
-			"socket": {"id": "audit_1", "port": 4301}
+			"endpoint": {"id": "audit_1", "port": 4301}
 		}]
 	}`)
 

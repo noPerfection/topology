@@ -3,7 +3,8 @@ package config
 import (
 	"fmt"
 	"slices"
-	"strings"
+
+	"github.com/noPerfection/protocol/message"
 )
 
 type CommandDep struct {
@@ -12,16 +13,11 @@ type CommandDep struct {
 	Extensions []DepTarget `json:"extensions,omitempty"`
 }
 
-type Socket struct {
-	Id   string `json:"id"`
-	Port int    `json:"port,omitempty"`
-}
-
 type Handler struct {
-	Type        HandlerType  `json:"type"`
-	Category    string       `json:"category"`
-	Socket      Socket       `json:"socket"`
-	CommandDeps []CommandDep `json:"command-deps,omitempty"`
+	Type        HandlerType      `json:"type"`
+	Category    string           `json:"category"`
+	Endpoint    message.Endpoint `json:"endpoint"`
+	CommandDeps []CommandDep     `json:"command-deps,omitempty"`
 }
 
 // Service type defined in the config.
@@ -47,7 +43,7 @@ func New(name string, serviceType Type) *Service {
 	}
 }
 
-// ValidateService validates the service metadata and socket bootstrap settings.
+// ValidateService validates the service metadata and endpoint bootstrap settings.
 func ValidateService(service Service) error {
 	if len(service.Name) == 0 {
 		return fmt.Errorf("service name is empty")
@@ -58,40 +54,36 @@ func ValidateService(service Service) error {
 
 	needsModuleURL := false
 	needsStartCommand := false
-	for _, h := range service.Handlers {
+	for i, h := range service.Handlers {
 		if err := ValidateHandlerType(h.Type); err != nil {
-			return fmt.Errorf("ValidateHandlerType: %v", err)
+			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
 		}
 		if len(h.Category) == 0 {
-			return fmt.Errorf("handler category is empty")
+			return fmt.Errorf("handler[%d] category is empty", i)
 		}
-		if len(h.Socket.Id) == 0 {
-			return fmt.Errorf("handler '%s' socket id is empty", h.Category)
-		}
-		if h.Socket.Port < 0 {
-			return fmt.Errorf("handler '%s' socket port is negative", h.Category)
+		if len(h.Endpoint.Id) == 0 && !h.Endpoint.IsRemote() {
+			return fmt.Errorf("handler[%d] '%s' endpoint id is empty", i, h.Category)
 		}
 
-		if h.Socket.Port == 0 {
-			if strings.HasPrefix(h.Socket.Id, "tmp/") {
-				needsStartCommand = true
-			} else {
-				needsModuleURL = true
-			}
+		if h.Endpoint.IsInproc() {
+			needsModuleURL = true
+		}
+		if h.Endpoint.IsIpc() {
+			needsStartCommand = true
 		}
 
 		for _, dep := range h.CommandDeps {
 			if err := ValidateCommandDep(dep); err != nil {
-				return fmt.Errorf("ValidateCommandDep: %v", err)
+				return fmt.Errorf("ValidateCommandDep[%d]: %v", i, err)
 			}
 		}
 	}
 
 	if needsModuleURL && len(service.ModuleUrl) == 0 {
-		return fmt.Errorf("service('%s') has inproc socket and requires module-url", service.Name)
+		return fmt.Errorf("service('%s') has inproc endpoint and requires module-url", service.Name)
 	}
 	if needsStartCommand && len(service.StartCommand) == 0 {
-		return fmt.Errorf("service('%s') has tmp socket and requires start-command", service.Name)
+		return fmt.Errorf("service('%s') has ipc endpoint and requires start-command", service.Name)
 	}
 
 	return nil
@@ -122,27 +114,27 @@ func (s *Service) HandlerByCategory(category string) (Handler, error) {
 	return s.Handlers[i], nil
 }
 
-// GetHandler returns a handler by its socket id and port.
-func (s *Service) GetHandler(id string, port int) (Handler, error) {
+// GetHandler returns a handler by its endpoint.
+func (s *Service) GetHandler(endpoint message.Endpoint) (Handler, error) {
 	if s == nil {
 		return Handler{}, fmt.Errorf("service struct is nil")
 	}
-	if len(id) == 0 {
-		return Handler{}, fmt.Errorf("socket id argument is empty")
+	if len(endpoint.Id) == 0 && !endpoint.IsRemote() {
+		return Handler{}, fmt.Errorf("endpoint id argument is empty")
 	}
 
 	i := slices.IndexFunc(s.Handlers, func(h Handler) bool {
-		return h.Socket.Id == id && h.Socket.Port == port
+		return h.Endpoint.Id == endpoint.Id && h.Endpoint.Port == endpoint.Port
 	})
 	if i == -1 {
-		return Handler{}, fmt.Errorf("handler with socket '%s:%d' not found", id, port)
+		return Handler{}, fmt.Errorf("handler with endpoint '%s:%d' not found", endpoint.Id, endpoint.Port)
 	}
 
 	return s.Handlers[i], nil
 }
 
 // SetHandler adds a new handler.
-// If the handler with the same socket id exists, it will over-write that handler.
+// If the handler with the same endpoint id exists, it will over-write that handler.
 func (s *Service) SetHandler(handler Handler) {
 	if s == nil {
 		return
@@ -154,7 +146,7 @@ func (s *Service) SetHandler(handler Handler) {
 	}
 
 	i := slices.IndexFunc(s.Handlers, func(h Handler) bool {
-		return h.Socket.Id == handler.Socket.Id
+		return h.Endpoint.Id == handler.Endpoint.Id
 	})
 
 	if i == -1 {
@@ -165,20 +157,20 @@ func (s *Service) SetHandler(handler Handler) {
 	s.Handlers[i] = handler
 }
 
-// RemoveHandler removes a handler by its socket.
-func (s *Service) RemoveHandler(socket Socket) error {
+// RemoveHandler removes a handler by its endpoint.
+func (s *Service) RemoveHandler(endpoint message.Endpoint) error {
 	if s == nil {
 		return fmt.Errorf("service struct is nil")
 	}
-	if len(socket.Id) == 0 {
-		return fmt.Errorf("socket id argument is empty")
+	if len(endpoint.Id) == 0 && !endpoint.IsRemote() {
+		return fmt.Errorf("endpoint id argument is empty")
 	}
 
 	i := slices.IndexFunc(s.Handlers, func(h Handler) bool {
-		return h.Socket.Id == socket.Id && h.Socket.Port == socket.Port
+		return h.Endpoint.Id == endpoint.Id && h.Endpoint.Port == endpoint.Port
 	})
 	if i == -1 {
-		return fmt.Errorf("handler with socket '%s:%d' not found", socket.Id, socket.Port)
+		return fmt.Errorf("handler with endpoint '%s:%d' not found", endpoint.Id, endpoint.Port)
 	}
 
 	s.Handlers = slices.Delete(s.Handlers, i, i+1)

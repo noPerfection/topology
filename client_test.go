@@ -38,19 +38,16 @@ func (test *TestClientSuite) SetupTest() {
 	logger, _ := log.New("test", false)
 	test.logger = logger
 
-	runtimeSocket := config.Socket{
-		Id:   RuntimeHandlerCategory,
-		Port: 0,
-	}
+	runtimeEndpoint := message.NewEndpoint(RuntimeHandlerCategory, 0)
 
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{}, runtimeSocket)
+	test.depHandler, err = newHandler(&config.NoPerfection{}, runtimeEndpoint)
 	s().NoError(err)
 
 	// Start the handler
 	s().NoError(test.depHandler.Start())
 
-	controlConfig := control.CreateInternalConfig(HandlerConfig(runtimeSocket))
+	controlConfig := control.CreateInternalConfig(HandlerConfig(runtimeEndpoint))
 	test.depHandlerManager, err = sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
 	s().NoError(err)
 
@@ -67,7 +64,7 @@ func (test *TestClientSuite) SetupTest() {
 		Port:       120,
 	}
 
-	socket, err := NewClient(runtimeSocket)
+	socket, err := NewClient(runtimeEndpoint)
 	s().NoError(err)
 
 	test.client = socket

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/noPerfection/protocol/message"
 )
 
 func TestLoadMissingFile(t *testing.T) {
@@ -202,7 +204,7 @@ func TestLoadSave(t *testing.T) {
 		{
 			Type:     ReplierType,
 			Category: "api",
-			Socket:   Socket{Id: "api_1", Port: 4101},
+			Endpoint: message.NewEndpoint("api_1", 4101),
 		},
 	}
 	if err := original.SetService(*sample); err != nil {
@@ -231,8 +233,8 @@ func TestLoadSave(t *testing.T) {
 	if loaded.Services[0].Name != "api" {
 		t.Fatalf("Name = %q, want api", loaded.Services[0].Name)
 	}
-	if loaded.Services[0].Handlers[0].Socket.Port != 4101 {
-		t.Fatalf("Port = %d, want 4101", loaded.Services[0].Handlers[0].Socket.Port)
+	if loaded.Services[0].Handlers[0].Endpoint.Port != 4101 {
+		t.Fatalf("Port = %d, want 4101", loaded.Services[0].Handlers[0].Endpoint.Port)
 	}
 }
 

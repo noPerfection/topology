@@ -25,7 +25,8 @@ const (
 	// PublisherType handlers publish messages.
 	PublisherType HandlerType = "Publisher"
 	// PairType handlers communicate as a pair socket.
-	PairType HandlerType = "Pair"
+	PairType   HandlerType = "Pair"
+	WorkerType HandlerType = "Worker"
 )
 
 // ValidateServiceType checks whether the given string is the valid or not.
@@ -41,7 +42,7 @@ func ValidateServiceType(t Type) error {
 // ValidateHandlerType checks whether the given handler type is valid.
 // If not valid, then returns the error otherwise returns nil.
 func ValidateHandlerType(t HandlerType) error {
-	if t == SyncReplierType || t == ReplierType || t == PublisherType || t == PairType {
+	if t == SyncReplierType || t == ReplierType || t == PublisherType || t == PairType || t == WorkerType {
 		return nil
 	}
 

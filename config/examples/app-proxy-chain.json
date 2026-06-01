@@ -7,7 +7,7 @@
         {
           "type": "Replier",
           "category": "public-api",
-          "socket": {
+          "endpoint": {
             "id": "public_1",
             "port": 4101
           },
@@ -30,7 +30,7 @@
         {
           "type": "Replier",
           "category": "auth-proxy",
-          "socket": {
+          "endpoint": {
             "id": "auth_1",
             "port": 4201
           },
@@ -52,7 +52,7 @@
         {
           "type": "Replier",
           "category": "audit-proxy",
-          "socket": {
+          "endpoint": {
             "id": "audit_1",
             "port": 4301
           },
@@ -74,7 +74,7 @@
         {
           "type": "Replier",
           "category": "user-service",
-          "socket": {
+          "endpoint": {
             "id": "user_api_1",
             "port": 4401
           }

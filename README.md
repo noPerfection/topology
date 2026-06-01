@@ -19,14 +19,12 @@ First we need to start the runtime handler
 ```go
 import "github.com/noPerfection/runtime"
 import "github.com/noPerfection/runtime/config"
+import "github.com/noPerfection/protocol/message"
 
 //.. rest of code
-runtimeSocket := config.Socket{
-	Id:   "runtime",
-	Port: 0,
-}
+runtimeEndpoint := message.NewEndpoint("runtime", 0)
 
-handler, _ := runtime.NewHandler("service.json", runtimeSocket)
+handler, _ := runtime.NewHandler("service.json", runtimeEndpoint)
 
 // Any handler's functions.
 
@@ -41,7 +39,7 @@ Second, we need to interact with it from the code:
 
 ```go
 	// Now interact with the runtime manager through a runtime client.
-	runtimeClient, _ := runtime.NewClient(runtimeSocket)
+	runtimeClient, _ := runtime.NewClient(runtimeEndpoint)
 	defer runtimeClient.Close()
 
 	running, err := runtimeClient.IsServiceRunning("database")
@@ -55,7 +53,7 @@ Second, we need to interact with it from the code:
 
 ## Runtime Handler
 
-`runtime.NewHandler(configPath, runtimeSocket)` returns a handler that serves runtime commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any runtime bootstrap changes, and uses `runtimeSocket` as its command endpoint.
+`runtime.NewHandler(configPath, runtimeEndpoint)` returns a handler that serves runtime commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any runtime bootstrap changes, and uses `runtimeEndpoint` as its command endpoint.
 
 The handler exposes these commands internally:
 
@@ -66,11 +64,11 @@ The handler exposes these commands internally:
 - `stop-service`
 - `is-service-running`
 
-Applications usually do not send these commands directly. Use `runtime.NewClient(runtimeSocket)` instead.
+Applications usually do not send these commands directly. Use `runtime.NewClient(runtimeEndpoint)` instead.
 
 ## Runtime Client API
 
-`runtime.NewClient(runtimeSocket)` returns a `*runtime.Client`. Configure request behavior with:
+`runtime.NewClient(runtimeEndpoint)` returns a `*runtime.Client`. Configure request behavior with:
 
 ```go
 runtimeClient.Timeout(5 * time.Second)
@@ -105,10 +103,7 @@ service := config.Service{
 		{
 			Type:     config.ReplierType,
 			Category: runtime.ManagerHandlerCategory,
-			Socket: config.Socket{
-				Id:   "worker-manager",
-				Port: 6001,
-			},
+			Endpoint: message.NewEndpoint("worker-manager", 6001),
 		},
 	},
 }
@@ -179,7 +174,7 @@ Example service config:
     {
       "type": "Replier",
       "category": "manager",
-      "socket": {
+      "endpoint": {
         "id": "worker-manager",
         "port": 6001
       }

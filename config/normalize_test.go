@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/noPerfection/protocol/message"
 )
 
 func TestNormalizeInlineService(t *testing.T) {
@@ -16,7 +18,7 @@ func TestNormalizeInlineService(t *testing.T) {
 					{
 						Type:     ReplierType,
 						Category: "public-api",
-						Socket:   Socket{Id: "public_1", Port: 4101},
+						Endpoint: message.NewEndpoint("public_1", 4101),
 						CommandDeps: []CommandDep{
 							{
 								Command: "call-user-api",
@@ -34,7 +36,7 @@ func TestNormalizeInlineService(t *testing.T) {
 		{
 			Type:     ReplierType,
 			Category: "nested",
-			Socket:   Socket{Id: "nested_1", Port: 4201},
+			Endpoint: message.NewEndpoint("nested_1", 4201),
 		},
 	}
 
@@ -60,7 +62,7 @@ func TestNormalizeMissingRef(t *testing.T) {
 					{
 						Type:     ReplierType,
 						Category: "api",
-						Socket:   Socket{Id: "api_1", Port: 4101},
+						Endpoint: message.NewEndpoint("api_1", 4101),
 						CommandDeps: []CommandDep{
 							{
 								Command: "route",
@@ -90,7 +92,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
         {
           "type": "Replier",
           "category": "api",
-          "socket": {"id": "api_1", "port": 4101},
+          "endpoint": {"id": "api_1", "port": 4101},
           "command-deps": [
             {
               "command": "route",
@@ -103,7 +105,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
                     {
                       "type": "Replier",
                       "category": "inline",
-                      "socket": {"id": "inline_1", "port": 4201}
+                      "endpoint": {"id": "inline_1", "port": 4201}
                     }
                   ]
                 }
@@ -120,7 +122,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
         {
           "type": "Replier",
           "category": "auth",
-          "socket": {"id": "auth_1", "port": 4301}
+          "endpoint": {"id": "auth_1", "port": 4301}
         }
       ]
     }

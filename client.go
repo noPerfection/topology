@@ -27,8 +27,8 @@ type ClientInterface interface {
 	IsServiceRunning(serviceName string) (bool, error)
 }
 
-func NewClient(runtimeSocket config.Socket) (*Client, error) {
-	socket, err := client.New(runtimeSocket.Id, uint64(runtimeSocket.Port), client.HandlerType(RuntimeSocketType))
+func NewClient(runtimeEndpoint message.Endpoint) (*Client, error) {
+	socket, err := client.New(runtimeEndpoint.Id, runtimeEndpoint.Port, client.HandlerType(RuntimeSocketType))
 	if err != nil {
 		return nil, fmt.Errorf("client.New: %w", err)
 	}

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	RuntimeHandlerCategory = "dep_handler" // handler category
+	RuntimeHandlerCategory = "service_runtime" // handler category
 	RuntimeSocketType      = handlerConfig.ReplierType
 	IsServiceRunning       = "is-service-running"
 	StartService           = "start-service"
@@ -26,114 +26,102 @@ const (
 
 // Handler acts as the router from other app processes to the runtime.
 type Handler struct {
-	handler base.Interface // Receive commands
-	runtime Interface      // Route to the functions from runtime
+	handler base.Interface   // Receive commands
+	runtime RuntimeInterface // Route to the functions from runtime
 }
 
-// HandlerConfig returns the handler configuration for the runtime socket.
-func HandlerConfig(runtimeSocket config.Socket) *handlerConfig.Handler {
+// HandlerConfig returns the handler configuration for the runtime endpoint.
+// Then use it as the handler's config with the SetConfig method.
+func HandlerConfig(runtimeEndpoint message.Endpoint) *handlerConfig.Handler {
 	return handlerConfig.New(
 		RuntimeSocketType,
-		runtimeSocket.Id,
+		runtimeEndpoint.Id,
 		RuntimeHandlerCategory,
-		uint64(runtimeSocket.Port),
+		runtimeEndpoint.Port,
 	)
 }
 
 // NewHandler loads app config, ensures the independent runtime service entry exists,
 // persists config when it changed, and returns a dependency runtime handler.
-func NewHandler(configPath string, runtimeSocket config.Socket) (*Handler, error) {
+func NewHandler(configPath string, runtimeEndpoint message.Endpoint) (*Handler, error) {
 	appConfig, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
 	}
 
-	appConfigChanged, err := ensureIndependentRuntimeService(&appConfig, runtimeSocket)
-	if err != nil {
-		return nil, fmt.Errorf("ensureIndependentRuntimeService: %w", err)
-	}
-	if appConfigChanged {
-		if err := appConfig.Save(); err != nil {
-			return nil, fmt.Errorf("appConfig.Save: %w", err)
-		}
-	}
-
-	h, err := newHandler(&appConfig, runtimeSocket)
-	if err != nil {
-		return nil, err
-	}
-
-	return h, nil
-}
-
-func ensureIndependentRuntimeService(appConfig *config.NoPerfection, runtimeSocket config.Socket) (bool, error) {
-	independentCount := appConfig.CountByType(config.IndependentType)
-	if independentCount > 1 {
-		return false, fmt.Errorf("only one independent service can be configured")
-	}
-
-	runtimeHandler := config.Handler{
-		Type:     config.HandlerType(RuntimeSocketType),
-		Category: RuntimeHandlerCategory,
-		Socket:   runtimeSocket,
-	}
-
-	if independentCount == 0 {
-		err := appConfig.SetService(config.Service{
-			Type:     config.IndependentType,
-			Name:     RuntimeHandlerCategory,
-			Handlers: []config.Handler{runtimeHandler},
-		})
-		if err != nil {
-			return false, fmt.Errorf("appConfig.SetService: %w", err)
-		}
-
-		return true, nil
-	}
-
-	independentService, err := appConfig.GetByType(config.IndependentType)
-	if err != nil {
-		return false, fmt.Errorf("appConfig.GetByType('%s'): %w", config.IndependentType, err)
-	}
-
-	handler, err := independentService.HandlerByCategory(RuntimeHandlerCategory)
-	if err == nil {
-		if handler.Socket.Id == runtimeSocket.Id && handler.Socket.Port == runtimeSocket.Port {
-			return false, nil
-		}
-
-		handler.Socket = runtimeSocket
-		independentService.SetHandler(handler)
-		return true, nil
-	}
-
-	independentService.Handlers = append(independentService.Handlers, runtimeHandler)
-	return true, nil
-}
-
-func newHandler(cfg *config.NoPerfection, runtimeSocket config.Socket) (*Handler, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("nil config")
-	}
+	// appConfigChanged, err := ensureIndependentRuntimeService(&appConfig, runtimeEndpoint)
+	// if err != nil {
+	// 	return nil, fmt.Errorf("ensureIndependentRuntimeService: %w", err)
+	// }
+	// if appConfigChanged {
+	// 	if err := appConfig.Save(); err != nil {
+	// 		return nil, fmt.Errorf("appConfig.Save: %w", err)
+	// 	}
+	// }
 
 	handler := replier.New()
 
-	logger, err := log.New("dep_runtime", true)
+	logger, err := log.New(RuntimeHandlerCategory, true)
 	if err != nil {
-		return nil, fmt.Errorf("log.New('dep-handler'): %w", err)
+		return nil, fmt.Errorf("log.New('%s'): %w", RuntimeHandlerCategory, err)
 	}
 
-	handler.SetConfig(HandlerConfig(runtimeSocket))
+	handler.SetConfig(HandlerConfig(runtimeEndpoint))
 	err = handler.SetLogger(logger)
 	if err != nil {
 		return nil, fmt.Errorf("handler.SetLogger: %w", err)
 	}
 
 	return &Handler{
-		runtime: New(cfg),
+		runtime: New(&appConfig),
 		handler: handler,
 	}, nil
 }
+
+// func ensureIndependentRuntimeService(appConfig *config.NoPerfection, runtimeEndpoint message.Endpoint) (bool, error) {
+// 	independentCount := appConfig.CountByType(config.IndependentType)
+// 	if independentCount > 1 {
+// 		return false, fmt.Errorf("only one independent service can be configured")
+// 	}
+
+// 	runtimeHandler := config.Handler{
+// 		Type:     config.HandlerType(RuntimeSocketType),
+// 		Category: RuntimeHandlerCategory,
+// 		Endpoint: runtimeEndpoint,
+// 	}
+
+// 	if independentCount == 0 {
+// 		err := appConfig.SetService(config.Service{
+// 			Type:     config.IndependentType,
+// 			Name:     RuntimeHandlerCategory,
+// 			Handlers: []config.Handler{runtimeHandler},
+// 		})
+// 		if err != nil {
+// 			return false, fmt.Errorf("appConfig.SetService: %w", err)
+// 		}
+
+// 		return true, nil
+// 	}
+
+// 	independentService, err := appConfig.GetByType(config.IndependentType)
+// 	if err != nil {
+// 		return false, fmt.Errorf("appConfig.GetByType('%s'): %w", config.IndependentType, err)
+// 	}
+
+// 	handler, err := independentService.HandlerByCategory(RuntimeHandlerCategory)
+// 	if err == nil {
+// 		if handler.Endpoint.Id == runtimeEndpoint.Id && handler.Endpoint.Port == runtimeEndpoint.Port {
+// 			return false, nil
+// 		}
+
+// 		handler.Endpoint = runtimeEndpoint
+// 		independentService.SetHandler(handler)
+// 		return true, nil
+// 	}
+
+// 	independentService.Handlers = append(independentService.Handlers, runtimeHandler)
+// 	return true, nil
+// }
 
 // onIsServiceRunning checks whether the dependency is running or not.
 // Requires 'service' string parameter with the service name.

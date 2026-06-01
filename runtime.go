@@ -15,11 +15,12 @@ import (
 	"github.com/noPerfection/runtime/config"
 )
 
-// Interface is implemented by the dependency runtime.
+// RuntimeInterface is implemented by the dependency runtime.
 //
 // It doesn't have the `Stop` command.
 // Because, stopping must be done by the remote call from other services.
-type Interface interface {
+// Use it if you want to implement your own runtime.
+type RuntimeInterface interface {
 	// AddService registers a service in the runtime configuration.
 	AddService(target config.DepTarget) error
 
@@ -40,7 +41,7 @@ type Interface interface {
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
-// Runtime.IsServiceRunning method uses this value before considering the socket as not running.
+// Runtime.IsServiceRunning method uses this value before considering the endpoint as not running.
 const DefaultTimeout = time.Second * 5
 
 const ManagerHandlerCategory = "manager"
@@ -60,6 +61,8 @@ type Runtime struct {
 	timeout          time.Duration
 }
 
+var _ RuntimeInterface = (*Runtime)(nil)
+
 // AddService registers a service target in the runtime configuration.
 // A ref target must already resolve in the configuration, while an inline
 // target and any inline dependencies are registered recursively.
@@ -78,7 +81,7 @@ func (rt *Runtime) AddService(target config.DepTarget) error {
 		return nil
 	}
 
-	if err := rt.addInlineService(target.Inline, make(map[string]bool), rt.usedSockets()); err != nil {
+	if err := rt.addInlineService(target.Inline, make(map[string]bool), rt.usedEndpoints()); err != nil {
 		return err
 	}
 
@@ -130,7 +133,7 @@ func (rt *Runtime) validateDepTargetExists(target config.DepTarget, visiting map
 	return rt.validateServiceRef(target.Inline.Name, visiting)
 }
 
-func (rt *Runtime) addInlineService(service *config.Service, visiting map[string]bool, reservedSockets map[string]string) error {
+func (rt *Runtime) addInlineService(service *config.Service, visiting map[string]bool, reservedEndpoints map[string]string) error {
 	if service == nil {
 		return fmt.Errorf("service is nil")
 	}
@@ -152,19 +155,19 @@ func (rt *Runtime) addInlineService(service *config.Service, visiting map[string
 	if _, err := rt.config.GetService(service.Name); err == nil {
 		return fmt.Errorf("service('%s') already added", service.Name)
 	}
-	if err := rt.reserveAvailableSockets(service, reservedSockets); err != nil {
+	if err := rt.reserveAvailableEndpoints(service, reservedEndpoints); err != nil {
 		return err
 	}
 
 	for _, handler := range service.Handlers {
 		for _, dep := range handler.CommandDeps {
 			for _, target := range dep.Proxies {
-				if err := rt.addOrValidateNestedTarget(target, visiting, reservedSockets); err != nil {
+				if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
 					return fmt.Errorf("service '%s' command '%s' proxy: %w", service.Name, dep.Command, err)
 				}
 			}
 			for _, target := range dep.Extensions {
-				if err := rt.addOrValidateNestedTarget(target, visiting, reservedSockets); err != nil {
+				if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
 					return fmt.Errorf("service '%s' command '%s' extension: %w", service.Name, dep.Command, err)
 				}
 			}
@@ -178,21 +181,21 @@ func (rt *Runtime) addInlineService(service *config.Service, visiting map[string
 	return nil
 }
 
-func (rt *Runtime) addOrValidateNestedTarget(target config.DepTarget, visiting map[string]bool, reservedSockets map[string]string) error {
+func (rt *Runtime) addOrValidateNestedTarget(target config.DepTarget, visiting map[string]bool, reservedEndpoints map[string]string) error {
 	if err := config.ValidateDepTarget(target); err != nil {
 		return err
 	}
 	if target.Ref != "" {
 		return rt.validateServiceRef(target.Ref, visiting)
 	}
-	return rt.addInlineService(target.Inline, visiting, reservedSockets)
+	return rt.addInlineService(target.Inline, visiting, reservedEndpoints)
 }
 
-func (rt *Runtime) usedSockets() map[string]string {
+func (rt *Runtime) usedEndpoints() map[string]string {
 	used := make(map[string]string)
 	for _, service := range rt.config.Services {
 		for _, handler := range service.Handlers {
-			key, err := socketKey(handler.Socket)
+			key, err := endpointKey(handler.Endpoint)
 			if err != nil {
 				continue
 			}
@@ -202,20 +205,20 @@ func (rt *Runtime) usedSockets() map[string]string {
 	return used
 }
 
-func (rt *Runtime) reserveAvailableSockets(service *config.Service, reserved map[string]string) error {
+func (rt *Runtime) reserveAvailableEndpoints(service *config.Service, reserved map[string]string) error {
 	seen := make(map[string]struct{})
 	for _, handler := range service.Handlers {
-		key, err := socketKey(handler.Socket)
+		key, err := endpointKey(handler.Endpoint)
 		if err != nil {
 			return fmt.Errorf("service('%s') handler('%s'): %w", service.Name, handler.Category, err)
 		}
 		if _, exists := seen[key]; exists {
-			return fmt.Errorf("service('%s') has duplicate socket '%s'", service.Name, key)
+			return fmt.Errorf("service('%s') has duplicate endpoint '%s'", service.Name, key)
 		}
 		seen[key] = struct{}{}
 
 		if owner, exists := reserved[key]; exists {
-			return fmt.Errorf("service('%s') handler('%s') socket '%s' is already used by %s", service.Name, handler.Category, key, owner)
+			return fmt.Errorf("service('%s') handler('%s') endpoint '%s' is already used by %s", service.Name, handler.Category, key, owner)
 		}
 		reserved[key] = fmt.Sprintf("service('%s') handler('%s')", service.Name, handler.Category)
 	}
@@ -223,11 +226,11 @@ func (rt *Runtime) reserveAvailableSockets(service *config.Service, reserved map
 	return nil
 }
 
-func socketKey(socket config.Socket) (string, error) {
-	if socket.Id == "" {
-		return "", fmt.Errorf("socket id is empty")
+func endpointKey(endpoint message.Endpoint) (string, error) {
+	if endpoint.Id == "" && !endpoint.IsRemote() {
+		return "", fmt.Errorf("endpoint id is empty")
 	}
-	return fmt.Sprintf("%s:%d", socket.Id, socket.Port), nil
+	return fmt.Sprintf("%s:%d", endpoint.Id, endpoint.Port), nil
 }
 
 // SetService updates an existing service in the runtime configuration.
@@ -279,7 +282,7 @@ func (rt *Runtime) setIndependentService(service config.Service) error {
 			Category: RuntimeHandlerCategory,
 		}
 	}
-	nextRuntimeHandler.Socket = runtimeHandler.Socket
+	nextRuntimeHandler.Endpoint = runtimeHandler.Endpoint
 	service.SetHandler(nextRuntimeHandler)
 
 	if current.Name != service.Name {
@@ -499,8 +502,8 @@ func (rt *Runtime) managerClient(service *config.Service) (*client.Socket, error
 	}
 
 	socket, err := client.New(
-		handler.Socket.Id,
-		uint64(handler.Socket.Port),
+		handler.Endpoint.Id,
+		handler.Endpoint.Port,
 		client.HandlerType(handler.Type),
 	)
 	if err != nil {

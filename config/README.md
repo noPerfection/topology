@@ -4,7 +4,7 @@ This module provides Go types and JSON helpers for an application configuration 
 
 It is a static data library only:
 
-- `config` defines service metadata (`Service`, `Handler`, `Socket`, `CommandDep`, `DepTarget`)
+- `config` defines service metadata (`Service`, `Handler`, `Endpoint`, `CommandDep`, `DepTarget`)
 - `config` defines the top-level `NoPerfection` struct (`services: [...]`), `Load`, and `NoPerfection.Save`
 
 There is no runtime config server, engine, or client API in this module.
@@ -21,7 +21,7 @@ There is no runtime config server, engine, or client API in this module.
         {
           "type": "Replier",
           "category": "public-api",
-          "socket": {
+          "endpoint": {
             "id": "public_1",
             "port": 4101
           },
@@ -44,6 +44,7 @@ See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a full pr
 
 ```go
 import (
+    "github.com/noPerfection/protocol/message"
     config "github.com/noPerfection/runtime/config"
 )
 
@@ -61,7 +62,7 @@ updated := svc
 updated.Handlers = append(updated.Handlers, config.Handler{
     Type:     config.ReplierType,
     Category: "public-api",
-    Socket:   config.Socket{Id: "public_2", Port: 4102},
+    Endpoint: message.NewEndpoint("public_2", 4102),
 })
 if err := a.SetService(updated); err != nil {
     panic(err)
@@ -91,10 +92,10 @@ Supported handler types:
 
 Each handler must define a `category`, which consumers can use to group and classify handlers.
 
-`port` is optional on a socket; omitted means `0`. Services only need bootstrap metadata when a zero-port socket requires it:
+`port` is optional on an endpoint; omitted means `0`. Services only need bootstrap metadata when a zero-port endpoint requires it:
 
 - `port: 0` with an id that does not start with `tmp/` is treated as inproc and requires `module-url`
-- `port: 0` with an id that starts with `tmp/` is treated as a tmp socket and requires `start-command`
+- `port: 0` with an id that starts with `tmp` is treated as an IPC endpoint and requires `start-command`
 - non-zero ports do not require either `module-url` or `start-command`
 
 Each `command-deps` entry must name a `command` and at least one routing target: `proxies` and/or `extensions`. A command without dependencies is invalid.
