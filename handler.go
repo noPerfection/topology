@@ -1,16 +1,16 @@
-// Package runtime contains the dependency runtime for the dev context.
+// Package runtime manages dependency service lifecycle for noPerfection services.
 package runtime
 
 import (
 	"fmt"
 
-	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/handler/base"
 	handlerConfig "github.com/noPerfection/protocol/handler/config"
 	"github.com/noPerfection/protocol/handler/replier"
 	"github.com/noPerfection/protocol/message"
+	"github.com/noPerfection/runtime/config"
 )
 
 const (
@@ -40,8 +40,78 @@ func HandlerConfig(runtimeSocket config.Socket) *handlerConfig.Handler {
 	)
 }
 
-// NewHandler returns a dependency runtime handler.
-func NewHandler(cfg *config.NoPerfection, runtimeSocket config.Socket) (*Handler, error) {
+// NewHandler loads app config, ensures the independent runtime service entry exists,
+// persists config when it changed, and returns a dependency runtime handler.
+func NewHandler(configPath string, runtimeSocket config.Socket) (*Handler, error) {
+	appConfig, err := config.Load(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
+	}
+
+	appConfigChanged, err := ensureIndependentRuntimeService(&appConfig, runtimeSocket)
+	if err != nil {
+		return nil, fmt.Errorf("ensureIndependentRuntimeService: %w", err)
+	}
+	if appConfigChanged {
+		if err := appConfig.Save(); err != nil {
+			return nil, fmt.Errorf("appConfig.Save: %w", err)
+		}
+	}
+
+	h, err := newHandler(&appConfig, runtimeSocket)
+	if err != nil {
+		return nil, err
+	}
+
+	return h, nil
+}
+
+func ensureIndependentRuntimeService(appConfig *config.NoPerfection, runtimeSocket config.Socket) (bool, error) {
+	independentCount := appConfig.CountByType(config.IndependentType)
+	if independentCount > 1 {
+		return false, fmt.Errorf("only one independent service can be configured")
+	}
+
+	runtimeHandler := config.Handler{
+		Type:     config.HandlerType(RuntimeSocketType),
+		Category: RuntimeHandlerCategory,
+		Socket:   runtimeSocket,
+	}
+
+	if independentCount == 0 {
+		err := appConfig.SetService(config.Service{
+			Type:     config.IndependentType,
+			Name:     RuntimeHandlerCategory,
+			Handlers: []config.Handler{runtimeHandler},
+		})
+		if err != nil {
+			return false, fmt.Errorf("appConfig.SetService: %w", err)
+		}
+
+		return true, nil
+	}
+
+	independentService, err := appConfig.GetByType(config.IndependentType)
+	if err != nil {
+		return false, fmt.Errorf("appConfig.GetByType('%s'): %w", config.IndependentType, err)
+	}
+
+	handler, err := independentService.HandlerByCategory(RuntimeHandlerCategory)
+	if err == nil {
+		if handler.Socket.Id == runtimeSocket.Id && handler.Socket.Port == runtimeSocket.Port {
+			return false, nil
+		}
+
+		handler.Socket = runtimeSocket
+		independentService.SetHandler(handler)
+		return true, nil
+	}
+
+	independentService.Handlers = append(independentService.Handlers, runtimeHandler)
+	return true, nil
+}
+
+func newHandler(cfg *config.NoPerfection, runtimeSocket config.Socket) (*Handler, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("nil config")
 	}

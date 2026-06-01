@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
-	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/client"
 	"github.com/noPerfection/protocol/client/sync_replier"
 	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/message"
+	config "github.com/noPerfection/runtime/config"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -45,7 +45,7 @@ func (test *TestHandlerSuite) SetupTest() {
 	}
 
 	var err error
-	test.depHandler, err = NewHandler(&config.NoPerfection{}, runtimeSocket)
+	test.depHandler, err = newHandler(&config.NoPerfection{}, runtimeSocket)
 	s().NoError(err)
 
 	// Start the handler
@@ -63,7 +63,7 @@ func (test *TestHandlerSuite) SetupTest() {
 
 	test.id = "test-manager"
 	test.parent = &ParentClient{
-		ServiceUrl: "context",
+		ServiceUrl: "runtime",
 		Id:         "parent",
 		Port:       120,
 	}

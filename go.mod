@@ -1,9 +1,9 @@
-module github.com/noPerfection/context
+module github.com/noPerfection/runtime
 
 go 1.19
 
 require (
-	github.com/noPerfection/context/config v0.0.0
+	github.com/noPerfection/runtime/config v0.0.0
 	github.com/noPerfection/datatype v0.0.0
 	github.com/noPerfection/log v0.0.0
 	github.com/noPerfection/os v0.0.0
@@ -37,7 +37,7 @@ require (
 )
 
 replace (
-	github.com/noPerfection/context/config => ./config
+	github.com/noPerfection/runtime/config => ./config
 	github.com/noPerfection/datatype => ../datatype
 	github.com/noPerfection/log => ../log
 	github.com/noPerfection/os => ../os

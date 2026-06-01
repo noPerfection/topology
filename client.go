@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/client"
 	"github.com/noPerfection/protocol/message"
+	config "github.com/noPerfection/runtime/config"
 )
 
 type Client struct {

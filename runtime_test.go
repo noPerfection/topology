@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/os/path"
+	config "github.com/noPerfection/runtime/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -92,12 +92,12 @@ func (test *TestDepManagerSuite) SetupTest() {
 
 	test.id = "test-manager"
 	test.parent = &ParentClient{
-		ServiceUrl: "context",
+		ServiceUrl: "runtime",
 		Id:         "parent",
 		Port:       120,
 	}
 
-	test.localTestDir = filepath.Join("../_test_services")
+	test.localTestDir = filepath.Join("_test_services")
 }
 
 // Test_0_New tests the creation of the Runtime.

@@ -1,4 +1,4 @@
-// Package runtime contains the dependency runtime for the dev context.
+// Package runtime manages dependency service lifecycle for noPerfection services.
 package runtime
 
 import (
@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/client"
 	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/message"
+	config "github.com/noPerfection/runtime/config"
 )
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.

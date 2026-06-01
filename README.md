@@ -1,110 +1,83 @@
-# Context
+# Runtime
 
-`context` is a Go library for applications built on the noPerfection framework.
+`runtime` provides a dependency services manager for noPerfection microservices.
+With the `runtime` noPerfection services can manage its dependencies.
 
-`context` owns your app's noPerfection service configuration and exposes a runtime client
-for starting, stopping, adding, updating, and removing dependency services while
-your app is running. You can manage the services both programmatically, by
-simply calling the client, or you can call it by cli.
-
-The `context` uses the simples form of management. It uses commands and calls `os.Exec`
-as if its a bash script.
-
-If you want to manage your app in another environment, lets say in Kubernetes or Docker,
-then use `context.Interface` and simpply replace this module with yours.
-
-The `context.Interface` from `interface.go` in the root of this module:
-
-```go
-type Interface interface {
-	StartRuntimeHandler() error
-	Runtime() runtime.ClientInterface
-}
-```
-
-That keeps most of your app independent from the concrete `Context` struct while
-still giving it access to service lifecycle operations through `ctx.Runtime()`.
+Since its asynchronous and lives on another thread to not break service's own code, 
+the runtime is decoupled into handler and a client.
 
 ## Install
+Requires zmq library C library. Go code running or building must be then done using C enabling.
 
 ```sh
-go get github.com/noPerfection/context@latest
+go get github.com/noPerfection/runtime@latest
 ```
 
-## Setup
-
-Assume you are implementing a noPerfection service. This is close to how an app built
-from `github.com/noPerfection/service` would wire its startup.
-
-First, load the context module and config types:
+## Tutorial
+First we need to start the runtime handler
 
 ```go
-package main
+import "github.com/noPerfection/runtime"
+import "github.com/noPerfection/runtime/config"
 
-import (
-	noPerfectionContext "github.com/noPerfection/context"
-	config "github.com/noPerfection/context/config"
-)
+//.. rest of code
+runtimeSocket := config.Socket{
+	Id:   "runtime",
+	Port: 0,
+}
+
+handler, _ := runtime.NewHandler("service.json", runtimeSocket)
+
+// Any handler's functions.
+
+// Register any additional handler routes or setup before starting, if needed.
+if err := handler.Start(); err != nil {
+	panic(err)
+}
+
 ```
-
-Second, choose the configuration file name. The file does not have to exist yet.
-It is where `context` will load and store your app's noPerfection service configuration.
-
-Config does two things: **service metadata** and **runtime wiring**.
+That's it. Runtime is running remotely.
+Second, we need to interact with it from the code:
 
 ```go
-const configPath = "service.json"
-```
+	// Now interact with the runtime manager through a runtime client.
+	runtimeClient, _ := runtime.NewClient(runtimeSocket)
+	defer runtimeClient.Close()
 
-Finally, set up context, launch its runtime handler, and call `ctx.Runtime()`
-from your service code:
-
-```go
-func main() {
-	runtimeSocket := config.Socket{
-		Id:   "runtime",
-		Port: 0,
-	}
-
-	ctx, err := noPerfectionContext.New(configPath, runtimeSocket)
+	running, err := runtimeClient.IsServiceRunning("database")
 	if err != nil {
 		panic(err)
 	}
 
-	if err := ctx.StartRuntimeHandler(); err != nil {
-		panic(err)
-	}
-
-	runtimeClient := ctx.Runtime()
-	_ = runtimeClient
+	_ = running
 }
 ```
 
-The `context/config` import is only needed here because `New` currently accepts
-a `config.Socket`. You do not need to call `config.Load` yourself.
+## Runtime Handler
 
-Use the interface in the rest of your app:
+`runtime.NewHandler(configPath, runtimeSocket)` returns a handler that serves runtime commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any runtime bootstrap changes, and uses `runtimeSocket` as its command endpoint.
+
+The handler exposes these commands internally:
+
+- `add-service`
+- `set-service`
+- `remove-service`
+- `start-service`
+- `stop-service`
+- `is-service-running`
+
+Applications usually do not send these commands directly. Use `runtime.NewClient(runtimeSocket)` instead.
+
+## Runtime Client API
+
+`runtime.NewClient(runtimeSocket)` returns a `*runtime.Client`. Configure request behavior with:
 
 ```go
-func runService(ctx noPerfectionContext.Interface) error {
-	runtimeClient := ctx.Runtime()
-	_ = runtimeClient
-	return nil
-}
+runtimeClient.Timeout(5 * time.Second)
+runtimeClient.Attempt(1)
 ```
 
-There is no public `CloseRuntimeHandler` or `IsHandlerRunning` API. The handler
-is an internal in-process runtime detail; users normally control services via
-`StartService` and `StopService`.
-
-When `New` loads the config, it ensures there is exactly one independent service.
-If none exists, it creates a default independent service for the internal runtime.
-If one exists, it ensures that service has the internal runtime handler category
-and socket. More than one independent service is an error.
-
-## Runtime Client
-
-`ctx.Runtime()` returns a `runtime.ClientInterface`.
+Available client methods:
 
 ```go
 type ClientInterface interface {
@@ -112,7 +85,7 @@ type ClientInterface interface {
 	Timeout(duration time.Duration)
 	Attempt(attempt uint8)
 
-	AddService(service config.Service) error
+	AddService(target config.DepTarget) error
 	SetService(service config.Service) error
 	RemoveService(serviceName string) error
 	StartService(serviceName string, parent *runtime.ParentClient) (string, error)
@@ -121,47 +94,7 @@ type ClientInterface interface {
 }
 ```
 
-Example:
-
-```go
-id, err := ctx.Runtime().StartService("database", parentClient)
-if err != nil {
-	panic(err)
-}
-
-running, err := ctx.Runtime().IsServiceRunning("database")
-if err != nil {
-	panic(err)
-}
-
-if running {
-	if err := ctx.Runtime().StopService("database"); err != nil {
-		panic(err)
-	}
-}
-
-_ = id
-```
-
-`StartService` returns the generated runtime id for the started service, for
-example `database1`.
-
-## Runtime Package
-
-The `runtime` package contains the service runtime, runtime handler, and
-runtime client used by `Context`.
-
-Constructors:
-
-```go
-rt := runtime.New(cfg)
-handler, err := runtime.NewHandler(cfg, runtimeSocket)
-client, err := runtime.NewClient(runtimeSocket)
-```
-
-## Service Management
-
-Services are added, updated, and removed through config-backed runtime commands:
+### Add or Update Services
 
 ```go
 service := config.Service{
@@ -171,7 +104,7 @@ service := config.Service{
 	Handlers: []config.Handler{
 		{
 			Type:     config.ReplierType,
-			Category: "manager",
+			Category: runtime.ManagerHandlerCategory,
 			Socket: config.Socket{
 				Id:   "worker-manager",
 				Port: 6001,
@@ -180,28 +113,54 @@ service := config.Service{
 	},
 }
 
-if err := ctx.Runtime().AddService(service); err != nil {
+if err := runtimeClient.AddService(config.InlineTarget(service)); err != nil {
 	panic(err)
 }
 
 service.StartCommand = "./worker --debug"
-if err := ctx.Runtime().SetService(service); err != nil {
-	panic(err)
-}
-
-if err := ctx.Runtime().RemoveService("worker"); err != nil {
+if err := runtimeClient.SetService(service); err != nil {
 	panic(err)
 }
 ```
 
-`AddService` refuses to add independent services and refuses to overwrite an
-existing service. `SetService` updates an existing service. `RemoveService`
-refuses to remove a service that is currently running.
+### Start, Check, and Stop Services
+
+```go
+parent := &runtime.ParentClient{
+	ServiceUrl: "api",
+	Id:         "api-manager",
+	Port:       6000,
+}
+
+id, err := runtimeClient.StartService("worker", parent)
+if err != nil {
+	panic(err)
+}
+
+if running, err := runtimeClient.IsServiceRunning("worker"); err != nil {
+	panic(err)
+} else if running {
+	if err := runtimeClient.StopService("worker"); err != nil {
+		panic(err)
+	}
+}
+
+_ = id
+```
+
+### Remove Services
+
+```go
+if err := runtimeClient.RemoveService("worker"); err != nil {
+	panic(err)
+}
+```
+
+`RemoveService` refuses to remove a service that is currently running. `AddService` refuses to add independent services and refuses to overwrite an existing service. `SetService` updates an existing service.
 
 ## Service Requirements
 
-Every service managed by `context` must have at least one handler that manages
-the service itself. By convention this handler uses category `manager`.
+Every managed service must have a handler that manages the service itself. By convention, this handler uses the `manager` category.
 
 The runtime uses the `manager` handler to:
 
@@ -229,35 +188,14 @@ Example service config:
 }
 ```
 
-User-facing API handlers can be added beside the `manager` handler. The manager
-handler is reserved for runtime lifecycle operations.
-
-Independent services are special: there can be only one independent service in
-the config, and it represents the service currently using the runtime. It cannot
-be added through `AddService` or stopped through `StopService`.
-
-## Handler Details
-
-`StartRuntimeHandler` starts an in-process handler that exposes runtime commands
-over noPerfection handler sockets:
-
-- `add-service`
-- `set-service`
-- `remove-service`
-- `start-service`
-- `stop-service`
-- `is-service-running`
-
-Applications usually do not interact with this handler directly. They use
-`ctx.Runtime()` instead.
+Independent services are special: there can be only one independent service in the config, and it represents the service currently running the runtime handler. It cannot be added through `AddService` or stopped through `StopService`.
 
 ## Tests
 
-Run the root package tests:
+Run the tests:
 
 ```sh
-go test .
+go test ./...
 ```
 
-Runtime tests compile, but tests that start sample binaries require local test
-fixtures for those binaries under `_test_services`.
+Runtime tests compile on a fresh checkout. Tests that start sample binaries require local fixtures under `_test_services`.

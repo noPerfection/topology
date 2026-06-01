@@ -17,6 +17,7 @@ type NoPerfection struct {
 }
 
 // Load loads an app configuration from a JSON file.
+// If the file does not exist, it creates a new configuration with the empty services list.
 func Load(filePath string) (NoPerfection, error) {
 	appConfig := NoPerfection{
 		Services: make([]Service, 0),
