@@ -66,6 +66,22 @@ The handler exposes these commands internally:
 
 Applications usually do not send these commands directly. Use `runtime.NewClient(runtimeEndpoint)` instead.
 
+Before `Start()` is called, the returned handler also implements `runtime.RuntimeInterface`. This lets setup code manipulate the runtime configuration directly:
+
+```go
+handler, _ := runtime.NewHandler("service.json", runtimeEndpoint)
+
+if err := handler.AddService(config.InlineTarget(service)); err != nil {
+	panic(err)
+}
+
+if err := handler.Start(); err != nil {
+	panic(err)
+}
+```
+
+After `Start()` succeeds, direct runtime methods on the handler are unavailable and return an error. Use `runtime.NewClient(runtimeEndpoint)` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
+
 ## Runtime Client API
 
 `runtime.NewClient(runtimeEndpoint)` returns a `*runtime.Client`. Configure request behavior with:

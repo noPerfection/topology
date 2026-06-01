@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -88,6 +89,52 @@ func (test *TestHandlerSuite) TearDownTest() {
 
 	// Wait a bit for the close of the handler thread.
 	time.Sleep(time.Millisecond * 100)
+}
+
+func TestHandlerRuntimeInterfaceBeforeStart(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "app.json")
+	appConfig, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	runtimeEndpoint := message.NewEndpoint("pre-start-runtime", 0)
+	handler, err := newHandler(&appConfig, runtimeEndpoint)
+	if err != nil {
+		t.Fatalf("newHandler: %v", err)
+	}
+
+	err = handler.AddService(config.InlineTarget(config.Service{
+		Type: config.ProxyType,
+		Name: "pre-start-service",
+		Handlers: []config.Handler{
+			{
+				Type:     config.ReplierType,
+				Category: ManagerHandlerCategory,
+				Endpoint: message.NewEndpoint("pre-start-manager", 6100),
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("handler.AddService before start: %v", err)
+	}
+
+	if _, err := appConfig.GetService("pre-start-service"); err != nil {
+		t.Fatalf("appConfig.GetService: %v", err)
+	}
+}
+
+func (test *TestHandlerSuite) TestRuntimeInterfaceAfterStartBlocked() {
+	s := test.Require
+
+	s().Error(test.depHandler.AddService(config.RefTarget("blocked")))
+	s().Error(test.depHandler.SetService(config.Service{Name: "blocked", Type: config.ProxyType}))
+	s().Error(test.depHandler.RemoveService("blocked"))
+	_, err := test.depHandler.StartService("blocked")
+	s().Error(err)
+	_, err = test.depHandler.IsServiceRunning("blocked")
+	s().Error(err)
+	s().Error(test.depHandler.StopService("blocked"))
 }
 
 //

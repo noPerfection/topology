@@ -28,7 +28,10 @@ const (
 type Handler struct {
 	handler base.Interface   // Receive commands
 	runtime RuntimeInterface // Route to the functions from runtime
+	started bool
 }
+
+var _ RuntimeInterface = (*Handler)(nil)
 
 // HandlerConfig returns the handler configuration for the runtime endpoint.
 // Then use it as the handler's config with the SetConfig method.
@@ -76,6 +79,72 @@ func NewHandler(configPath string, runtimeEndpoint message.Endpoint) (*Handler, 
 		runtime: New(&appConfig),
 		handler: handler,
 	}, nil
+}
+
+func (h *Handler) requireNotStarted() error {
+	if h == nil {
+		return fmt.Errorf("handler is nil")
+	}
+	if h.started {
+		return fmt.Errorf("runtime handler already started, use runtime client")
+	}
+	if h.runtime == nil {
+		return fmt.Errorf("runtime is nil")
+	}
+	return nil
+}
+
+// AddService registers a service in the runtime configuration before the
+// runtime handler is started.
+func (h *Handler) AddService(target config.DepTarget) error {
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	return h.runtime.AddService(target)
+}
+
+// SetService updates a service in the runtime configuration before the runtime
+// handler is started.
+func (h *Handler) SetService(service config.Service) error {
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	return h.runtime.SetService(service)
+}
+
+// RemoveService removes a service from the runtime configuration before the
+// runtime handler is started.
+func (h *Handler) RemoveService(serviceName string) error {
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	return h.runtime.RemoveService(serviceName)
+}
+
+// StartService starts a dependency service before the runtime handler is
+// started.
+func (h *Handler) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
+	if err := h.requireNotStarted(); err != nil {
+		return "", err
+	}
+	return h.runtime.StartService(serviceName, optionalParent...)
+}
+
+// IsServiceRunning checks a dependency service before the runtime handler is
+// started.
+func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
+	if err := h.requireNotStarted(); err != nil {
+		return false, err
+	}
+	return h.runtime.IsServiceRunning(serviceName)
+}
+
+// StopService stops a dependency service before the runtime handler is started.
+func (h *Handler) StopService(serviceName string) error {
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	return h.runtime.StopService(serviceName)
 }
 
 // func ensureIndependentRuntimeService(appConfig *config.NoPerfection, runtimeEndpoint message.Endpoint) (bool, error) {
@@ -253,6 +322,13 @@ func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInter
 
 // Start starts the dependency handler with the available operations.
 func (h *Handler) Start() error {
+	if h == nil {
+		return fmt.Errorf("handler is nil")
+	}
+	if h.started {
+		return fmt.Errorf("runtime handler already started")
+	}
+
 	if err := h.handler.Route(IsServiceRunning, h.onIsServiceRunning); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", IsServiceRunning, err)
 	}
@@ -272,5 +348,9 @@ func (h *Handler) Start() error {
 		return fmt.Errorf("h.handler.Route('%s'): %v", RemoveService, err)
 	}
 
-	return h.handler.Start()
+	if err := h.handler.Start(); err != nil {
+		return err
+	}
+	h.started = true
+	return nil
 }
