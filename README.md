@@ -1,8 +1,8 @@
 # Context
 
-`context` is a Go library for applications built on the SDS framework.
+`context` is a Go library for applications built on the noPerfection framework.
 
-`context` owns your app's SDS service configuration and exposes a runtime client
+`context` owns your app's noPerfection service configuration and exposes a runtime client
 for starting, stopping, adding, updating, and removing dependency services while
 your app is running. You can manage the services both programmatically, by
 simply calling the client, or you can call it by cli.
@@ -33,8 +33,8 @@ go get github.com/noPerfection/context@latest
 
 ## Setup
 
-Assume you are implementing an SDS service. This is close to how an app built
-from `github.com/sds-framework/service` would wire its startup.
+Assume you are implementing a noPerfection service. This is close to how an app built
+from `github.com/noPerfection/service` would wire its startup.
 
 First, load the context module and config types:
 
@@ -42,13 +42,13 @@ First, load the context module and config types:
 package main
 
 import (
-	sdscontext "github.com/noPerfection/context"
+	noPerfectionContext "github.com/noPerfection/context"
 	config "github.com/noPerfection/context/config"
 )
 ```
 
 Second, choose the configuration file name. The file does not have to exist yet.
-It is where `context` will load and store your app's SDS service configuration.
+It is where `context` will load and store your app's noPerfection service configuration.
 
 Config does two things: **service metadata** and **runtime wiring**.
 
@@ -66,7 +66,7 @@ func main() {
 		Port: 0,
 	}
 
-	ctx, err := sdscontext.New(configPath, runtimeSocket)
+	ctx, err := noPerfectionContext.New(configPath, runtimeSocket)
 	if err != nil {
 		panic(err)
 	}
@@ -86,7 +86,7 @@ a `config.Socket`. You do not need to call `config.Load` yourself.
 Use the interface in the rest of your app:
 
 ```go
-func runService(ctx sdscontext.Interface) error {
+func runService(ctx noPerfectionContext.Interface) error {
 	runtimeClient := ctx.Runtime()
 	_ = runtimeClient
 	return nil
@@ -239,7 +239,7 @@ be added through `AddService` or stopped through `StopService`.
 ## Handler Details
 
 `StartRuntimeHandler` starts an in-process handler that exposes runtime commands
-over SDS handler sockets:
+over noPerfection handler sockets:
 
 - `add-service`
 - `set-service`

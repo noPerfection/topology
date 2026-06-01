@@ -41,7 +41,7 @@ func HandlerConfig(runtimeSocket config.Socket) *handlerConfig.Handler {
 }
 
 // NewHandler returns a dependency runtime handler.
-func NewHandler(cfg *config.SdsService, runtimeSocket config.Socket) (*Handler, error) {
+func NewHandler(cfg *config.NoPerfection, runtimeSocket config.Socket) (*Handler, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("nil config")
 	}

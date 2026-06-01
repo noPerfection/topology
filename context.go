@@ -10,7 +10,7 @@ import (
 
 // A Context handles the config of the contexts
 type Context struct {
-	Config         config.SdsService
+	Config         config.NoPerfection
 	runtimeHandler *runtime.Handler
 	runtimeClient  *runtime.Client
 }
@@ -51,7 +51,7 @@ func New(configPath string, runtimeSocket config.Socket) (*Context, error) {
 	return ctx, nil
 }
 
-func ensureIndependentRuntimeService(appConfig *config.SdsService, runtimeSocket config.Socket) (bool, error) {
+func ensureIndependentRuntimeService(appConfig *config.NoPerfection, runtimeSocket config.Socket) (bool, error) {
 	independentCount := appConfig.CountByType(config.IndependentType)
 	if independentCount > 1 {
 		return false, fmt.Errorf("only one independent service can be configured")

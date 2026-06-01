@@ -4,7 +4,7 @@ import "fmt"
 
 // Normalize registers inline services from command-deps into Services and
 // validates that every dependency target name resolves to a known service.
-func (a *SdsService) Normalize() error {
+func (a *NoPerfection) Normalize() error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
@@ -19,7 +19,7 @@ func (a *SdsService) Normalize() error {
 	return a.validateDepRefs()
 }
 
-func (a *SdsService) normalizeService(service *Service, visiting map[string]bool) error {
+func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bool) error {
 	if service == nil {
 		return fmt.Errorf("service is nil")
 	}
@@ -51,7 +51,7 @@ func (a *SdsService) normalizeService(service *Service, visiting map[string]bool
 	return nil
 }
 
-func (a *SdsService) normalizeCommandDep(dep *CommandDep, visiting map[string]bool) error {
+func (a *NoPerfection) normalizeCommandDep(dep *CommandDep, visiting map[string]bool) error {
 	if err := ValidateCommandDep(*dep); err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (a *SdsService) normalizeCommandDep(dep *CommandDep, visiting map[string]bo
 	return nil
 }
 
-func (a *SdsService) normalizeDepTarget(target *DepTarget, visiting map[string]bool) error {
+func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string]bool) error {
 	if err := ValidateDepTarget(*target); err != nil {
 		return err
 	}
@@ -84,7 +84,7 @@ func (a *SdsService) normalizeDepTarget(target *DepTarget, visiting map[string]b
 	return a.SetService(*target.Inline)
 }
 
-func (a *SdsService) validateDepRefs() error {
+func (a *NoPerfection) validateDepRefs() error {
 	for _, service := range a.Services {
 		for _, handler := range service.Handlers {
 			for _, dep := range handler.CommandDeps {
@@ -104,7 +104,7 @@ func (a *SdsService) validateDepRefs() error {
 	return nil
 }
 
-func (a *SdsService) validateDepRef(target DepTarget) error {
+func (a *NoPerfection) validateDepRef(target DepTarget) error {
 	name := target.Name()
 	if name == "" {
 		return fmt.Errorf("dep target name is empty")

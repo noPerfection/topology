@@ -22,7 +22,7 @@ func TestLoadMissingFile(t *testing.T) {
 }
 
 func TestGetService(t *testing.T) {
-	a := SdsService{}
+	a := NoPerfection{}
 	sample := New("api", IndependentType)
 	if err := a.SetService(*sample); err != nil {
 		t.Fatalf("SetService: %v", err)
@@ -42,7 +42,7 @@ func TestGetService(t *testing.T) {
 }
 
 func TestGetByType(t *testing.T) {
-	a := SdsService{}
+	a := NoPerfection{}
 	services := []Service{
 		*New("api", IndependentType),
 		*New("worker", IndependentType),
@@ -71,7 +71,7 @@ func TestGetByType(t *testing.T) {
 }
 
 func TestFilterByType(t *testing.T) {
-	a := SdsService{}
+	a := NoPerfection{}
 	services := []Service{
 		*New("api", IndependentType),
 		*New("worker", IndependentType),
@@ -106,7 +106,7 @@ func TestFilterByType(t *testing.T) {
 }
 
 func TestCountByType(t *testing.T) {
-	a := SdsService{}
+	a := NoPerfection{}
 	services := []Service{
 		*New("api", IndependentType),
 		*New("worker", IndependentType),
@@ -130,7 +130,7 @@ func TestCountByType(t *testing.T) {
 }
 
 func TestSetService(t *testing.T) {
-	a := SdsService{}
+	a := NoPerfection{}
 	first := New("api", IndependentType)
 	second := New("proxy", ProxyType)
 
@@ -163,7 +163,7 @@ func TestSetService(t *testing.T) {
 }
 
 func TestRemoveService(t *testing.T) {
-	a := SdsService{}
+	a := NoPerfection{}
 	first := New("api", IndependentType)
 	second := New("proxy", ProxyType)
 	if err := a.SetService(*first); err != nil {
@@ -237,7 +237,7 @@ func TestLoadSave(t *testing.T) {
 }
 
 func TestSaveWithoutFilePath(t *testing.T) {
-	if err := (SdsService{}).Save(); err == nil {
+	if err := (NoPerfection{}).Save(); err == nil {
 		t.Fatal("Save without file path returned nil error")
 	}
 }

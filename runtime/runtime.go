@@ -30,7 +30,7 @@ type Process struct {
 
 // Runtime runs, stops, and checks dependency services.
 type Runtime struct {
-	config           *config.SdsService
+	config           *config.NoPerfection
 	sameServices     map[string]int
 	runningProcesses map[string]*Process
 	timeout          time.Duration
@@ -305,7 +305,7 @@ func (rt *Runtime) RemoveService(serviceName string) error {
 }
 
 // New creates a dependency runtime in the Dev context.
-func New(cfg *config.SdsService) *Runtime {
+func New(cfg *config.NoPerfection) *Runtime {
 	return &Runtime{
 		config:           cfg,
 		sameServices:     make(map[string]int),

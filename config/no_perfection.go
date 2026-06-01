@@ -1,4 +1,4 @@
-// Package config defines the SDS application configuration.
+// Package config defines the noPerfection application configuration.
 package config
 
 import (
@@ -9,16 +9,16 @@ import (
 	"os"
 )
 
-// SdsService is the configuration of the entire application.
+// NoPerfection is the configuration of the entire application.
 // Consists the supported services.
-type SdsService struct {
+type NoPerfection struct {
 	Services []Service `json:"services"`
 	filePath string
 }
 
 // Load loads an app configuration from a JSON file.
-func Load(filePath string) (SdsService, error) {
-	appConfig := SdsService{
+func Load(filePath string) (NoPerfection, error) {
+	appConfig := NoPerfection{
 		Services: make([]Service, 0),
 		filePath: filePath,
 	}
@@ -28,22 +28,22 @@ func Load(filePath string) (SdsService, error) {
 		return appConfig, nil
 	}
 	if err != nil {
-		return SdsService{}, fmt.Errorf("os.ReadFile('%s'): %w", filePath, err)
+		return NoPerfection{}, fmt.Errorf("os.ReadFile('%s'): %w", filePath, err)
 	}
 
 	if err := json.Unmarshal(data, &appConfig); err != nil {
-		return SdsService{}, fmt.Errorf("json.Unmarshal: %w", err)
+		return NoPerfection{}, fmt.Errorf("json.Unmarshal: %w", err)
 	}
 
 	if err := appConfig.Normalize(); err != nil {
-		return SdsService{}, fmt.Errorf("Normalize: %w", err)
+		return NoPerfection{}, fmt.Errorf("Normalize: %w", err)
 	}
 
 	return appConfig, nil
 }
 
 // Save saves the app configuration as JSON into its file path.
-func (a SdsService) Save() error {
+func (a NoPerfection) Save() error {
 	if len(a.filePath) == 0 {
 		return fmt.Errorf("app file path is empty")
 	}
@@ -63,7 +63,7 @@ func (a SdsService) Save() error {
 
 // GetService returns a service by name from the app configuration.
 // If not found, return an error.
-func (a *SdsService) GetService(name string) (Service, error) {
+func (a *NoPerfection) GetService(name string) (Service, error) {
 	for i := range a.Services {
 		if a.Services[i].Name == name {
 			return a.Services[i], nil
@@ -75,7 +75,7 @@ func (a *SdsService) GetService(name string) (Service, error) {
 
 // GetByType returns the first service of the given type from the app configuration.
 // If the service type is invalid or no service is found, return an error.
-func (a *SdsService) GetByType(serviceType Type) (*Service, error) {
+func (a *NoPerfection) GetByType(serviceType Type) (*Service, error) {
 	if err := ValidateServiceType(serviceType); err != nil {
 		return nil, fmt.Errorf("ValidateServiceType: %w", err)
 	}
@@ -91,7 +91,7 @@ func (a *SdsService) GetByType(serviceType Type) (*Service, error) {
 
 // FilterByType returns all services of the given type from the app configuration.
 // If the service type is invalid or no services are found, return an error.
-func (a *SdsService) FilterByType(serviceType Type) ([]*Service, error) {
+func (a *NoPerfection) FilterByType(serviceType Type) ([]*Service, error) {
 	if err := ValidateServiceType(serviceType); err != nil {
 		return nil, fmt.Errorf("ValidateServiceType: %w", err)
 	}
@@ -110,7 +110,7 @@ func (a *SdsService) FilterByType(serviceType Type) ([]*Service, error) {
 }
 
 // CountByType returns the amount of services of the given type.
-func (a *SdsService) CountByType(serviceType Type) int {
+func (a *NoPerfection) CountByType(serviceType Type) int {
 	count := 0
 	for i := range a.Services {
 		if a.Services[i].Type == serviceType {
@@ -122,7 +122,7 @@ func (a *SdsService) CountByType(serviceType Type) int {
 }
 
 // SetService sets a new service into the configuration.
-func (a *SdsService) SetService(s Service) error {
+func (a *NoPerfection) SetService(s Service) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
@@ -143,7 +143,7 @@ func (a *SdsService) SetService(s Service) error {
 }
 
 // RemoveService removes a service by name from the app configuration.
-func (a *SdsService) RemoveService(name string) error {
+func (a *NoPerfection) RemoveService(name string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}

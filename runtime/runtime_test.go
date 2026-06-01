@@ -63,7 +63,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 	test.currentDir = currentDir
 
 	test.runtime = &Runtime{
-		config: &config.SdsService{
+		config: &config.NoPerfection{
 			Services: []config.Service{
 				{
 					Type:         config.ProxyType,
@@ -104,7 +104,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 func (test *TestDepManagerSuite) Test_0_New() {
 	s := test.Require
 
-	cfg := &config.SdsService{}
+	cfg := &config.NoPerfection{}
 	depRuntime := New(cfg)
 	s().NotNil(depRuntime)
 	s().Same(cfg, depRuntime.config)

@@ -1,11 +1,11 @@
-# SDS Configuration
+# noPerfection Configuration
 
 This module provides Go types and JSON helpers for an application configuration made of services.
 
 It is a static data library only:
 
 - `config` defines service metadata (`Service`, `Handler`, `Socket`, `CommandDep`, `DepTarget`)
-- `config` defines the top-level `SdsService` struct (`services: [...]`), `Load`, and `SdsService.Save`
+- `config` defines the top-level `NoPerfection` struct (`services: [...]`), `Load`, and `NoPerfection.Save`
 
 There is no runtime config server, engine, or client API in this module.
 
@@ -116,4 +116,4 @@ Proxy chains are declared in handler `command-deps` metadata. Terminal services 
 
 ## Packages removed from this module
 
-Previous versions included a dev runtime layer (`engine`, `handler`, `client`, `watch`) for serving config over SDS sockets. That runtime API has been removed. Consumers should load JSON with `config.Load` and save it with `SdsService.Save`.
+Previous versions included a dev runtime layer (`engine`, `handler`, `client`, `watch`) for serving config over noPerfection sockets. That runtime API has been removed. Consumers should load JSON with `config.Load` and save it with `NoPerfection.Save`.

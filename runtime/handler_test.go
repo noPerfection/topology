@@ -45,7 +45,7 @@ func (test *TestHandlerSuite) SetupTest() {
 	}
 
 	var err error
-	test.depHandler, err = NewHandler(&config.SdsService{}, runtimeSocket)
+	test.depHandler, err = NewHandler(&config.NoPerfection{}, runtimeSocket)
 	s().NoError(err)
 
 	// Start the handler

@@ -7,7 +7,7 @@ import (
 )
 
 func TestNormalizeInlineService(t *testing.T) {
-	app := SdsService{
+	app := NoPerfection{
 		Services: []Service{
 			{
 				Type: IndependentType,
@@ -51,7 +51,7 @@ func TestNormalizeInlineService(t *testing.T) {
 }
 
 func TestNormalizeMissingRef(t *testing.T) {
-	app := SdsService{
+	app := NoPerfection{
 		Services: []Service{
 			{
 				Type: IndependentType,
