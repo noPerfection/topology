@@ -7,8 +7,6 @@ import (
 	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/client"
-	clientConfig "github.com/noPerfection/protocol/client/config"
-	handlerConfig "github.com/noPerfection/protocol/handler/config"
 	"github.com/noPerfection/protocol/message"
 )
 
@@ -25,16 +23,12 @@ type ClientInterface interface {
 	AddService(target config.DepTarget) error
 	SetService(service config.Service) error
 	RemoveService(serviceName string) error
-	StartService(serviceName string, parent *clientConfig.Client) (string, error)
+	StartService(serviceName string, parent *ParentClient) (string, error)
 	IsServiceRunning(serviceName string) (bool, error)
 }
 
 func NewClient(runtimeSocket config.Socket) (*Client, error) {
-	socketType := handlerConfig.SocketType(RuntimeSocketType)
-	c := clientConfig.New("", runtimeSocket.Id, uint64(runtimeSocket.Port), socketType).
-		UrlFunc(clientConfig.Url)
-
-	socket, err := client.New(c)
+	socket, err := client.New(runtimeSocket.Id, uint64(runtimeSocket.Port), client.HandlerType(RuntimeSocketType))
 	if err != nil {
 		return nil, fmt.Errorf("client.New: %w", err)
 	}
@@ -145,7 +139,7 @@ func (c *Client) RemoveService(serviceName string) error {
 }
 
 // StartService starts the dependency service and returns the generated runtime id.
-func (c *Client) StartService(serviceName string, parent *clientConfig.Client) (string, error) {
+func (c *Client) StartService(serviceName string, parent *ParentClient) (string, error) {
 	req := message.Request{
 		Command: StartService,
 		Parameters: datatype.New().

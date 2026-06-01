@@ -1,13 +1,13 @@
 package runtime
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
 	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/os/path"
-	clientConfig "github.com/noPerfection/protocol/client/config"
 	"github.com/stretchr/testify/suite"
 )
 
@@ -20,11 +20,11 @@ type TestDepManagerSuite struct {
 	suite.Suite
 
 	logger       *log.Logger
-	runtime      *Runtime             // the runtime to test
-	currentDir   string               // executable to store the binaries and source codes
-	url          string               // dependency source code
-	id           string               // the id of the dependency
-	parent       *clientConfig.Client // the info about the service to which dependency should connect
+	runtime      *Runtime      // the runtime to test
+	currentDir   string        // executable to store the binaries and source codes
+	url          string        // dependency source code
+	id           string        // the id of the dependency
+	parent       *ParentClient // the info about the service to which dependency should connect
 	localTestDir string
 }
 
@@ -40,6 +40,14 @@ func (test *TestDepManagerSuite) setServiceStartCommand(name string, startComman
 		Name:         name,
 		StartCommand: startCommand,
 	})
+}
+
+func (test *TestDepManagerSuite) requireTestBinary(binary string) {
+	_, err := os.Stat(binary)
+	if os.IsNotExist(err) {
+		test.T().Skipf("test service binary %q is missing; build the _test_services fixtures to run this test", binary)
+	}
+	test.Require().NoError(err)
 }
 
 // Make sure that Account is set to five
@@ -83,7 +91,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 	test.url = "github.com/noPerfection/test-manager"
 
 	test.id = "test-manager"
-	test.parent = &clientConfig.Client{
+	test.parent = &ParentClient{
 		ServiceUrl: "context",
 		Id:         "parent",
 		Port:       120,
@@ -250,6 +258,7 @@ func (test *TestDepManagerSuite) Test_20_Run() {
 
 	localBin := path.BinPath(filepath.Join(test.localTestDir, "test-manager", "bin"), "test")
 	invalidBin := path.BinPath(filepath.Join(test.localTestDir, "test-manager", "bin"), "non_existing")
+	test.requireTestBinary(localBin)
 	test.setServiceStartCommand(test.id, localBin)
 
 	_, ok := test.runtime.runningProcesses[test.id+"1"]
@@ -300,6 +309,7 @@ func (test *TestDepManagerSuite) Test_21_RunError() {
 	s := test.Require
 
 	localBin := path.BinPath(filepath.Join(test.localTestDir, "with-error", "bin"), "test")
+	test.requireTestBinary(localBin)
 	test.setServiceStartCommand(test.id, localBin)
 
 	// Let's run it
@@ -327,6 +337,7 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 	s := test.Require
 
 	localBin := path.BinPath(filepath.Join(test.localTestDir, "server", "bin"), "test")
+	test.requireTestBinary(localBin)
 	test.setServiceStartCommand(test.id, localBin)
 
 	// First, install the manager

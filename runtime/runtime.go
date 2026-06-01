@@ -11,8 +11,7 @@ import (
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/client"
-	clientConfig "github.com/noPerfection/protocol/client/config"
-	handlerConfig "github.com/noPerfection/protocol/handler/config"
+	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/message"
 )
 
@@ -349,19 +348,14 @@ func (rt *Runtime) StopService(serviceName string) error {
 		return nil
 	}
 
-	c, err := rt.managerClient(&service)
+	sock, err := rt.managerClient(&service)
 	if err != nil {
 		return err
-	}
-
-	sock, err := client.New(c)
-	if err != nil {
-		return fmt.Errorf("zmq.NewSocket: %w", err)
 	}
 	defer sock.Close()
 
 	closeRequest := &message.Request{
-		Command:    handlerConfig.HandlerClose,
+		Command:    control.HandlerClose,
 		Parameters: datatype.New(),
 	}
 
@@ -371,7 +365,7 @@ func (rt *Runtime) StopService(serviceName string) error {
 
 	running, err = rt.IsServiceRunning(serviceName)
 	if err != nil {
-		return fmt.Errorf("socket.Request('%s'): runtime.IsServiceRunning('%s'): %w", handlerConfig.HandlerClose, serviceName, err)
+		return fmt.Errorf("socket.Request('%s'): runtime.IsServiceRunning('%s'): %w", control.HandlerClose, serviceName, err)
 	}
 
 	if running {
@@ -398,14 +392,9 @@ func (rt *Runtime) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
-	c, err := rt.managerClient(&service)
+	sock, err := rt.managerClient(&service)
 	if err != nil {
 		return false, err
-	}
-
-	sock, err := client.New(c)
-	if err != nil {
-		return false, fmt.Errorf("client.New: %w", err)
 	}
 	sock.Attempt(1).Timeout(rt.timeout)
 
@@ -479,21 +468,22 @@ func (rt *Runtime) refreshServiceCount(serviceName string) {
 	rt.sameServices[serviceName] = count
 }
 
-func (rt *Runtime) managerClient(service *config.Service) (*clientConfig.Client, error) {
+func (rt *Runtime) managerClient(service *config.Service) (*client.Socket, error) {
 	handler, err := service.HandlerByCategory(ManagerHandlerCategory)
 	if err != nil {
 		return nil, fmt.Errorf("no manager found in the '%s' service, please set its config", service.Name)
 	}
 
-	client := clientConfig.New(
-		service.Name,
+	socket, err := client.New(
 		handler.Socket.Id,
 		uint64(handler.Socket.Port),
-		handlerConfig.SocketType(handlerConfig.HandlerType(handler.Type)),
+		client.HandlerType(handler.Type),
 	)
-	client.UrlFunc(clientConfig.Url)
+	if err != nil {
+		return nil, fmt.Errorf("client.New: %w", err)
+	}
 
-	return client, nil
+	return socket, nil
 }
 
 // StartService runs the service start command.
@@ -501,7 +491,7 @@ func (rt *Runtime) managerClient(service *config.Service) (*clientConfig.Client,
 //
 // Note that, services can crash during the initialization.
 // In that case, you should use Runtime.OnStop method.
-func (rt *Runtime) StartService(serviceName string, optionalParent ...*clientConfig.Client) (string, error) {
+func (rt *Runtime) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
 	if rt == nil || rt.config == nil {
 		return "", fmt.Errorf("nil config")
 	}

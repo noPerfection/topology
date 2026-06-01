@@ -1,9 +1,6 @@
 package runtime
 
-import (
-	config "github.com/noPerfection/context/config"
-	clientConfig "github.com/noPerfection/protocol/client/config"
-)
+import config "github.com/noPerfection/context/config"
 
 // Interface is implemented by the dependency runtime.
 //
@@ -20,7 +17,7 @@ type Interface interface {
 	RemoveService(serviceName string) error
 
 	// StartService starts the dependency service with the given parent.
-	StartService(serviceName string, optionalParent ...*clientConfig.Client) (string, error)
+	StartService(serviceName string, optionalParent ...*ParentClient) (string, error)
 
 	// IsServiceRunning checks is the service running or not.
 	IsServiceRunning(serviceName string) (bool, error)

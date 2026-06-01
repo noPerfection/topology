@@ -5,10 +5,11 @@ import (
 	"time"
 
 	config "github.com/noPerfection/context/config"
-	clientConfig "github.com/noPerfection/protocol/client/config"
-	handlerConfig "github.com/noPerfection/protocol/handler/config"
-	"github.com/noPerfection/protocol/handler/manager_client"
+	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
+	"github.com/noPerfection/protocol/client/sync_replier"
+	"github.com/noPerfection/protocol/handler/control"
+	"github.com/noPerfection/protocol/message"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -21,10 +22,10 @@ type TestClientSuite struct {
 
 	logger            *log.Logger
 	depHandler        *Handler // the manager to test
-	depHandlerManager manager_client.Interface
-	url               string               // dependency source code
-	id                string               // the id of the dependency
-	parent            *clientConfig.Client // the info about the service to which dependency should connect
+	depHandlerManager *sync_replier.Client
+	url               string        // dependency source code
+	id                string        // the id of the dependency
+	parent            *ParentClient // the info about the service to which dependency should connect
 
 	client *Client
 }
@@ -49,7 +50,8 @@ func (test *TestClientSuite) SetupTest() {
 	// Start the handler
 	s().NoError(test.depHandler.Start())
 
-	test.depHandlerManager, err = manager_client.New(HandlerConfig(runtimeSocket))
+	controlConfig := control.CreateInternalConfig(HandlerConfig(runtimeSocket))
+	test.depHandlerManager, err = sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
 	s().NoError(err)
 
 	// wait a bit for closing
@@ -59,11 +61,10 @@ func (test *TestClientSuite) SetupTest() {
 	test.url = "github.com/noPerfection/test-manager"
 
 	test.id = "test-manager"
-	test.parent = &clientConfig.Client{
+	test.parent = &ParentClient{
 		ServiceUrl: "context",
 		Id:         "parent",
 		Port:       120,
-		TargetType: handlerConfig.SocketType(handlerConfig.ReplierType),
 	}
 
 	socket, err := NewClient(runtimeSocket)
@@ -79,6 +80,11 @@ func (test *TestClientSuite) TearDownTest() {
 
 	s().NoError(test.client.Close())
 
+	_, err := test.depHandlerManager.Request(&message.Request{
+		Command:    control.HandlerClose,
+		Parameters: datatype.New(),
+	})
+	s().NoError(err)
 	s().NoError(test.depHandlerManager.Close())
 
 	// Wait a bit for the close of the handler thread.

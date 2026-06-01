@@ -115,7 +115,7 @@ type ClientInterface interface {
 	AddService(service config.Service) error
 	SetService(service config.Service) error
 	RemoveService(serviceName string) error
-	StartService(serviceName string, parent *clientConfig.Client) (string, error)
+	StartService(serviceName string, parent *runtime.ParentClient) (string, error)
 	StopService(serviceName string) error
 	IsServiceRunning(serviceName string) (bool, error)
 }

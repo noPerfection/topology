@@ -7,7 +7,6 @@ import (
 	config "github.com/noPerfection/context/config"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
-	clientConfig "github.com/noPerfection/protocol/client/config"
 	"github.com/noPerfection/protocol/handler/base"
 	handlerConfig "github.com/noPerfection/protocol/handler/config"
 	"github.com/noPerfection/protocol/handler/replier"
@@ -33,7 +32,7 @@ type Handler struct {
 
 // HandlerConfig returns the handler configuration for the runtime socket.
 func HandlerConfig(runtimeSocket config.Socket) *handlerConfig.Handler {
-	return handlerConfig.NewHandler(
+	return handlerConfig.New(
 		RuntimeSocketType,
 		runtimeSocket.Id,
 		RuntimeHandlerCategory,
@@ -86,7 +85,7 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 // onStartService starts the dependency service.
 // Requires:
 //   - 'service' string parameter,
-//   - 'parent' of the clientConfig.Client type.
+//   - 'parent' of the ParentClient type.
 //
 // Returns nothing.
 // todo make it publish the result through publisher, so user won't wait for the result.
@@ -96,13 +95,11 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('parent'): %v", err))
 	}
 
-	var parent clientConfig.Client
+	var parent ParentClient
 	err = kv.Interface(&parent)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
-
-	parent.UrlFunc(clientConfig.Url)
 
 	serviceName, err := req.RouteParameters().StringValue("service")
 	if err != nil {
