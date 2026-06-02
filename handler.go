@@ -35,32 +35,22 @@ var _ TopologyInterface = (*Handler)(nil)
 
 // HandlerConfig returns the handler configuration for the topology endpoint.
 // Then use it as the handler's config with the SetConfig method.
-func HandlerConfig(topologyEndpoint message.Endpoint) *handlerConfig.Handler {
+func HandlerConfig() *handlerConfig.Handler {
 	return handlerConfig.New(
 		TopologySocketType,
-		topologyEndpoint.Id,
 		TopologyHandlerCategory,
-		topologyEndpoint.Port,
+		TopologyHandlerCategory,
+		0,
 	)
 }
 
 // NewHandler loads app config, ensures the independent topology service entry exists,
 // persists config when it changed, and returns a dependency topology handler.
-func NewHandler(configPath string, topologyEndpoint message.Endpoint) (*Handler, error) {
+func NewHandler(configPath string) (*Handler, error) {
 	appConfig, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
 	}
-
-	// appConfigChanged, err := ensureIndependentTopologyService(&appConfig, topologyEndpoint)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("ensureIndependentTopologyService: %w", err)
-	// }
-	// if appConfigChanged {
-	// 	if err := appConfig.Save(); err != nil {
-	// 		return nil, fmt.Errorf("appConfig.Save: %w", err)
-	// 	}
-	// }
 
 	handler := replier.New()
 
@@ -69,7 +59,7 @@ func NewHandler(configPath string, topologyEndpoint message.Endpoint) (*Handler,
 		return nil, fmt.Errorf("log.New('%s'): %w", TopologyHandlerCategory, err)
 	}
 
-	handler.SetConfig(HandlerConfig(topologyEndpoint))
+	handler.SetConfig(HandlerConfig())
 	err = handler.SetLogger(logger)
 	if err != nil {
 		return nil, fmt.Errorf("handler.SetLogger: %w", err)
@@ -146,51 +136,6 @@ func (h *Handler) StopService(serviceName string) error {
 	}
 	return h.topology.StopService(serviceName)
 }
-
-// func ensureIndependentTopologyService(appConfig *config.NoPerfection, topologyEndpoint message.Endpoint) (bool, error) {
-// 	independentCount := appConfig.CountByType(config.IndependentType)
-// 	if independentCount > 1 {
-// 		return false, fmt.Errorf("only one independent service can be configured")
-// 	}
-
-// 	topologyHandler := config.Handler{
-// 		Type:     config.HandlerType(TopologySocketType),
-// 		Category: TopologyHandlerCategory,
-// 		Endpoint: topologyEndpoint,
-// 	}
-
-// 	if independentCount == 0 {
-// 		err := appConfig.SetService(config.Service{
-// 			Type:     config.IndependentType,
-// 			Name:     TopologyHandlerCategory,
-// 			Handlers: []config.Handler{topologyHandler},
-// 		})
-// 		if err != nil {
-// 			return false, fmt.Errorf("appConfig.SetService: %w", err)
-// 		}
-
-// 		return true, nil
-// 	}
-
-// 	independentService, err := appConfig.GetByType(config.IndependentType)
-// 	if err != nil {
-// 		return false, fmt.Errorf("appConfig.GetByType('%s'): %w", config.IndependentType, err)
-// 	}
-
-// 	handler, err := independentService.HandlerByCategory(TopologyHandlerCategory)
-// 	if err == nil {
-// 		if handler.Endpoint.Id == topologyEndpoint.Id && handler.Endpoint.Port == topologyEndpoint.Port {
-// 			return false, nil
-// 		}
-
-// 		handler.Endpoint = topologyEndpoint
-// 		independentService.SetHandler(handler)
-// 		return true, nil
-// 	}
-
-// 	independentService.Handlers = append(independentService.Handlers, topologyHandler)
-// 	return true, nil
-// }
 
 // onIsServiceRunning checks whether the dependency is running or not.
 // Requires 'service' string parameter with the service name.

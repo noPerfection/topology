@@ -3,8 +3,11 @@
 `topology` provides a dependency topology manager for noPerfection microservices.
 With `topology`, noPerfection services can manage their dependencies.
 
-Since its asynchronous and lives on another thread to not break service's own code, 
-the topology is decoupled into handler and a client.
+Topology is an in-process (`inproc`) handler: it lives in the same process as
+the service, but runs asynchronously on a different goroutine/thread so it does
+not block the service's own code. The handler and client use a predefined
+endpoint at `inproc://<TopologyHandlerCategory>`, where `TopologyHandlerCategory`
+is the package constant used to build the endpoint internally.
 
 ## Install
 Requires zmq library C library. Go code running or building must be then done using C enabling.
@@ -18,13 +21,9 @@ First we need to start the topology handler
 
 ```go
 import "github.com/noPerfection/topology"
-import "github.com/noPerfection/topology/config"
-import "github.com/noPerfection/protocol/message"
 
 //.. rest of code
-topologyEndpoint := message.NewEndpoint("topology", 0)
-
-handler, _ := topology.NewHandler("service.json", topologyEndpoint)
+handler, _ := topology.NewHandler("service.json")
 
 // Any handler's functions.
 
@@ -34,12 +33,12 @@ if err := handler.Start(); err != nil {
 }
 
 ```
-That's it. Topology is running remotely.
+That's it. Topology is running in-process.
 Second, we need to interact with it from the code:
 
 ```go
 	// Now interact with the topology manager through a topology client.
-	topologyClient, _ := topology.NewClient(topologyEndpoint)
+	topologyClient, _ := topology.NewClient()
 	defer topologyClient.Close()
 
 	running, err := topologyClient.IsServiceRunning("database")
@@ -53,7 +52,7 @@ Second, we need to interact with it from the code:
 
 ## Topology Handler
 
-`topology.NewHandler(configPath, topologyEndpoint)` returns a handler that serves topology commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any topology bootstrap changes, and uses `topologyEndpoint` as its command endpoint.
+`topology.NewHandler(configPath)` returns a handler that serves topology commands over an in-process noPerfection protocol socket. The handler loads `configPath` using `config.Load`, saves any topology bootstrap changes, and uses the predefined `inproc://<TopologyHandlerCategory>` command endpoint.
 
 The handler exposes these commands internally:
 
@@ -64,12 +63,12 @@ The handler exposes these commands internally:
 - `stop-service`
 - `is-service-running`
 
-Applications usually do not send these commands directly. Use `topology.NewClient(topologyEndpoint)` instead.
+Applications usually do not send these commands directly. Use `topology.NewClient()` instead.
 
 Before `Start()` is called, the returned handler also implements `topology.TopologyInterface`. This lets setup code manipulate the topology configuration directly:
 
 ```go
-handler, _ := topology.NewHandler("service.json", topologyEndpoint)
+handler, _ := topology.NewHandler("service.json")
 
 if err := handler.AddService(config.InlineTarget(service)); err != nil {
 	panic(err)
@@ -80,11 +79,11 @@ if err := handler.Start(); err != nil {
 }
 ```
 
-After `Start()` succeeds, direct topology methods on the handler are unavailable and return an error. Use `topology.NewClient(topologyEndpoint)` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
+After `Start()` succeeds, direct topology methods on the handler are unavailable and return an error. Use `topology.NewClient()` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
 
 ## Topology Client API
 
-`topology.NewClient(topologyEndpoint)` returns a `*topology.Client`. Configure request behavior with:
+`topology.NewClient()` returns a `*topology.Client`. It builds the same in-process endpoint internally with `message.NewEndpoint(TopologyHandlerCategory, 0)`, which resolves to `inproc://<TopologyHandlerCategory>`. Configure request behavior with:
 
 ```go
 topologyClient.Timeout(5 * time.Second)
@@ -119,7 +118,7 @@ service := config.Service{
 	Handlers: []config.Handler{
 		{
 			Type:     config.ReplierType,
-			Category: topology.ManagerHandlerCategory,
+			Category: topology.ServiceManagerCategory,
 			Endpoint: message.NewEndpoint("worker-manager", 6001),
 		},
 	},

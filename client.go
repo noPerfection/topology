@@ -25,7 +25,12 @@ var (
 )
 
 // NewClient connects to the topology handler endpoint.
-func NewClient(serviceEndpoint message.Endpoint) (*Client, error) {
+func NewClient() (*Client, error) {
+	return newClient(message.NewEndpoint(TopologyHandlerCategory, 0))
+}
+
+// NewClient connects to the topology handler endpoint.
+func newClient(serviceEndpoint message.Endpoint) (*Client, error) {
 	socket, err := client.New(serviceEndpoint.Id, serviceEndpoint.Port, client.HandlerType(TopologySocketType))
 	if err != nil {
 		return nil, fmt.Errorf("client.New: %w", err)
@@ -36,7 +41,7 @@ func NewClient(serviceEndpoint message.Endpoint) (*Client, error) {
 
 // newNodeClient connects to a service manager handler endpoint.
 func newNodeClient(serviceEndpoint message.Endpoint) (*NodeClient, error) {
-	c, err := NewClient(serviceEndpoint)
+	c, err := newClient(serviceEndpoint)
 	if err != nil {
 		return nil, err
 	}

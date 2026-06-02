@@ -5,11 +5,10 @@ import (
 
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/handler/replier"
-	"github.com/noPerfection/protocol/message"
 	"github.com/noPerfection/topology/config"
 )
 
-func newHandler(appConfig *config.NoPerfection, topologyEndpoint message.Endpoint) (*Handler, error) {
+func newHandler(appConfig *config.NoPerfection) (*Handler, error) {
 	if appConfig == nil {
 		appConfig = &config.NoPerfection{}
 	}
@@ -21,7 +20,7 @@ func newHandler(appConfig *config.NoPerfection, topologyEndpoint message.Endpoin
 		return nil, fmt.Errorf("log.New('%s'): %w", TopologyHandlerCategory, err)
 	}
 
-	handler.SetConfig(HandlerConfig(topologyEndpoint))
+	handler.SetConfig(HandlerConfig())
 	if err := handler.SetLogger(logger); err != nil {
 		return nil, fmt.Errorf("handler.SetLogger: %w", err)
 	}

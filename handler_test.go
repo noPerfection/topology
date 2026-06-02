@@ -40,16 +40,14 @@ func (test *TestHandlerSuite) SetupTest() {
 	logger, _ := log.New("test", false)
 	test.logger = logger
 
-	topologyEndpoint := message.NewEndpoint(TopologyHandlerCategory, 0)
-
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{}, topologyEndpoint)
+	test.depHandler, err = newHandler(&config.NoPerfection{})
 	s().NoError(err)
 
 	// Start the handler
 	s().NoError(test.depHandler.Start())
 
-	controlConfig := control.CreateInternalConfig(HandlerConfig(topologyEndpoint))
+	controlConfig := control.CreateInternalConfig(HandlerConfig())
 	test.depHandlerManager, err = sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
 	s().NoError(err)
 
@@ -66,7 +64,7 @@ func (test *TestHandlerSuite) SetupTest() {
 		Port:       120,
 	}
 
-	handlerCfg := HandlerConfig(topologyEndpoint)
+	handlerCfg := HandlerConfig()
 	socket, err := client.New(handlerCfg.Id, handlerCfg.Port, client.HandlerType(handlerCfg.Type))
 	s().NoError(err)
 
@@ -98,8 +96,7 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 		t.Fatalf("config.Load: %v", err)
 	}
 
-	topologyEndpoint := message.NewEndpoint("pre-start-topology", 0)
-	handler, err := newHandler(&appConfig, topologyEndpoint)
+	handler, err := newHandler(&appConfig)
 	if err != nil {
 		t.Fatalf("newHandler: %v", err)
 	}

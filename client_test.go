@@ -38,16 +38,14 @@ func (test *TestClientSuite) SetupTest() {
 	logger, _ := log.New("test", false)
 	test.logger = logger
 
-	topologyEndpoint := message.NewEndpoint(TopologyHandlerCategory, 0)
-
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{}, topologyEndpoint)
+	test.depHandler, err = newHandler(&config.NoPerfection{})
 	s().NoError(err)
 
 	// Start the handler
 	s().NoError(test.depHandler.Start())
 
-	controlConfig := control.CreateInternalConfig(HandlerConfig(topologyEndpoint))
+	controlConfig := control.CreateInternalConfig(HandlerConfig())
 	test.depHandlerManager, err = sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
 	s().NoError(err)
 
@@ -64,7 +62,7 @@ func (test *TestClientSuite) SetupTest() {
 		Port:       120,
 	}
 
-	socket, err := NewClient(topologyEndpoint)
+	socket, err := NewClient()
 	s().NoError(err)
 
 	test.client = socket
