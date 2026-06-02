@@ -19,6 +19,7 @@ const (
 	IsServiceRunning        = "is-service-running"
 	StartService            = "start-service"
 	StopService             = "stop-service"
+	Service                 = "service"
 	AddService              = "add-service"
 	SetService              = "set-service"
 	RemoveService           = "remove-service"
@@ -135,6 +136,14 @@ func (h *Handler) StopService(serviceName string) error {
 		return err
 	}
 	return h.topology.StopService(serviceName)
+}
+
+// Service returns a service configuration before the topology handler is started.
+func (h *Handler) Service(serviceName string) (config.Service, error) {
+	if err := h.requireNotStarted(); err != nil {
+		return config.Service{}, err
+	}
+	return h.topology.Service(serviceName)
 }
 
 // onIsServiceRunning checks whether the dependency is running or not.
@@ -265,6 +274,21 @@ func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInter
 	return req.Ok(datatype.New())
 }
 
+// onService returns the configuration for a service.
+func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface {
+	serviceName, err := req.RouteParameters().StringValue("service")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
+	}
+
+	service, err := h.topology.Service(serviceName)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.Service('%s'): %v", serviceName, err))
+	}
+
+	return req.Ok(datatype.New().Set("service", service))
+}
+
 // Start starts the dependency handler with the available operations.
 func (h *Handler) Start() error {
 	if h == nil {
@@ -282,6 +306,9 @@ func (h *Handler) Start() error {
 	}
 	if err := h.handler.Route(StopService, h.onStopService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", StopService, err)
+	}
+	if err := h.handler.Route(Service, h.onService); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", Service, err)
 	}
 	if err := h.handler.Route(AddService, h.onAddService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", AddService, err)

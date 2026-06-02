@@ -63,6 +63,36 @@ func (c *Client) Close() error {
 	return c.socket.Close()
 }
 
+// Service returns a service configuration by name.
+func (c *Client) Service(serviceName string) (config.Service, error) {
+	req := message.Request{
+		Command: Service,
+		Parameters: datatype.New().
+			Set("service", serviceName),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return config.Service{}, fmt.Errorf("socket.Request('%s'): %w", Service, err)
+	}
+
+	if !reply.IsOK() {
+		return config.Service{}, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	raw, err := reply.ReplyParameters().NestedValue("service")
+	if err != nil {
+		return config.Service{}, fmt.Errorf("reply.ReplyParameters().NestedValue('service'): %w", err)
+	}
+
+	var service config.Service
+	if err := raw.Interface(&service); err != nil {
+		return config.Service{}, fmt.Errorf("raw.Interface('config.Service'): %w", err)
+	}
+
+	return service, nil
+}
+
 // AddService registers a service target in the topology configuration.
 func (c *Client) AddService(target config.DepTarget) error {
 	req := message.Request{

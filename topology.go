@@ -32,6 +32,9 @@ type NodeInterface interface {
 type TopologyInterface interface {
 	NodeInterface
 
+	// Service returns a service configuration by name.
+	Service(serviceName string) (config.Service, error)
+
 	// AddService registers a service in the topology configuration.
 	AddService(target config.DepTarget) error
 
@@ -98,6 +101,20 @@ func (tp *Topology) AddService(target config.DepTarget) error {
 	}
 
 	return tp.config.Save()
+}
+
+// Service returns a service configuration by name.
+func (tp *Topology) Service(serviceName string) (config.Service, error) {
+	if tp == nil || tp.config == nil {
+		return config.Service{}, fmt.Errorf("nil config")
+	}
+
+	service, err := tp.config.GetService(serviceName)
+	if err != nil {
+		return config.Service{}, fmt.Errorf("tp.config.GetService('%s'): %w", serviceName, err)
+	}
+
+	return service, nil
 }
 
 func (tp *Topology) validateServiceRef(serviceName string, visiting map[string]bool) error {
