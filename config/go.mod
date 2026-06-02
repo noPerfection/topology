@@ -1,4 +1,4 @@
-module github.com/noPerfection/runtime/config
+module github.com/noPerfection/topology/config
 
 go 1.19
 

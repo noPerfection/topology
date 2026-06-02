@@ -45,7 +45,7 @@ See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a full pr
 ```go
 import (
     "github.com/noPerfection/protocol/message"
-    config "github.com/noPerfection/runtime/config"
+    config "github.com/noPerfection/topology/config"
 )
 
 a, err := config.Load("app.json")

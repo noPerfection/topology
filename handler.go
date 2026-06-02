@@ -1,5 +1,5 @@
-// Package runtime manages dependency service lifecycle for noPerfection services.
-package runtime
+// Package topology manages dependency service lifecycle for noPerfection services.
+package topology
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 	handlerConfig "github.com/noPerfection/protocol/handler/config"
 	"github.com/noPerfection/protocol/handler/replier"
 	"github.com/noPerfection/protocol/message"
-	"github.com/noPerfection/runtime/config"
+	"github.com/noPerfection/topology/config"
 )
 
 const (

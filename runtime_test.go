@@ -1,4 +1,4 @@
-package runtime
+package topology
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/os/path"
 	"github.com/noPerfection/protocol/message"
-	config "github.com/noPerfection/runtime/config"
+	config "github.com/noPerfection/topology/config"
 	"github.com/stretchr/testify/suite"
 )
 

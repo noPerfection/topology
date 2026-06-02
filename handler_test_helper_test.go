@@ -1,4 +1,4 @@
-package runtime
+package topology
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/handler/replier"
 	"github.com/noPerfection/protocol/message"
-	"github.com/noPerfection/runtime/config"
+	"github.com/noPerfection/topology/config"
 )
 
 func newHandler(appConfig *config.NoPerfection, runtimeEndpoint message.Endpoint) (*Handler, error) {

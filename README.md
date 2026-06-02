@@ -1,7 +1,7 @@
-# Runtime
+# Topology
 
-`runtime` provides a dependency services manager for noPerfection microservices.
-With the `runtime` noPerfection services can manage its dependencies.
+`topology` provides a dependency services manager for noPerfection microservices.
+With `topology`, noPerfection services can manage their dependencies.
 
 Since its asynchronous and lives on another thread to not break service's own code, 
 the runtime is decoupled into handler and a client.
@@ -10,21 +10,21 @@ the runtime is decoupled into handler and a client.
 Requires zmq library C library. Go code running or building must be then done using C enabling.
 
 ```sh
-go get github.com/noPerfection/runtime@latest
+go get github.com/noPerfection/topology@latest
 ```
 
 ## Tutorial
 First we need to start the runtime handler
 
 ```go
-import "github.com/noPerfection/runtime"
-import "github.com/noPerfection/runtime/config"
+import "github.com/noPerfection/topology"
+import "github.com/noPerfection/topology/config"
 import "github.com/noPerfection/protocol/message"
 
 //.. rest of code
 runtimeEndpoint := message.NewEndpoint("runtime", 0)
 
-handler, _ := runtime.NewHandler("service.json", runtimeEndpoint)
+handler, _ := topology.NewHandler("service.json", runtimeEndpoint)
 
 // Any handler's functions.
 
@@ -39,7 +39,7 @@ Second, we need to interact with it from the code:
 
 ```go
 	// Now interact with the runtime manager through a runtime client.
-	runtimeClient, _ := runtime.NewClient(runtimeEndpoint)
+	runtimeClient, _ := topology.NewClient(runtimeEndpoint)
 	defer runtimeClient.Close()
 
 	running, err := runtimeClient.IsServiceRunning("database")
@@ -53,7 +53,7 @@ Second, we need to interact with it from the code:
 
 ## Runtime Handler
 
-`runtime.NewHandler(configPath, runtimeEndpoint)` returns a handler that serves runtime commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any runtime bootstrap changes, and uses `runtimeEndpoint` as its command endpoint.
+`topology.NewHandler(configPath, runtimeEndpoint)` returns a handler that serves runtime commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any runtime bootstrap changes, and uses `runtimeEndpoint` as its command endpoint.
 
 The handler exposes these commands internally:
 
@@ -64,12 +64,12 @@ The handler exposes these commands internally:
 - `stop-service`
 - `is-service-running`
 
-Applications usually do not send these commands directly. Use `runtime.NewClient(runtimeEndpoint)` instead.
+Applications usually do not send these commands directly. Use `topology.NewClient(runtimeEndpoint)` instead.
 
-Before `Start()` is called, the returned handler also implements `runtime.RuntimeInterface`. This lets setup code manipulate the runtime configuration directly:
+Before `Start()` is called, the returned handler also implements `topology.RuntimeInterface`. This lets setup code manipulate the runtime configuration directly:
 
 ```go
-handler, _ := runtime.NewHandler("service.json", runtimeEndpoint)
+handler, _ := topology.NewHandler("service.json", runtimeEndpoint)
 
 if err := handler.AddService(config.InlineTarget(service)); err != nil {
 	panic(err)
@@ -80,11 +80,11 @@ if err := handler.Start(); err != nil {
 }
 ```
 
-After `Start()` succeeds, direct runtime methods on the handler are unavailable and return an error. Use `runtime.NewClient(runtimeEndpoint)` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
+After `Start()` succeeds, direct runtime methods on the handler are unavailable and return an error. Use `topology.NewClient(runtimeEndpoint)` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
 
 ## Runtime Client API
 
-`runtime.NewClient(runtimeEndpoint)` returns a `*runtime.Client`. Configure request behavior with:
+`topology.NewClient(runtimeEndpoint)` returns a `*topology.Client`. Configure request behavior with:
 
 ```go
 runtimeClient.Timeout(5 * time.Second)
@@ -102,7 +102,7 @@ type ClientInterface interface {
 	AddService(target config.DepTarget) error
 	SetService(service config.Service) error
 	RemoveService(serviceName string) error
-	StartService(serviceName string, parent *runtime.ParentClient) (string, error)
+	StartService(serviceName string, parent *topology.ParentClient) (string, error)
 	StopService(serviceName string) error
 	IsServiceRunning(serviceName string) (bool, error)
 }
@@ -118,7 +118,7 @@ service := config.Service{
 	Handlers: []config.Handler{
 		{
 			Type:     config.ReplierType,
-			Category: runtime.ManagerHandlerCategory,
+			Category: topology.ManagerHandlerCategory,
 			Endpoint: message.NewEndpoint("worker-manager", 6001),
 		},
 	},
@@ -137,7 +137,7 @@ if err := runtimeClient.SetService(service); err != nil {
 ### Start, Check, and Stop Services
 
 ```go
-parent := &runtime.ParentClient{
+parent := &topology.ParentClient{
 	ServiceUrl: "api",
 	Id:         "api-manager",
 	Port:       6000,

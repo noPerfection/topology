@@ -1,4 +1,4 @@
-package runtime
+package topology
 
 import (
 	"path/filepath"
@@ -11,7 +11,7 @@ import (
 	"github.com/noPerfection/protocol/client/sync_replier"
 	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/message"
-	config "github.com/noPerfection/runtime/config"
+	config "github.com/noPerfection/topology/config"
 
 	"github.com/stretchr/testify/suite"
 )

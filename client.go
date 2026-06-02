@@ -1,4 +1,4 @@
-package runtime
+package topology
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/client"
 	"github.com/noPerfection/protocol/message"
-	config "github.com/noPerfection/runtime/config"
+	config "github.com/noPerfection/topology/config"
 )
 
 type Client struct {
