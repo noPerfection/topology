@@ -94,17 +94,18 @@ topologyClient.Attempt(1)
 Available client methods:
 
 ```go
-type ClientInterface interface {
-	Close() error
-	Timeout(duration time.Duration)
-	Attempt(attempt uint8)
+type NodeInterface interface {
+	StopService(serviceName string) error
+	StartService(serviceName string, optionalParent ...*topology.ParentClient) (string, error)
+	IsServiceRunning(serviceName string) (bool, error)
+}
+
+type TopologyInterface interface {
+	NodeInterface
 
 	AddService(target config.DepTarget) error
 	SetService(service config.Service) error
 	RemoveService(serviceName string) error
-	StartService(serviceName string, parent *topology.ParentClient) (string, error)
-	StopService(serviceName string) error
-	IsServiceRunning(serviceName string) (bool, error)
 }
 ```
 

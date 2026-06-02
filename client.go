@@ -7,33 +7,41 @@ import (
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/client"
 	"github.com/noPerfection/protocol/message"
-	config "github.com/noPerfection/topology/config"
+	"github.com/noPerfection/topology/config"
 )
 
 type Client struct {
 	socket *client.Socket
 }
 
-type ClientInterface interface {
-	Close() error
-	Timeout(duration time.Duration)
-	Attempt(attempt uint8)
-
-	StopService(serviceName string) error
-	AddService(target config.DepTarget) error
-	SetService(service config.Service) error
-	RemoveService(serviceName string) error
-	StartService(serviceName string, parent *ParentClient) (string, error)
-	IsServiceRunning(serviceName string) (bool, error)
+// NodeClient is a topology protocol client connected to a service manager handler.
+type NodeClient struct {
+	*Client
 }
 
-func NewClient(topologyEndpoint message.Endpoint) (*Client, error) {
-	socket, err := client.New(topologyEndpoint.Id, topologyEndpoint.Port, client.HandlerType(TopologySocketType))
+var (
+	_ NodeInterface     = (*NodeClient)(nil)
+	_ TopologyInterface = (*Client)(nil)
+)
+
+// NewClient connects to the topology handler endpoint.
+func NewClient(serviceEndpoint message.Endpoint) (*Client, error) {
+	socket, err := client.New(serviceEndpoint.Id, serviceEndpoint.Port, client.HandlerType(TopologySocketType))
 	if err != nil {
 		return nil, fmt.Errorf("client.New: %w", err)
 	}
 
 	return &Client{socket: socket}, nil
+}
+
+// newNodeClient connects to a service manager handler endpoint.
+func newNodeClient(serviceEndpoint message.Endpoint) (*NodeClient, error) {
+	c, err := NewClient(serviceEndpoint)
+	if err != nil {
+		return nil, err
+	}
+
+	return &NodeClient{Client: c}, nil
 }
 
 // Timeout of the client socket.
@@ -48,34 +56,6 @@ func (c *Client) Attempt(attempt uint8) {
 
 func (c *Client) Close() error {
 	return c.socket.Close()
-}
-
-// StopService stops the running dependency service.
-func (c *Client) StopService(serviceName string) error {
-	req := message.Request{
-		Command: StopService,
-		Parameters: datatype.New().
-			Set("service", serviceName),
-	}
-
-	if c == nil {
-		return fmt.Errorf("dep manager not initialized")
-	}
-
-	if c.socket == nil {
-		return fmt.Errorf("dep manager socket was closed")
-	}
-
-	reply, err := c.socket.Request(&req)
-	if err != nil {
-		return fmt.Errorf("socket.Submit('%s'): %w", StopService, err)
-	}
-
-	if !reply.IsOK() {
-		return fmt.Errorf("c.socket.Requeset(request='%v'): reply failed with: %s", req, reply.ErrorMessage())
-	}
-
-	return nil
 }
 
 // AddService registers a service target in the topology configuration.
@@ -139,12 +119,22 @@ func (c *Client) RemoveService(serviceName string) error {
 }
 
 // StartService starts the dependency service and returns the generated topology id.
-func (c *Client) StartService(serviceName string, parent *ParentClient) (string, error) {
+func (c *Client) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
+	if len(optionalParent) > 1 {
+		return "", fmt.Errorf("too many optional parameters, either no parameter or 1 parameter required")
+	}
+	if len(optionalParent) == 1 && optionalParent[0] == nil {
+		return "", fmt.Errorf("nil parent")
+	}
+
+	parameters := datatype.New().Set("service", serviceName)
+	if len(optionalParent) == 1 {
+		parameters.Set("parent", optionalParent[0])
+	}
+
 	req := message.Request{
-		Command: StartService,
-		Parameters: datatype.New().
-			Set("parent", parent).
-			Set("service", serviceName),
+		Command:    StartService,
+		Parameters: parameters,
 	}
 
 	reply, err := c.socket.Request(&req)
@@ -187,4 +177,32 @@ func (c *Client) IsServiceRunning(serviceName string) (bool, error) {
 	}
 
 	return res, nil
+}
+
+// StopService stops the running dependency service.
+func (c *Client) StopService(serviceName string) error {
+	req := message.Request{
+		Command: StopService,
+		Parameters: datatype.New().
+			Set("service", serviceName),
+	}
+
+	if c == nil {
+		return fmt.Errorf("dep manager not initialized")
+	}
+
+	if c.socket == nil {
+		return fmt.Errorf("dep manager socket was closed")
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return fmt.Errorf("socket.Submit('%s'): %w", StopService, err)
+	}
+
+	if !reply.IsOK() {
+		return fmt.Errorf("c.socket.Requeset(request='%v'): reply failed with: %s", req, reply.ErrorMessage())
+	}
+
+	return nil
 }

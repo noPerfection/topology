@@ -110,7 +110,7 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 		Handlers: []config.Handler{
 			{
 				Type:     config.ReplierType,
-				Category: ManagerHandlerCategory,
+				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("pre-start-manager", 6100),
 			},
 		},

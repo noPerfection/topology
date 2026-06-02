@@ -211,23 +211,14 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 
 // onStartService starts the dependency service.
 // Requires:
-//   - 'service' string parameter,
+//   - 'service' string parameter.
+//
+// Optional:
 //   - 'parent' of the ParentClient type.
 //
 // Returns nothing.
 // todo make it publish the result through publisher, so user won't wait for the result.
 func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInterface {
-	kv, err := req.RouteParameters().NestedValue("parent")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('parent'): %v", err))
-	}
-
-	var parent ParentClient
-	err = kv.Interface(&parent)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
-	}
-
 	serviceName, err := req.RouteParameters().StringValue("service")
 	if err != nil {
 		serviceName, err = req.RouteParameters().StringValue("url")
@@ -236,7 +227,16 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 		}
 	}
 
-	id, err := h.topology.StartService(serviceName, &parent)
+	var optionalParent []*ParentClient
+	if kv, err := req.RouteParameters().NestedValue("parent"); err == nil {
+		var parent ParentClient
+		if err := kv.Interface(&parent); err != nil {
+			return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
+		}
+		optionalParent = append(optionalParent, &parent)
+	}
+
+	id, err := h.topology.StartService(serviceName, optionalParent...)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.StartService(service: '%s'): %v", serviceName, err))
 	}

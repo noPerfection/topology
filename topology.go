@@ -9,13 +9,20 @@ import (
 
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
-	"github.com/noPerfection/protocol/client/sync_replier"
-	"github.com/noPerfection/protocol/handler/base"
-	handlerConfig "github.com/noPerfection/protocol/handler/config"
-	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/message"
 	"github.com/noPerfection/topology/config"
 )
+
+type NodeInterface interface {
+	// StopService stops the given dependency service.
+	StopService(serviceName string) error
+
+	// StartService starts the dependency service with the given parent.
+	StartService(serviceName string, optionalParent ...*ParentClient) (string, error)
+
+	// IsServiceRunning checks is the service running or not.
+	IsServiceRunning(serviceName string) (bool, error)
+}
 
 // TopologyInterface is implemented by the dependency topology.
 //
@@ -23,6 +30,8 @@ import (
 // Because, stopping must be done by the remote call from other services.
 // Use it if you want to implement your own topology.
 type TopologyInterface interface {
+	NodeInterface
+
 	// AddService registers a service in the topology configuration.
 	AddService(target config.DepTarget) error
 
@@ -31,22 +40,13 @@ type TopologyInterface interface {
 
 	// RemoveService removes a service from the topology configuration.
 	RemoveService(serviceName string) error
-
-	// StartService starts the dependency service with the given parent.
-	StartService(serviceName string, optionalParent ...*ParentClient) (string, error)
-
-	// IsServiceRunning checks is the service running or not.
-	IsServiceRunning(serviceName string) (bool, error)
-
-	// StopService stops the given dependency service.
-	StopService(serviceName string) error
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
 // Topology.IsServiceRunning method uses this value before considering the endpoint as not running.
 const DefaultTimeout = time.Second * 5
 
-const ManagerHandlerCategory = "manager"
+const ServiceManagerCategory = "manager"
 
 type Process struct {
 	config *config.Service
@@ -64,6 +64,16 @@ type Topology struct {
 }
 
 var _ TopologyInterface = (*Topology)(nil)
+
+// New creates a dependency topology in the Dev context.
+func New(cfg *config.NoPerfection) *Topology {
+	return &Topology{
+		config:           cfg,
+		sameServices:     make(map[string]int),
+		runningProcesses: make(map[string]*Process, 0),
+		timeout:          DefaultTimeout,
+	}
+}
 
 // AddService registers a service target in the topology configuration.
 // A ref target must already resolve in the configuration, while an inline
@@ -359,23 +369,11 @@ func (tp *Topology) RemoveService(serviceName string) error {
 	return nil
 }
 
-// New creates a dependency topology in the Dev context.
-func New(cfg *config.NoPerfection) *Topology {
-	return &Topology{
-		config:           cfg,
-		sameServices:     make(map[string]int),
-		runningProcesses: make(map[string]*Process, 0),
-		timeout:          DefaultTimeout,
-	}
-}
-
-func (process *Process) copy() *Process {
-	return &Process{
-		config: process.config,
-		id:     process.id,
-		done:   make(chan error, 1),
-	}
-}
+//---------------------------------------------------------------------
+//
+// NodeInterface implementation
+//
+//---------------------------------------------------------------------
 
 // StopService stops the dependency service.
 func (tp *Topology) StopService(serviceName string) error {
@@ -395,29 +393,30 @@ func (tp *Topology) StopService(serviceName string) error {
 		return fmt.Errorf("service('%s') is independent service, impossible to stop since you are now using it", serviceName)
 	}
 
-	running, err := tp.IsServiceRunning(serviceName)
+	node, err := tp.newServiceManagerClient(&service)
 	if err != nil {
-		return fmt.Errorf("topology.IsServiceRunning('%s'): %w", serviceName, err)
+		return err
+	}
+	defer node.Close()
+
+	node.Timeout(tp.timeout)
+	node.Attempt(2)
+
+	running, err := node.IsServiceRunning(serviceName)
+	if err != nil {
+		return fmt.Errorf("node.IsServiceRunning('%s'): %w", serviceName, err)
 	}
 	if !running {
 		return nil
 	}
 
-	managerControl, err := tp.managerControl(&service)
-	if err != nil {
-		return err
-	}
-	defer managerControl.Close()
-
-	managerControl.Timeout(tp.timeout)
-	managerControl.Attempt(1)
-	if err := managerControl.HandlerClose(); err != nil {
-		return fmt.Errorf("managerControl.HandlerClose: %w", err)
+	if err := node.StopService(serviceName); err != nil {
+		return fmt.Errorf("node.StopService('%s'): %w", serviceName, err)
 	}
 
-	running, err = tp.IsServiceRunning(serviceName)
+	running, err = node.IsServiceRunning(serviceName)
 	if err != nil {
-		return fmt.Errorf("managerControl.HandlerClose: topology.IsServiceRunning('%s'): %w", serviceName, err)
+		return fmt.Errorf("StopService -> node.IsServiceRunning('%s'): %w", serviceName, err)
 	}
 
 	if running {
@@ -444,21 +443,21 @@ func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
-	managerControl, err := tp.managerControl(&service)
+	node, err := tp.newServiceManagerClient(&service)
 	if err != nil {
 		return false, err
 	}
-	defer managerControl.Close()
+	defer node.Close()
 
-	managerControl.Attempt(1)
-	managerControl.Timeout(tp.timeout)
+	node.Attempt(1)
+	node.Timeout(tp.timeout)
 
-	status, err := managerControl.HandlerStatus()
+	running, err := node.IsServiceRunning(serviceName)
 	if err != nil {
 		return false, nil
 	}
 
-	return status == base.SocketReady, nil
+	return running, nil
 }
 
 // OnStop returns a signal through the channel when the process spawned by the Topology stops.
@@ -476,8 +475,8 @@ func (tp *Topology) OnStop(id string) chan error {
 	return process.done
 }
 
-// GenerateId returns the next topology id for a service name.
-func (tp *Topology) GenerateId(serviceName string) (string, error) {
+// generateProcessId returns the next topology id for a service name.
+func (tp *Topology) generateProcessId(serviceName string) (string, error) {
 	if tp == nil {
 		return "", fmt.Errorf("nil topology")
 	}
@@ -513,25 +512,18 @@ func (tp *Topology) refreshServiceCount(serviceName string) {
 	tp.sameServices[serviceName] = count
 }
 
-func (tp *Topology) managerControl(service *config.Service) (*sync_replier.BaseControl, error) {
-	handler, err := service.HandlerByCategory(ManagerHandlerCategory)
+func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClient, error) {
+	handler, err := service.HandlerByCategory(ServiceManagerCategory)
 	if err != nil {
 		return nil, fmt.Errorf("no manager found in the '%s' service, please set its config", service.Name)
 	}
 
-	controlConfig := control.CreateInternalConfig(handlerConfig.New(
-		handlerConfig.HandlerType(handler.Type),
-		handler.Endpoint.Id,
-		handler.Category,
-		handler.Endpoint.Port,
-	))
-
-	managerControl, err := sync_replier.NewBaseControl(controlConfig.Id, controlConfig.Port)
+	node, err := newNodeClient(handler.Endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("sync_replier.NewBaseControl: %w", err)
+		return nil, fmt.Errorf("NewNode: %w", err)
 	}
 
-	return managerControl, nil
+	return node, nil
 }
 
 // StartService runs the service start command.
@@ -559,13 +551,30 @@ func (tp *Topology) StartService(serviceName string, optionalParent ...*ParentCl
 		return "", fmt.Errorf("nil parent")
 	}
 
+	node, err := tp.newServiceManagerClient(&serviceConfig)
+	if err != nil {
+		return "", err
+	}
+	defer node.Close()
+
+	node.Attempt(1)
+	node.Timeout(tp.timeout)
+
+	running, err := node.IsServiceRunning(serviceName)
+	if err != nil {
+		return "", fmt.Errorf("StartService -> node.IsServiceRunning('%s'): %w", serviceName, err)
+	}
+	if running {
+		return "", fmt.Errorf("service('%s') is already running", serviceName)
+	}
+
 	if len(process.config.StartCommand) == 0 {
 		return "", fmt.Errorf("no start command")
 	}
 
-	id, err := tp.GenerateId(process.config.Name)
+	id, err := tp.generateProcessId(process.config.Name)
 	if err != nil {
-		return "", fmt.Errorf("tp.GenerateId('%s'): %w", process.config.Name, err)
+		return "", fmt.Errorf("tp.generateProcessId('%s'): %w", process.config.Name, err)
 	}
 	process.id = id
 
@@ -635,4 +644,12 @@ func (tp *Topology) wait(id string) {
 		delete(tp.runningProcesses, id)
 		tp.refreshServiceCount(process.config.Name)
 	}()
+}
+
+func (process *Process) copy() *Process {
+	return &Process{
+		config: process.config,
+		id:     process.id,
+		done:   make(chan error, 1),
+	}
 }

@@ -73,7 +73,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 					Handlers: []config.Handler{
 						{
 							Type:     config.ReplierType,
-							Category: ManagerHandlerCategory,
+							Category: ServiceManagerCategory,
 							Endpoint: message.NewEndpoint("test-manager", 6000),
 						},
 					},
@@ -116,7 +116,7 @@ func (test *TestDepManagerSuite) Test_0_New() {
 func (test *TestDepManagerSuite) Test_10_GenerateId() {
 	s := test.Require
 
-	id, err := test.topology.GenerateId(test.id)
+	id, err := test.topology.generateProcessId(test.id)
 	s().NoError(err)
 	s().Equal("test-manager1", id)
 	s().Equal(1, test.topology.sameServices[test.id])
@@ -126,7 +126,7 @@ func (test *TestDepManagerSuite) Test_10_GenerateId() {
 		id:     id,
 	}
 
-	id, err = test.topology.GenerateId(test.id)
+	id, err = test.topology.generateProcessId(test.id)
 	s().NoError(err)
 	s().Equal("test-manager2", id)
 	s().Equal(2, test.topology.sameServices[test.id])
@@ -151,7 +151,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 		Handlers: []config.Handler{
 			{
 				Type:     config.ReplierType,
-				Category: ManagerHandlerCategory,
+				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("extra-service-manager", 6001),
 			},
 		},
@@ -203,7 +203,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		Handlers: []config.Handler{
 			{
 				Type:     config.ReplierType,
-				Category: ManagerHandlerCategory,
+				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("test-manager", 6000),
 			},
 		},
@@ -216,7 +216,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		Handlers: []config.Handler{
 			{
 				Type:     config.ReplierType,
-				Category: ManagerHandlerCategory,
+				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
 				CommandDeps: []config.DepService{
 					{
@@ -228,7 +228,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 								Handlers: []config.Handler{
 									{
 										Type:     config.ReplierType,
-										Category: ManagerHandlerCategory,
+										Category: ServiceManagerCategory,
 										Endpoint: message.NewEndpoint("nested-child-manager", 6101),
 									},
 								},
@@ -259,7 +259,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 						Handlers: []config.Handler{
 							{
 								Type:     config.ReplierType,
-								Category: ManagerHandlerCategory,
+								Category: ServiceManagerCategory,
 								Endpoint: message.NewEndpoint("service-level-child-manager", 6201),
 							},
 						},
@@ -270,7 +270,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		Handlers: []config.Handler{
 			{
 				Type:     config.ReplierType,
-				Category: ManagerHandlerCategory,
+				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("service-level-parent-manager", 6200),
 			},
 		},
