@@ -322,23 +322,24 @@ func (tp *Topology) SetService(service config.Service) error {
 func (tp *Topology) setIndependentService(service config.Service) error {
 	current, err := tp.config.GetByType(config.IndependentType)
 	if err != nil {
-		return fmt.Errorf("tp.config.GetByType('%s'): %w", config.IndependentType, err)
+		if err := tp.config.SetService(service); err != nil {
+			return fmt.Errorf("tp.config.SetService: %w", err)
+		}
+		return nil
 	}
 
 	topologyHandler, err := current.HandlerByCategory(TopologyHandlerCategory)
-	if err != nil {
-		return fmt.Errorf("current.HandlerByCategory('%s'): %w", TopologyHandlerCategory, err)
-	}
-
-	nextTopologyHandler, err := service.HandlerByCategory(TopologyHandlerCategory)
-	if err != nil {
-		nextTopologyHandler = config.Handler{
-			Type:     config.HandlerType(TopologySocketType),
-			Category: TopologyHandlerCategory,
+	if err == nil {
+		nextTopologyHandler, err := service.HandlerByCategory(TopologyHandlerCategory)
+		if err != nil {
+			nextTopologyHandler = config.Handler{
+				Type:     config.HandlerType(TopologySocketType),
+				Category: TopologyHandlerCategory,
+			}
 		}
+		nextTopologyHandler.Endpoint = topologyHandler.Endpoint
+		service.SetHandler(nextTopologyHandler)
 	}
-	nextTopologyHandler.Endpoint = topologyHandler.Endpoint
-	service.SetHandler(nextTopologyHandler)
 
 	if current.Name != service.Name {
 		if err := tp.config.RemoveService(current.Name); err != nil {

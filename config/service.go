@@ -145,8 +145,9 @@ func (s *Service) GetHandler(endpoint message.Endpoint) (Handler, error) {
 }
 
 // SetHandler adds a new handler.
-// If the handler with the same endpoint id exists, it will over-write that handler.
-func (s *Service) SetHandler(handler Handler) {
+// If the handler with the same endpoint is identical, it will over-write that handler.
+// Otherwise, it will add a new handler.
+func (s *Service) SetHandler(handler Handler, overwriteByCategory ...bool) {
 	if s == nil {
 		return
 	}
@@ -156,9 +157,16 @@ func (s *Service) SetHandler(handler Handler) {
 		return
 	}
 
-	i := slices.IndexFunc(s.Handlers, func(h Handler) bool {
-		return h.Endpoint.Id == handler.Endpoint.Id
-	})
+	var i int
+	if len(overwriteByCategory) > 0 && overwriteByCategory[0] {
+		i = slices.IndexFunc(s.Handlers, func(h Handler) bool {
+			return h.Category == handler.Category
+		})
+	} else {
+		i = slices.IndexFunc(s.Handlers, func(h Handler) bool {
+			return h.Endpoint == handler.Endpoint
+		})
+	}
 
 	if i == -1 {
 		s.Handlers = append(s.Handlers, handler)
