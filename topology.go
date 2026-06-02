@@ -17,19 +17,19 @@ import (
 	"github.com/noPerfection/topology/config"
 )
 
-// RuntimeInterface is implemented by the dependency runtime.
+// TopologyInterface is implemented by the dependency topology.
 //
 // It doesn't have the `Stop` command.
 // Because, stopping must be done by the remote call from other services.
-// Use it if you want to implement your own runtime.
-type RuntimeInterface interface {
-	// AddService registers a service in the runtime configuration.
+// Use it if you want to implement your own topology.
+type TopologyInterface interface {
+	// AddService registers a service in the topology configuration.
 	AddService(target config.DepTarget) error
 
-	// SetService updates an existing service in the runtime configuration.
+	// SetService updates an existing service in the topology configuration.
 	SetService(service config.Service) error
 
-	// RemoveService removes a service from the runtime configuration.
+	// RemoveService removes a service from the topology configuration.
 	RemoveService(serviceName string) error
 
 	// StartService starts the dependency service with the given parent.
@@ -43,7 +43,7 @@ type RuntimeInterface interface {
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
-// Runtime.IsServiceRunning method uses this value before considering the endpoint as not running.
+// Topology.IsServiceRunning method uses this value before considering the endpoint as not running.
 const DefaultTimeout = time.Second * 5
 
 const ManagerHandlerCategory = "manager"
@@ -55,21 +55,21 @@ type Process struct {
 	done   chan error // signalizes when the service finished
 }
 
-// Runtime runs, stops, and checks dependency services.
-type Runtime struct {
+// Topology runs, stops, and checks dependency services.
+type Topology struct {
 	config           *config.NoPerfection
 	sameServices     map[string]int
 	runningProcesses map[string]*Process
 	timeout          time.Duration
 }
 
-var _ RuntimeInterface = (*Runtime)(nil)
+var _ TopologyInterface = (*Topology)(nil)
 
-// AddService registers a service target in the runtime configuration.
+// AddService registers a service target in the topology configuration.
 // A ref target must already resolve in the configuration, while an inline
 // target and any inline dependencies are registered recursively.
-func (rt *Runtime) AddService(target config.DepTarget) error {
-	if rt == nil || rt.config == nil {
+func (tp *Topology) AddService(target config.DepTarget) error {
+	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
 	if err := config.ValidateDepTarget(target); err != nil {
@@ -77,23 +77,23 @@ func (rt *Runtime) AddService(target config.DepTarget) error {
 	}
 
 	if target.Ref != "" {
-		if err := rt.validateServiceRef(target.Ref, make(map[string]bool)); err != nil {
+		if err := tp.validateServiceRef(target.Ref, make(map[string]bool)); err != nil {
 			return err
 		}
 		return nil
 	}
 
-	if err := rt.addInlineService(target.Inline, make(map[string]bool), rt.usedEndpoints()); err != nil {
+	if err := tp.addInlineService(target.Inline, make(map[string]bool), tp.usedEndpoints()); err != nil {
 		return err
 	}
 
-	return rt.config.Save()
+	return tp.config.Save()
 }
 
-func (rt *Runtime) validateServiceRef(serviceName string, visiting map[string]bool) error {
-	service, err := rt.config.GetService(serviceName)
+func (tp *Topology) validateServiceRef(serviceName string, visiting map[string]bool) error {
+	service, err := tp.config.GetService(serviceName)
 	if err != nil {
-		return fmt.Errorf("rt.config.GetService('%s'): %w", serviceName, err)
+		return fmt.Errorf("tp.config.GetService('%s'): %w", serviceName, err)
 	}
 	if visiting[service.Name] {
 		return fmt.Errorf("cycle detected at service '%s'", service.Name)
@@ -105,14 +105,14 @@ func (rt *Runtime) validateServiceRef(serviceName string, visiting map[string]bo
 	}
 
 	for _, dep := range service.HandlerDeps {
-		if err := rt.validateDepServiceTargets(dep, visiting); err != nil {
+		if err := tp.validateDepServiceTargets(dep, visiting); err != nil {
 			return fmt.Errorf("service '%s' handler-deps category '%s': %w", service.Name, dep.Name, err)
 		}
 	}
 
 	for _, handler := range service.Handlers {
 		for _, dep := range handler.CommandDeps {
-			if err := rt.validateDepServiceTargets(dep, visiting); err != nil {
+			if err := tp.validateDepServiceTargets(dep, visiting); err != nil {
 				return fmt.Errorf("service '%s' command '%s': %w", service.Name, dep.Name, err)
 			}
 		}
@@ -121,34 +121,34 @@ func (rt *Runtime) validateServiceRef(serviceName string, visiting map[string]bo
 	return nil
 }
 
-func (rt *Runtime) validateDepServiceTargets(dep config.DepService, visiting map[string]bool) error {
+func (tp *Topology) validateDepServiceTargets(dep config.DepService, visiting map[string]bool) error {
 	for _, target := range dep.Proxies {
-		if err := rt.validateDepTargetExists(target, visiting); err != nil {
+		if err := tp.validateDepTargetExists(target, visiting); err != nil {
 			return fmt.Errorf("proxy: %w", err)
 		}
 	}
 	for _, target := range dep.Extensions {
-		if err := rt.validateDepTargetExists(target, visiting); err != nil {
+		if err := tp.validateDepTargetExists(target, visiting); err != nil {
 			return fmt.Errorf("extension: %w", err)
 		}
 	}
 	return nil
 }
 
-func (rt *Runtime) validateDepTargetExists(target config.DepTarget, visiting map[string]bool) error {
+func (tp *Topology) validateDepTargetExists(target config.DepTarget, visiting map[string]bool) error {
 	if err := config.ValidateDepTarget(target); err != nil {
 		return err
 	}
 	if target.Ref != "" {
-		return rt.validateServiceRef(target.Ref, visiting)
+		return tp.validateServiceRef(target.Ref, visiting)
 	}
-	if _, err := rt.config.GetService(target.Inline.Name); err != nil {
+	if _, err := tp.config.GetService(target.Inline.Name); err != nil {
 		return fmt.Errorf("inline service '%s' is not registered: %w", target.Inline.Name, err)
 	}
-	return rt.validateServiceRef(target.Inline.Name, visiting)
+	return tp.validateServiceRef(target.Inline.Name, visiting)
 }
 
-func (rt *Runtime) addInlineService(service *config.Service, visiting map[string]bool, reservedEndpoints map[string]string) error {
+func (tp *Topology) addInlineService(service *config.Service, visiting map[string]bool, reservedEndpoints map[string]string) error {
 	if service == nil {
 		return fmt.Errorf("service is nil")
 	}
@@ -167,61 +167,61 @@ func (rt *Runtime) addInlineService(service *config.Service, visiting map[string
 	if service.Type == config.IndependentType {
 		return fmt.Errorf("independent service can not be added")
 	}
-	if _, err := rt.config.GetService(service.Name); err == nil {
+	if _, err := tp.config.GetService(service.Name); err == nil {
 		return fmt.Errorf("service('%s') already added", service.Name)
 	}
-	if err := rt.reserveAvailableEndpoints(service, reservedEndpoints); err != nil {
+	if err := tp.reserveAvailableEndpoints(service, reservedEndpoints); err != nil {
 		return err
 	}
 
 	for _, dep := range service.HandlerDeps {
-		if err := rt.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
+		if err := tp.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
 			return fmt.Errorf("service '%s' handler-deps category '%s': %w", service.Name, dep.Name, err)
 		}
 	}
 
 	for _, handler := range service.Handlers {
 		for _, dep := range handler.CommandDeps {
-			if err := rt.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
+			if err := tp.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
 				return fmt.Errorf("service '%s' command '%s': %w", service.Name, dep.Name, err)
 			}
 		}
 	}
 
-	if err := rt.config.SetService(*service); err != nil {
-		return fmt.Errorf("rt.config.SetService: %w", err)
+	if err := tp.config.SetService(*service); err != nil {
+		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
 	return nil
 }
 
-func (rt *Runtime) addOrValidateDepServiceTargets(dep config.DepService, visiting map[string]bool, reservedEndpoints map[string]string) error {
+func (tp *Topology) addOrValidateDepServiceTargets(dep config.DepService, visiting map[string]bool, reservedEndpoints map[string]string) error {
 	for _, target := range dep.Proxies {
-		if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
+		if err := tp.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
 			return fmt.Errorf("proxy: %w", err)
 		}
 	}
 	for _, target := range dep.Extensions {
-		if err := rt.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
+		if err := tp.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
 			return fmt.Errorf("extension: %w", err)
 		}
 	}
 	return nil
 }
 
-func (rt *Runtime) addOrValidateNestedTarget(target config.DepTarget, visiting map[string]bool, reservedEndpoints map[string]string) error {
+func (tp *Topology) addOrValidateNestedTarget(target config.DepTarget, visiting map[string]bool, reservedEndpoints map[string]string) error {
 	if err := config.ValidateDepTarget(target); err != nil {
 		return err
 	}
 	if target.Ref != "" {
-		return rt.validateServiceRef(target.Ref, visiting)
+		return tp.validateServiceRef(target.Ref, visiting)
 	}
-	return rt.addInlineService(target.Inline, visiting, reservedEndpoints)
+	return tp.addInlineService(target.Inline, visiting, reservedEndpoints)
 }
 
-func (rt *Runtime) usedEndpoints() map[string]string {
+func (tp *Topology) usedEndpoints() map[string]string {
 	used := make(map[string]string)
-	for _, service := range rt.config.Services {
+	for _, service := range tp.config.Services {
 		for _, handler := range service.Handlers {
 			key, err := endpointKey(handler.Endpoint)
 			if err != nil {
@@ -233,7 +233,7 @@ func (rt *Runtime) usedEndpoints() map[string]string {
 	return used
 }
 
-func (rt *Runtime) reserveAvailableEndpoints(service *config.Service, reserved map[string]string) error {
+func (tp *Topology) reserveAvailableEndpoints(service *config.Service, reserved map[string]string) error {
 	seen := make(map[string]struct{})
 	for _, handler := range service.Handlers {
 		key, err := endpointKey(handler.Endpoint)
@@ -261,9 +261,9 @@ func endpointKey(endpoint message.Endpoint) (string, error) {
 	return fmt.Sprintf("%s:%d", endpoint.Id, endpoint.Port), nil
 }
 
-// SetService updates an existing service in the runtime configuration.
-func (rt *Runtime) SetService(service config.Service) error {
-	if rt == nil || rt.config == nil {
+// SetService updates an existing service in the topology configuration.
+func (tp *Topology) SetService(service config.Service) error {
+	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
 	if len(service.Name) == 0 {
@@ -274,72 +274,72 @@ func (rt *Runtime) SetService(service config.Service) error {
 	}
 
 	if service.Type == config.IndependentType {
-		if err := rt.setIndependentService(service); err != nil {
+		if err := tp.setIndependentService(service); err != nil {
 			return err
 		}
 
-		return rt.config.Save()
+		return tp.config.Save()
 	}
 
-	if _, err := rt.config.GetService(service.Name); err != nil {
-		return fmt.Errorf("rt.config.GetService('%s'): %w", service.Name, err)
+	if _, err := tp.config.GetService(service.Name); err != nil {
+		return fmt.Errorf("tp.config.GetService('%s'): %w", service.Name, err)
 	}
 
-	if err := rt.config.SetService(service); err != nil {
-		return fmt.Errorf("rt.config.SetService: %w", err)
+	if err := tp.config.SetService(service); err != nil {
+		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
-	return rt.config.Save()
+	return tp.config.Save()
 }
 
-func (rt *Runtime) setIndependentService(service config.Service) error {
-	current, err := rt.config.GetByType(config.IndependentType)
+func (tp *Topology) setIndependentService(service config.Service) error {
+	current, err := tp.config.GetByType(config.IndependentType)
 	if err != nil {
-		return fmt.Errorf("rt.config.GetByType('%s'): %w", config.IndependentType, err)
+		return fmt.Errorf("tp.config.GetByType('%s'): %w", config.IndependentType, err)
 	}
 
-	runtimeHandler, err := current.HandlerByCategory(RuntimeHandlerCategory)
+	topologyHandler, err := current.HandlerByCategory(TopologyHandlerCategory)
 	if err != nil {
-		return fmt.Errorf("current.HandlerByCategory('%s'): %w", RuntimeHandlerCategory, err)
+		return fmt.Errorf("current.HandlerByCategory('%s'): %w", TopologyHandlerCategory, err)
 	}
 
-	nextRuntimeHandler, err := service.HandlerByCategory(RuntimeHandlerCategory)
+	nextTopologyHandler, err := service.HandlerByCategory(TopologyHandlerCategory)
 	if err != nil {
-		nextRuntimeHandler = config.Handler{
-			Type:     config.HandlerType(RuntimeSocketType),
-			Category: RuntimeHandlerCategory,
+		nextTopologyHandler = config.Handler{
+			Type:     config.HandlerType(TopologySocketType),
+			Category: TopologyHandlerCategory,
 		}
 	}
-	nextRuntimeHandler.Endpoint = runtimeHandler.Endpoint
-	service.SetHandler(nextRuntimeHandler)
+	nextTopologyHandler.Endpoint = topologyHandler.Endpoint
+	service.SetHandler(nextTopologyHandler)
 
 	if current.Name != service.Name {
-		if err := rt.config.RemoveService(current.Name); err != nil {
-			return fmt.Errorf("rt.config.RemoveService('%s'): %w", current.Name, err)
+		if err := tp.config.RemoveService(current.Name); err != nil {
+			return fmt.Errorf("tp.config.RemoveService('%s'): %w", current.Name, err)
 		}
 	}
 
-	if err := rt.config.SetService(service); err != nil {
-		return fmt.Errorf("rt.config.SetService: %w", err)
+	if err := tp.config.SetService(service); err != nil {
+		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
 	return nil
 }
 
-// RemoveService removes a service from the runtime configuration.
-func (rt *Runtime) RemoveService(serviceName string) error {
-	if rt == nil || rt.config == nil {
+// RemoveService removes a service from the topology configuration.
+func (tp *Topology) RemoveService(serviceName string) error {
+	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
 	if len(serviceName) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
 
-	if _, err := rt.config.GetService(serviceName); err != nil {
-		return fmt.Errorf("rt.config.GetService('%s'): %w", serviceName, err)
+	if _, err := tp.config.GetService(serviceName); err != nil {
+		return fmt.Errorf("tp.config.GetService('%s'): %w", serviceName, err)
 	}
 
-	running, err := rt.IsServiceRunning(serviceName)
+	running, err := tp.IsServiceRunning(serviceName)
 	if err != nil {
 		return err
 	}
@@ -347,21 +347,21 @@ func (rt *Runtime) RemoveService(serviceName string) error {
 		return fmt.Errorf("service('%s') is running, please stop it first", serviceName)
 	}
 
-	if err := rt.config.RemoveService(serviceName); err != nil {
+	if err := tp.config.RemoveService(serviceName); err != nil {
 		return err
 	}
 
-	if err := rt.config.Save(); err != nil {
-		return fmt.Errorf("rt.config.Save: %w", err)
+	if err := tp.config.Save(); err != nil {
+		return fmt.Errorf("tp.config.Save: %w", err)
 	}
 
-	delete(rt.sameServices, serviceName)
+	delete(tp.sameServices, serviceName)
 	return nil
 }
 
-// New creates a dependency runtime in the Dev context.
-func New(cfg *config.NoPerfection) *Runtime {
-	return &Runtime{
+// New creates a dependency topology in the Dev context.
+func New(cfg *config.NoPerfection) *Topology {
+	return &Topology{
 		config:           cfg,
 		sameServices:     make(map[string]int),
 		runningProcesses: make(map[string]*Process, 0),
@@ -378,16 +378,16 @@ func (process *Process) copy() *Process {
 }
 
 // StopService stops the dependency service.
-func (rt *Runtime) StopService(serviceName string) error {
+func (tp *Topology) StopService(serviceName string) error {
 	// Make sure it's running
-	if rt == nil || rt.config == nil {
+	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
 	if len(serviceName) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
 
-	service, err := rt.config.GetService(serviceName)
+	service, err := tp.config.GetService(serviceName)
 	if err != nil {
 		return err
 	}
@@ -395,48 +395,48 @@ func (rt *Runtime) StopService(serviceName string) error {
 		return fmt.Errorf("service('%s') is independent service, impossible to stop since you are now using it", serviceName)
 	}
 
-	running, err := rt.IsServiceRunning(serviceName)
+	running, err := tp.IsServiceRunning(serviceName)
 	if err != nil {
-		return fmt.Errorf("runtime.IsServiceRunning('%s'): %w", serviceName, err)
+		return fmt.Errorf("topology.IsServiceRunning('%s'): %w", serviceName, err)
 	}
 	if !running {
 		return nil
 	}
 
-	managerControl, err := rt.managerControl(&service)
+	managerControl, err := tp.managerControl(&service)
 	if err != nil {
 		return err
 	}
 	defer managerControl.Close()
 
-	managerControl.Timeout(rt.timeout)
+	managerControl.Timeout(tp.timeout)
 	managerControl.Attempt(1)
 	if err := managerControl.HandlerClose(); err != nil {
 		return fmt.Errorf("managerControl.HandlerClose: %w", err)
 	}
 
-	running, err = rt.IsServiceRunning(serviceName)
+	running, err = tp.IsServiceRunning(serviceName)
 	if err != nil {
-		return fmt.Errorf("managerControl.HandlerClose: runtime.IsServiceRunning('%s'): %w", serviceName, err)
+		return fmt.Errorf("managerControl.HandlerClose: topology.IsServiceRunning('%s'): %w", serviceName, err)
 	}
 
 	if running {
-		return fmt.Errorf("runtime is running even after closing")
+		return fmt.Errorf("topology is running even after closing")
 	}
 
 	return nil
 }
 
 // IsServiceRunning checks whether the given service is running or not.
-func (rt *Runtime) IsServiceRunning(serviceName string) (bool, error) {
-	if rt == nil || rt.config == nil {
+func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
+	if tp == nil || tp.config == nil {
 		return false, fmt.Errorf("nil config")
 	}
 	if len(serviceName) == 0 {
 		return false, fmt.Errorf("service name is empty")
 	}
 
-	service, err := rt.config.GetService(serviceName)
+	service, err := tp.config.GetService(serviceName)
 	if err != nil {
 		return false, err
 	}
@@ -444,14 +444,14 @@ func (rt *Runtime) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
-	managerControl, err := rt.managerControl(&service)
+	managerControl, err := tp.managerControl(&service)
 	if err != nil {
 		return false, err
 	}
 	defer managerControl.Close()
 
 	managerControl.Attempt(1)
-	managerControl.Timeout(rt.timeout)
+	managerControl.Timeout(tp.timeout)
 
 	status, err := managerControl.HandlerStatus()
 	if err != nil {
@@ -461,10 +461,10 @@ func (rt *Runtime) IsServiceRunning(serviceName string) (bool, error) {
 	return status == base.SocketReady, nil
 }
 
-// OnStop returns a signal through the channel when the process spawned by the Runtime stops.
+// OnStop returns a signal through the channel when the process spawned by the Topology stops.
 // If the process is not existing, then it will simply return error.
-func (rt *Runtime) OnStop(id string) chan error {
-	process, ok := rt.runningProcesses[id]
+func (tp *Topology) OnStop(id string) chan error {
+	process, ok := tp.runningProcesses[id]
 	if !ok {
 		return nil
 	}
@@ -476,44 +476,44 @@ func (rt *Runtime) OnStop(id string) chan error {
 	return process.done
 }
 
-// GenerateId returns the next runtime id for a service name.
-func (rt *Runtime) GenerateId(serviceName string) (string, error) {
-	if rt == nil {
-		return "", fmt.Errorf("nil runtime")
+// GenerateId returns the next topology id for a service name.
+func (tp *Topology) GenerateId(serviceName string) (string, error) {
+	if tp == nil {
+		return "", fmt.Errorf("nil topology")
 	}
 	if len(serviceName) == 0 {
 		return "", fmt.Errorf("service name is empty")
 	}
-	if rt.sameServices == nil {
-		rt.sameServices = make(map[string]int)
+	if tp.sameServices == nil {
+		tp.sameServices = make(map[string]int)
 	}
 
-	count := rt.sameServices[serviceName]
+	count := tp.sameServices[serviceName]
 	for {
 		count++
 		id := fmt.Sprintf("%s%d", serviceName, count)
-		if _, exists := rt.runningProcesses[id]; !exists {
-			rt.sameServices[serviceName]++
+		if _, exists := tp.runningProcesses[id]; !exists {
+			tp.sameServices[serviceName]++
 			return id, nil
 		}
 	}
 }
 
-func (rt *Runtime) refreshServiceCount(serviceName string) {
+func (tp *Topology) refreshServiceCount(serviceName string) {
 	count := 0
-	for _, process := range rt.runningProcesses {
+	for _, process := range tp.runningProcesses {
 		if process != nil && process.config != nil && process.config.Name == serviceName {
 			count++
 		}
 	}
 	if count == 0 {
-		delete(rt.sameServices, serviceName)
+		delete(tp.sameServices, serviceName)
 		return
 	}
-	rt.sameServices[serviceName] = count
+	tp.sameServices[serviceName] = count
 }
 
-func (rt *Runtime) managerControl(service *config.Service) (*sync_replier.BaseControl, error) {
+func (tp *Topology) managerControl(service *config.Service) (*sync_replier.BaseControl, error) {
 	handler, err := service.HandlerByCategory(ManagerHandlerCategory)
 	if err != nil {
 		return nil, fmt.Errorf("no manager found in the '%s' service, please set its config", service.Name)
@@ -538,15 +538,15 @@ func (rt *Runtime) managerControl(service *config.Service) (*sync_replier.BaseCo
 // If it fails to run, then it will return an error.
 //
 // Note that, services can crash during the initialization.
-// In that case, you should use Runtime.OnStop method.
-func (rt *Runtime) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
-	if rt == nil || rt.config == nil {
+// In that case, you should use Topology.OnStop method.
+func (tp *Topology) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
+	if tp == nil || tp.config == nil {
 		return "", fmt.Errorf("nil config")
 	}
 	if len(serviceName) == 0 {
 		return "", fmt.Errorf("service name is empty")
 	}
-	serviceConfig, err := rt.config.GetService(serviceName)
+	serviceConfig, err := tp.config.GetService(serviceName)
 	if err != nil {
 		return "", err
 	}
@@ -563,9 +563,9 @@ func (rt *Runtime) StartService(serviceName string, optionalParent ...*ParentCli
 		return "", fmt.Errorf("no start command")
 	}
 
-	id, err := rt.GenerateId(process.config.Name)
+	id, err := tp.GenerateId(process.config.Name)
 	if err != nil {
-		return "", fmt.Errorf("rt.GenerateId('%s'): %w", process.config.Name, err)
+		return "", fmt.Errorf("tp.GenerateId('%s'): %w", process.config.Name, err)
 	}
 	process.id = id
 
@@ -576,7 +576,7 @@ func (rt *Runtime) StartService(serviceName string, optionalParent ...*ParentCli
 	if len(optionalParent) == 1 {
 		parentKv, err := datatype.NewFromInterface(optionalParent[0])
 		if err != nil {
-			rt.refreshServiceCount(process.config.Name)
+			tp.refreshServiceCount(process.config.Name)
 			return "", fmt.Errorf("optionalParent: datatype.NewFromInterface(parent='%v'): %w", optionalParent[0], err)
 		}
 		parentFlag := fmt.Sprintf("--parent=%s", parentKv.String())
@@ -585,24 +585,24 @@ func (rt *Runtime) StartService(serviceName string, optionalParent ...*ParentCli
 
 	commandArgs := strings.Fields(process.config.StartCommand)
 	if len(commandArgs) == 0 {
-		rt.refreshServiceCount(process.config.Name)
+		tp.refreshServiceCount(process.config.Name)
 		return "", fmt.Errorf("no start command")
 	}
 
 	instance := process.copy()
 
-	rt.runningProcesses[id] = instance
+	tp.runningProcesses[id] = instance
 
 	logger, err := log.New(id, false)
 	if err != nil {
-		delete(rt.runningProcesses, id)
-		rt.refreshServiceCount(process.config.Name)
+		delete(tp.runningProcesses, id)
+		tp.refreshServiceCount(process.config.Name)
 		return "", fmt.Errorf("log.New('%s'): %w", id, err)
 	}
 	errLogger, err := log.New(id+"Err", false)
 	if err != nil {
-		delete(rt.runningProcesses, id)
-		rt.refreshServiceCount(process.config.Name)
+		delete(tp.runningProcesses, id)
+		tp.refreshServiceCount(process.config.Name)
 		return "", fmt.Errorf("log.New('%sErr'): %w", id, err)
 	}
 
@@ -611,28 +611,28 @@ func (rt *Runtime) StartService(serviceName string, optionalParent ...*ParentCli
 	cmd.Stderr = errLogger
 	err = cmd.Start()
 	if err != nil {
-		delete(rt.runningProcesses, id)
-		rt.refreshServiceCount(process.config.Name)
+		delete(tp.runningProcesses, id)
+		tp.refreshServiceCount(process.config.Name)
 		return "", fmt.Errorf("cmd.Start: %w", err)
 	}
 
 	instance.cmd = cmd
-	rt.wait(id)
+	tp.wait(id)
 
 	return id, nil
 }
 
 // The wait is invoked if the spawned dependency stops.
 // The dependencies are running asynchronously.
-// In order to call this function, you must use the Runtime.StopService() method.
+// In order to call this function, you must use the Topology.StopService() method.
 // If the Close signal was sent to the spawned child, then
 // this method will be called automatically by the operating system.
-func (rt *Runtime) wait(id string) {
+func (tp *Topology) wait(id string) {
 	go func() {
-		process := rt.runningProcesses[id]
+		process := tp.runningProcesses[id]
 		err := process.cmd.Wait() // it can return an error
 		process.done <- err
-		delete(rt.runningProcesses, id)
-		rt.refreshServiceCount(process.config.Name)
+		delete(tp.runningProcesses, id)
+		tp.refreshServiceCount(process.config.Name)
 	}()
 }

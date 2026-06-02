@@ -27,8 +27,8 @@ type ClientInterface interface {
 	IsServiceRunning(serviceName string) (bool, error)
 }
 
-func NewClient(runtimeEndpoint message.Endpoint) (*Client, error) {
-	socket, err := client.New(runtimeEndpoint.Id, runtimeEndpoint.Port, client.HandlerType(RuntimeSocketType))
+func NewClient(topologyEndpoint message.Endpoint) (*Client, error) {
+	socket, err := client.New(topologyEndpoint.Id, topologyEndpoint.Port, client.HandlerType(TopologySocketType))
 	if err != nil {
 		return nil, fmt.Errorf("client.New: %w", err)
 	}
@@ -78,7 +78,7 @@ func (c *Client) StopService(serviceName string) error {
 	return nil
 }
 
-// AddService registers a service target in the runtime configuration.
+// AddService registers a service target in the topology configuration.
 func (c *Client) AddService(target config.DepTarget) error {
 	req := message.Request{
 		Command: AddService,
@@ -98,7 +98,7 @@ func (c *Client) AddService(target config.DepTarget) error {
 	return nil
 }
 
-// SetService updates an existing service in the runtime configuration.
+// SetService updates an existing service in the topology configuration.
 func (c *Client) SetService(service config.Service) error {
 	req := message.Request{
 		Command: SetService,
@@ -118,7 +118,7 @@ func (c *Client) SetService(service config.Service) error {
 	return nil
 }
 
-// RemoveService removes a service from the runtime configuration.
+// RemoveService removes a service from the topology configuration.
 func (c *Client) RemoveService(serviceName string) error {
 	req := message.Request{
 		Command: RemoveService,
@@ -138,7 +138,7 @@ func (c *Client) RemoveService(serviceName string) error {
 	return nil
 }
 
-// StartService starts the dependency service and returns the generated runtime id.
+// StartService starts the dependency service and returns the generated topology id.
 func (c *Client) StartService(serviceName string, parent *ParentClient) (string, error) {
 	req := message.Request{
 		Command: StartService,

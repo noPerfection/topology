@@ -38,16 +38,16 @@ func (test *TestClientSuite) SetupTest() {
 	logger, _ := log.New("test", false)
 	test.logger = logger
 
-	runtimeEndpoint := message.NewEndpoint(RuntimeHandlerCategory, 0)
+	topologyEndpoint := message.NewEndpoint(TopologyHandlerCategory, 0)
 
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{}, runtimeEndpoint)
+	test.depHandler, err = newHandler(&config.NoPerfection{}, topologyEndpoint)
 	s().NoError(err)
 
 	// Start the handler
 	s().NoError(test.depHandler.Start())
 
-	controlConfig := control.CreateInternalConfig(HandlerConfig(runtimeEndpoint))
+	controlConfig := control.CreateInternalConfig(HandlerConfig(topologyEndpoint))
 	test.depHandlerManager, err = sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
 	s().NoError(err)
 
@@ -59,12 +59,12 @@ func (test *TestClientSuite) SetupTest() {
 
 	test.id = "test-manager"
 	test.parent = &ParentClient{
-		ServiceUrl: "runtime",
+		ServiceUrl: "topology",
 		Id:         "parent",
 		Port:       120,
 	}
 
-	socket, err := NewClient(runtimeEndpoint)
+	socket, err := NewClient(topologyEndpoint)
 	s().NoError(err)
 
 	test.client = socket

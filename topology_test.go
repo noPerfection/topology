@@ -21,7 +21,7 @@ type TestDepManagerSuite struct {
 	suite.Suite
 
 	logger       *log.Logger
-	runtime      *Runtime      // the runtime to test
+	topology     *Topology     // the topology to test
 	currentDir   string        // executable to store the binaries and source codes
 	url          string        // dependency source code
 	id           string        // the id of the dependency
@@ -30,14 +30,14 @@ type TestDepManagerSuite struct {
 }
 
 func (test *TestDepManagerSuite) setServiceStartCommand(name string, startCommand string) {
-	for i := range test.runtime.config.Services {
-		if test.runtime.config.Services[i].Name == name {
-			test.runtime.config.Services[i].StartCommand = startCommand
+	for i := range test.topology.config.Services {
+		if test.topology.config.Services[i].Name == name {
+			test.topology.config.Services[i].StartCommand = startCommand
 			return
 		}
 	}
 
-	test.runtime.config.Services = append(test.runtime.config.Services, config.Service{
+	test.topology.config.Services = append(test.topology.config.Services, config.Service{
 		Name:         name,
 		StartCommand: startCommand,
 	})
@@ -63,7 +63,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 	s().NoError(err)
 	test.currentDir = currentDir
 
-	test.runtime = &Runtime{
+	test.topology = &Topology{
 		config: &config.NoPerfection{
 			Services: []config.Service{
 				{
@@ -90,7 +90,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 
 	test.id = "test-manager"
 	test.parent = &ParentClient{
-		ServiceUrl: "runtime",
+		ServiceUrl: "topology",
 		Id:         "parent",
 		Port:       120,
 	}
@@ -98,42 +98,42 @@ func (test *TestDepManagerSuite) SetupTest() {
 	test.localTestDir = filepath.Join("_test_services")
 }
 
-// Test_0_New tests the creation of the Runtime.
+// Test_0_New tests the creation of the Topology.
 func (test *TestDepManagerSuite) Test_0_New() {
 	s := test.Require
 
 	cfg := &config.NoPerfection{}
-	depRuntime := New(cfg)
-	s().NotNil(depRuntime)
-	s().Same(cfg, depRuntime.config)
-	s().NotNil(depRuntime.sameServices)
-	s().NotNil(depRuntime.runningProcesses)
-	s().Equal(DefaultTimeout, depRuntime.timeout)
+	depTopology := New(cfg)
+	s().NotNil(depTopology)
+	s().Same(cfg, depTopology.config)
+	s().NotNil(depTopology.sameServices)
+	s().NotNil(depTopology.runningProcesses)
+	s().Equal(DefaultTimeout, depTopology.timeout)
 
-	test.runtime = depRuntime
+	test.topology = depTopology
 }
 
 func (test *TestDepManagerSuite) Test_10_GenerateId() {
 	s := test.Require
 
-	id, err := test.runtime.GenerateId(test.id)
+	id, err := test.topology.GenerateId(test.id)
 	s().NoError(err)
 	s().Equal("test-manager1", id)
-	s().Equal(1, test.runtime.sameServices[test.id])
+	s().Equal(1, test.topology.sameServices[test.id])
 
-	test.runtime.runningProcesses[id] = &Process{
-		config: &test.runtime.config.Services[0],
+	test.topology.runningProcesses[id] = &Process{
+		config: &test.topology.config.Services[0],
 		id:     id,
 	}
 
-	id, err = test.runtime.GenerateId(test.id)
+	id, err = test.topology.GenerateId(test.id)
 	s().NoError(err)
 	s().Equal("test-manager2", id)
-	s().Equal(2, test.runtime.sameServices[test.id])
+	s().Equal(2, test.topology.sameServices[test.id])
 
-	delete(test.runtime.runningProcesses, "test-manager1")
-	test.runtime.refreshServiceCount(test.id)
-	s().Equal(0, test.runtime.sameServices[test.id])
+	delete(test.topology.runningProcesses, "test-manager1")
+	test.topology.refreshServiceCount(test.id)
+	s().Equal(0, test.topology.sameServices[test.id])
 }
 
 func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
@@ -142,7 +142,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
 	cfg, err := config.Load(cfgPath)
 	s().NoError(err)
-	test.runtime = New(&cfg)
+	test.topology = New(&cfg)
 
 	service := config.Service{
 		Type:         config.ProxyType,
@@ -156,29 +156,29 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 			},
 		},
 	}
-	err = test.runtime.AddService(config.InlineTarget(service))
+	err = test.topology.AddService(config.InlineTarget(service))
 	s().NoError(err)
 
-	got, err := test.runtime.config.GetService("extra-service")
+	got, err := test.topology.config.GetService("extra-service")
 	s().NoError(err)
 	s().Equal("echo extra", got.StartCommand)
 
-	err = test.runtime.RemoveService("extra-service")
+	err = test.topology.RemoveService("extra-service")
 	s().NoError(err)
 
-	_, err = test.runtime.config.GetService("extra-service")
+	_, err = test.topology.config.GetService("extra-service")
 	s().Error(err)
 
-	err = test.runtime.RemoveService("missing")
+	err = test.topology.RemoveService("missing")
 	s().Error(err)
 
-	err = test.runtime.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.InlineTarget(config.Service{
 		Type:         config.ProxyType,
 		Name:         "plain-service",
 		StartCommand: "echo plain",
 	}))
 	s().NoError(err)
-	err = test.runtime.RemoveService("plain-service")
+	err = test.topology.RemoveService("plain-service")
 	s().Error(err)
 }
 
@@ -188,16 +188,16 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
 	cfg, err := config.Load(cfgPath)
 	s().NoError(err)
-	s().NoError(cfg.SetService(test.runtime.config.Services[0]))
-	test.runtime = New(&cfg)
+	s().NoError(cfg.SetService(test.topology.config.Services[0]))
+	test.topology = New(&cfg)
 
-	err = test.runtime.AddService(config.RefTarget("test-manager"))
+	err = test.topology.AddService(config.RefTarget("test-manager"))
 	s().NoError(err)
 
-	err = test.runtime.AddService(config.RefTarget("missing-service"))
+	err = test.topology.AddService(config.RefTarget("missing-service"))
 	s().Error(err)
 
-	err = test.runtime.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.InlineTarget(config.Service{
 		Type: config.ProxyType,
 		Name: "duplicate-socket",
 		Handlers: []config.Handler{
@@ -210,7 +210,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	}))
 	s().Error(err)
 
-	err = test.runtime.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.InlineTarget(config.Service{
 		Type: config.ProxyType,
 		Name: "nested-parent",
 		Handlers: []config.Handler{
@@ -241,12 +241,12 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	}))
 	s().NoError(err)
 
-	_, err = test.runtime.config.GetService("nested-parent")
+	_, err = test.topology.config.GetService("nested-parent")
 	s().NoError(err)
-	_, err = test.runtime.config.GetService("nested-child")
+	_, err = test.topology.config.GetService("nested-child")
 	s().NoError(err)
 
-	err = test.runtime.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.InlineTarget(config.Service{
 		Type: config.ProxyType,
 		Name: "service-level-parent",
 		HandlerDeps: []config.DepService{
@@ -277,9 +277,9 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	}))
 	s().NoError(err)
 
-	_, err = test.runtime.config.GetService("service-level-parent")
+	_, err = test.topology.config.GetService("service-level-parent")
 	s().NoError(err)
-	_, err = test.runtime.config.GetService("service-level-child")
+	_, err = test.topology.config.GetService("service-level-child")
 	s().NoError(err)
 }
 
@@ -292,44 +292,44 @@ func (test *TestDepManagerSuite) Test_20_Run() {
 	test.requireTestBinary(localBin)
 	test.setServiceStartCommand(test.id, localBin)
 
-	_, ok := test.runtime.runningProcesses[test.id+"1"]
+	_, ok := test.topology.runningProcesses[test.id+"1"]
 	s().False(ok)
 
 	// running nil values must exist
-	var depRuntime *Runtime
-	_, err := depRuntime.StartService(test.id, test.parent)
+	var depTopology *Topology
+	_, err := depTopology.StartService(test.id, test.parent)
 	s().Error(err)
 
-	_, err = test.runtime.StartService("", test.parent)
+	_, err = test.topology.StartService("", test.parent)
 	s().Error(err) // missing service name
-	_, err = test.runtime.StartService(test.id, nil)
+	_, err = test.topology.StartService(test.id, nil)
 	s().Error(err) // missing parent
 
 	test.setServiceStartCommand("no-command", "")
-	_, err = test.runtime.StartService("no-command", test.parent)
+	_, err = test.topology.StartService("no-command", test.parent)
 	s().Error(err) // no start command
 
 	// the binary doesn't exist
 	test.setServiceStartCommand(test.id, invalidBin)
-	_, err = test.runtime.StartService(test.id, test.parent)
+	_, err = test.topology.StartService(test.id, test.parent)
 	s().Error(err) // no binary
 
 	// Let's run it, it should exit immediately
 	test.setServiceStartCommand(test.id, localBin)
-	id, err := test.runtime.StartService(test.id, test.parent)
+	id, err := test.topology.StartService(test.id, test.parent)
 	s().NoError(err)
 
-	_, ok = test.runtime.runningProcesses[id]
+	_, ok = test.topology.runningProcesses[id]
 	s().True(ok)
 
 	// clean out
-	_, ok = test.runtime.runningProcesses[id]
+	_, ok = test.topology.runningProcesses[id]
 	if ok {
-		onStop := test.runtime.OnStop(id)
+		onStop := test.topology.OnStop(id)
 		err = <-onStop
 		s().NoError(err)
 
-		_, running := test.runtime.runningProcesses[id]
+		_, running := test.topology.runningProcesses[id]
 		s().False(running)
 	}
 }
@@ -344,21 +344,21 @@ func (test *TestDepManagerSuite) Test_21_RunError() {
 	test.setServiceStartCommand(test.id, localBin)
 
 	// Let's run it
-	id, err := test.runtime.StartService(test.id, test.parent)
+	id, err := test.topology.StartService(test.id, test.parent)
 	s().NoError(err)
 
 	// make sure that it exists
-	_, ok := test.runtime.runningProcesses[id]
+	_, ok := test.topology.runningProcesses[id]
 	s().True(ok)
 
-	stopChan := test.runtime.OnStop(id)
+	stopChan := test.topology.OnStop(id)
 	s().NotNil(stopChan)
 
 	err = <-stopChan
 	s().Error(err)
 
-	// the closed service is removed from Runtime
-	_, ok = test.runtime.runningProcesses[id]
+	// the closed service is removed from Topology
+	_, ok = test.topology.runningProcesses[id]
 	s().False(ok)
 
 }
@@ -373,23 +373,23 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 
 	// First, install the manager
 	// Let's run it
-	id, err := test.runtime.StartService(test.id, test.parent)
+	id, err := test.topology.StartService(test.id, test.parent)
 	s().NoError(err)
-	s().NotNil(test.runtime.runningProcesses[id]) // cmd == nil indicates that the program was closed
+	s().NotNil(test.topology.runningProcesses[id]) // cmd == nil indicates that the program was closed
 
 	// Check is the service running
-	running, err := test.runtime.IsServiceRunning(test.id)
+	running, err := test.topology.IsServiceRunning(test.id)
 	s().NoError(err)
 	s().True(running)
 
 	// service is running two seconds. after that running should return false
-	onStop := test.runtime.OnStop(id)
+	onStop := test.topology.OnStop(id)
 	s().NotNil(onStop)
 	err = <-onStop
 	s().NoError(err)
 
-	s().Nil(test.runtime.runningProcesses[id]) // cmd == nil indicates that the program was closed
-	running, err = test.runtime.IsServiceRunning(test.id)
+	s().Nil(test.topology.runningProcesses[id]) // cmd == nil indicates that the program was closed
+	running, err = test.topology.IsServiceRunning(test.id)
 	s().NoError(err)
 	s().False(running)
 }

@@ -14,47 +14,47 @@ import (
 )
 
 const (
-	RuntimeHandlerCategory = "service_runtime" // handler category
-	RuntimeSocketType      = handlerConfig.ReplierType
-	IsServiceRunning       = "is-service-running"
-	StartService           = "start-service"
-	StopService            = "stop-service"
-	AddService             = "add-service"
-	SetService             = "set-service"
-	RemoveService          = "remove-service"
+	TopologyHandlerCategory = "service_topology" // handler category
+	TopologySocketType      = handlerConfig.ReplierType
+	IsServiceRunning        = "is-service-running"
+	StartService            = "start-service"
+	StopService             = "stop-service"
+	AddService              = "add-service"
+	SetService              = "set-service"
+	RemoveService           = "remove-service"
 )
 
-// Handler acts as the router from other app processes to the runtime.
+// Handler acts as the router from other app processes to the topology.
 type Handler struct {
-	handler base.Interface   // Receive commands
-	runtime RuntimeInterface // Route to the functions from runtime
-	started bool
+	handler  base.Interface    // Receive commands
+	topology TopologyInterface // Route to the functions from topology
+	started  bool
 }
 
-var _ RuntimeInterface = (*Handler)(nil)
+var _ TopologyInterface = (*Handler)(nil)
 
-// HandlerConfig returns the handler configuration for the runtime endpoint.
+// HandlerConfig returns the handler configuration for the topology endpoint.
 // Then use it as the handler's config with the SetConfig method.
-func HandlerConfig(runtimeEndpoint message.Endpoint) *handlerConfig.Handler {
+func HandlerConfig(topologyEndpoint message.Endpoint) *handlerConfig.Handler {
 	return handlerConfig.New(
-		RuntimeSocketType,
-		runtimeEndpoint.Id,
-		RuntimeHandlerCategory,
-		runtimeEndpoint.Port,
+		TopologySocketType,
+		topologyEndpoint.Id,
+		TopologyHandlerCategory,
+		topologyEndpoint.Port,
 	)
 }
 
-// NewHandler loads app config, ensures the independent runtime service entry exists,
-// persists config when it changed, and returns a dependency runtime handler.
-func NewHandler(configPath string, runtimeEndpoint message.Endpoint) (*Handler, error) {
+// NewHandler loads app config, ensures the independent topology service entry exists,
+// persists config when it changed, and returns a dependency topology handler.
+func NewHandler(configPath string, topologyEndpoint message.Endpoint) (*Handler, error) {
 	appConfig, err := config.Load(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
 	}
 
-	// appConfigChanged, err := ensureIndependentRuntimeService(&appConfig, runtimeEndpoint)
+	// appConfigChanged, err := ensureIndependentTopologyService(&appConfig, topologyEndpoint)
 	// if err != nil {
-	// 	return nil, fmt.Errorf("ensureIndependentRuntimeService: %w", err)
+	// 	return nil, fmt.Errorf("ensureIndependentTopologyService: %w", err)
 	// }
 	// if appConfigChanged {
 	// 	if err := appConfig.Save(); err != nil {
@@ -64,20 +64,20 @@ func NewHandler(configPath string, runtimeEndpoint message.Endpoint) (*Handler, 
 
 	handler := replier.New()
 
-	logger, err := log.New(RuntimeHandlerCategory, true)
+	logger, err := log.New(TopologyHandlerCategory, true)
 	if err != nil {
-		return nil, fmt.Errorf("log.New('%s'): %w", RuntimeHandlerCategory, err)
+		return nil, fmt.Errorf("log.New('%s'): %w", TopologyHandlerCategory, err)
 	}
 
-	handler.SetConfig(HandlerConfig(runtimeEndpoint))
+	handler.SetConfig(HandlerConfig(topologyEndpoint))
 	err = handler.SetLogger(logger)
 	if err != nil {
 		return nil, fmt.Errorf("handler.SetLogger: %w", err)
 	}
 
 	return &Handler{
-		runtime: New(&appConfig),
-		handler: handler,
+		topology: New(&appConfig),
+		handler:  handler,
 	}, nil
 }
 
@@ -86,84 +86,84 @@ func (h *Handler) requireNotStarted() error {
 		return fmt.Errorf("handler is nil")
 	}
 	if h.started {
-		return fmt.Errorf("runtime handler already started, use runtime client")
+		return fmt.Errorf("topology handler already started, use topology client")
 	}
-	if h.runtime == nil {
-		return fmt.Errorf("runtime is nil")
+	if h.topology == nil {
+		return fmt.Errorf("topology is nil")
 	}
 	return nil
 }
 
-// AddService registers a service in the runtime configuration before the
-// runtime handler is started.
+// AddService registers a service in the topology configuration before the
+// topology handler is started.
 func (h *Handler) AddService(target config.DepTarget) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	return h.runtime.AddService(target)
+	return h.topology.AddService(target)
 }
 
-// SetService updates a service in the runtime configuration before the runtime
+// SetService updates a service in the topology configuration before the topology
 // handler is started.
 func (h *Handler) SetService(service config.Service) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	return h.runtime.SetService(service)
+	return h.topology.SetService(service)
 }
 
-// RemoveService removes a service from the runtime configuration before the
-// runtime handler is started.
+// RemoveService removes a service from the topology configuration before the
+// topology handler is started.
 func (h *Handler) RemoveService(serviceName string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	return h.runtime.RemoveService(serviceName)
+	return h.topology.RemoveService(serviceName)
 }
 
-// StartService starts a dependency service before the runtime handler is
+// StartService starts a dependency service before the topology handler is
 // started.
 func (h *Handler) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
-	return h.runtime.StartService(serviceName, optionalParent...)
+	return h.topology.StartService(serviceName, optionalParent...)
 }
 
-// IsServiceRunning checks a dependency service before the runtime handler is
+// IsServiceRunning checks a dependency service before the topology handler is
 // started.
 func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return false, err
 	}
-	return h.runtime.IsServiceRunning(serviceName)
+	return h.topology.IsServiceRunning(serviceName)
 }
 
-// StopService stops a dependency service before the runtime handler is started.
+// StopService stops a dependency service before the topology handler is started.
 func (h *Handler) StopService(serviceName string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	return h.runtime.StopService(serviceName)
+	return h.topology.StopService(serviceName)
 }
 
-// func ensureIndependentRuntimeService(appConfig *config.NoPerfection, runtimeEndpoint message.Endpoint) (bool, error) {
+// func ensureIndependentTopologyService(appConfig *config.NoPerfection, topologyEndpoint message.Endpoint) (bool, error) {
 // 	independentCount := appConfig.CountByType(config.IndependentType)
 // 	if independentCount > 1 {
 // 		return false, fmt.Errorf("only one independent service can be configured")
 // 	}
 
-// 	runtimeHandler := config.Handler{
-// 		Type:     config.HandlerType(RuntimeSocketType),
-// 		Category: RuntimeHandlerCategory,
-// 		Endpoint: runtimeEndpoint,
+// 	topologyHandler := config.Handler{
+// 		Type:     config.HandlerType(TopologySocketType),
+// 		Category: TopologyHandlerCategory,
+// 		Endpoint: topologyEndpoint,
 // 	}
 
 // 	if independentCount == 0 {
 // 		err := appConfig.SetService(config.Service{
 // 			Type:     config.IndependentType,
-// 			Name:     RuntimeHandlerCategory,
-// 			Handlers: []config.Handler{runtimeHandler},
+// 			Name:     TopologyHandlerCategory,
+// 			Handlers: []config.Handler{topologyHandler},
 // 		})
 // 		if err != nil {
 // 			return false, fmt.Errorf("appConfig.SetService: %w", err)
@@ -177,18 +177,18 @@ func (h *Handler) StopService(serviceName string) error {
 // 		return false, fmt.Errorf("appConfig.GetByType('%s'): %w", config.IndependentType, err)
 // 	}
 
-// 	handler, err := independentService.HandlerByCategory(RuntimeHandlerCategory)
+// 	handler, err := independentService.HandlerByCategory(TopologyHandlerCategory)
 // 	if err == nil {
-// 		if handler.Endpoint.Id == runtimeEndpoint.Id && handler.Endpoint.Port == runtimeEndpoint.Port {
+// 		if handler.Endpoint.Id == topologyEndpoint.Id && handler.Endpoint.Port == topologyEndpoint.Port {
 // 			return false, nil
 // 		}
 
-// 		handler.Endpoint = runtimeEndpoint
+// 		handler.Endpoint = topologyEndpoint
 // 		independentService.SetHandler(handler)
 // 		return true, nil
 // 	}
 
-// 	independentService.Handlers = append(independentService.Handlers, runtimeHandler)
+// 	independentService.Handlers = append(independentService.Handlers, topologyHandler)
 // 	return true, nil
 // }
 
@@ -200,9 +200,9 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	running, err := h.runtime.IsServiceRunning(serviceName)
+	running, err := h.topology.IsServiceRunning(serviceName)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.IsServiceRunning: %v", err))
+		return req.Fail(fmt.Sprintf("h.topology.IsServiceRunning: %v", err))
 	}
 
 	params := datatype.New().Set("running", running)
@@ -236,15 +236,15 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 		}
 	}
 
-	id, err := h.runtime.StartService(serviceName, &parent)
+	id, err := h.topology.StartService(serviceName, &parent)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.StartService(service: '%s'): %v", serviceName, err))
+		return req.Fail(fmt.Sprintf("h.topology.StartService(service: '%s'): %v", serviceName, err))
 	}
 
 	return req.Ok(datatype.New().Set("id", id))
 }
 
-// onAddService registers a service target in the runtime configuration.
+// onAddService registers a service target in the topology configuration.
 // Requires 'service' as either a service name or inline config.Service object.
 func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
@@ -258,15 +258,15 @@ func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterf
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
 
-	err = h.runtime.AddService(target)
+	err = h.topology.AddService(target)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.AddService('%s'): %v", target.Name(), err))
+		return req.Fail(fmt.Sprintf("h.topology.AddService('%s'): %v", target.Name(), err))
 	}
 
 	return req.Ok(datatype.New())
 }
 
-// onSetService updates a service in the runtime configuration.
+// onSetService updates a service in the topology configuration.
 // Requires 'service' of the config.Service type.
 func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
@@ -280,15 +280,15 @@ func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterf
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
 
-	err = h.runtime.SetService(service)
+	err = h.topology.SetService(service)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.SetService('%s'): %v", service.Name, err))
+		return req.Fail(fmt.Sprintf("h.topology.SetService('%s'): %v", service.Name, err))
 	}
 
 	return req.Ok(datatype.New())
 }
 
-// onRemoveService removes a service from the runtime configuration.
+// onRemoveService removes a service from the topology configuration.
 // Requires 'service' string parameter with the service name.
 func (h *Handler) onRemoveService(req message.RequestInterface) message.ReplyInterface {
 	serviceName, err := req.RouteParameters().StringValue("service")
@@ -296,9 +296,9 @@ func (h *Handler) onRemoveService(req message.RequestInterface) message.ReplyInt
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	err = h.runtime.RemoveService(serviceName)
+	err = h.topology.RemoveService(serviceName)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.RemoveService('%s'): %v", serviceName, err))
+		return req.Fail(fmt.Sprintf("h.topology.RemoveService('%s'): %v", serviceName, err))
 	}
 
 	return req.Ok(datatype.New())
@@ -312,9 +312,9 @@ func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInter
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	err = h.runtime.StopService(serviceName)
+	err = h.topology.StopService(serviceName)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.runtime.StopService: %v", err))
+		return req.Fail(fmt.Sprintf("h.topology.StopService: %v", err))
 	}
 
 	return req.Ok(datatype.New())
@@ -326,7 +326,7 @@ func (h *Handler) Start() error {
 		return fmt.Errorf("handler is nil")
 	}
 	if h.started {
-		return fmt.Errorf("runtime handler already started")
+		return fmt.Errorf("topology handler already started")
 	}
 
 	if err := h.handler.Route(IsServiceRunning, h.onIsServiceRunning); err != nil {

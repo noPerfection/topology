@@ -40,16 +40,16 @@ func (test *TestHandlerSuite) SetupTest() {
 	logger, _ := log.New("test", false)
 	test.logger = logger
 
-	runtimeEndpoint := message.NewEndpoint(RuntimeHandlerCategory, 0)
+	topologyEndpoint := message.NewEndpoint(TopologyHandlerCategory, 0)
 
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{}, runtimeEndpoint)
+	test.depHandler, err = newHandler(&config.NoPerfection{}, topologyEndpoint)
 	s().NoError(err)
 
 	// Start the handler
 	s().NoError(test.depHandler.Start())
 
-	controlConfig := control.CreateInternalConfig(HandlerConfig(runtimeEndpoint))
+	controlConfig := control.CreateInternalConfig(HandlerConfig(topologyEndpoint))
 	test.depHandlerManager, err = sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
 	s().NoError(err)
 
@@ -61,12 +61,12 @@ func (test *TestHandlerSuite) SetupTest() {
 
 	test.id = "test-manager"
 	test.parent = &ParentClient{
-		ServiceUrl: "runtime",
+		ServiceUrl: "topology",
 		Id:         "parent",
 		Port:       120,
 	}
 
-	handlerCfg := HandlerConfig(runtimeEndpoint)
+	handlerCfg := HandlerConfig(topologyEndpoint)
 	socket, err := client.New(handlerCfg.Id, handlerCfg.Port, client.HandlerType(handlerCfg.Type))
 	s().NoError(err)
 
@@ -91,15 +91,15 @@ func (test *TestHandlerSuite) TearDownTest() {
 	time.Sleep(time.Millisecond * 100)
 }
 
-func TestHandlerRuntimeInterfaceBeforeStart(t *testing.T) {
+func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "app.json")
 	appConfig, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("config.Load: %v", err)
 	}
 
-	runtimeEndpoint := message.NewEndpoint("pre-start-runtime", 0)
-	handler, err := newHandler(&appConfig, runtimeEndpoint)
+	topologyEndpoint := message.NewEndpoint("pre-start-topology", 0)
+	handler, err := newHandler(&appConfig, topologyEndpoint)
 	if err != nil {
 		t.Fatalf("newHandler: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestHandlerRuntimeInterfaceBeforeStart(t *testing.T) {
 	}
 }
 
-func (test *TestHandlerSuite) TestRuntimeInterfaceAfterStartBlocked() {
+func (test *TestHandlerSuite) TestTopologyInterfaceAfterStartBlocked() {
 	s := test.Require
 
 	s().Error(test.depHandler.AddService(config.RefTarget("blocked")))

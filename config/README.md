@@ -7,7 +7,7 @@ It is a static data library only:
 - `config` defines service metadata (`Service`, `Handler`, `Endpoint`, `DepService`, `DepTarget`)
 - `config` defines the top-level `NoPerfection` struct (`services: [...]`), `Load`, and `NoPerfection.Save`
 
-There is no runtime config server, engine, or client API in this module.
+There is no topology config server, engine, or client API in this module.
 
 ## App structure
 
@@ -117,4 +117,4 @@ Proxy chains can be declared in service-level `handler-deps` metadata or per-han
 
 ## Packages removed from this module
 
-Previous versions included a dev runtime layer (`engine`, `handler`, `client`, `watch`) for serving config over noPerfection sockets. That runtime API has been removed. Consumers should load JSON with `config.Load` and save it with `NoPerfection.Save`.
+Previous versions included a dev topology layer (`engine`, `handler`, `client`, `watch`) for serving config over noPerfection sockets. That topology API has been removed. Consumers should load JSON with `config.Load` and save it with `NoPerfection.Save`.

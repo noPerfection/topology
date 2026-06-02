@@ -1,10 +1,10 @@
 # Topology
 
-`topology` provides a dependency services manager for noPerfection microservices.
+`topology` provides a dependency topology manager for noPerfection microservices.
 With `topology`, noPerfection services can manage their dependencies.
 
 Since its asynchronous and lives on another thread to not break service's own code, 
-the runtime is decoupled into handler and a client.
+the topology is decoupled into handler and a client.
 
 ## Install
 Requires zmq library C library. Go code running or building must be then done using C enabling.
@@ -14,7 +14,7 @@ go get github.com/noPerfection/topology@latest
 ```
 
 ## Tutorial
-First we need to start the runtime handler
+First we need to start the topology handler
 
 ```go
 import "github.com/noPerfection/topology"
@@ -22,9 +22,9 @@ import "github.com/noPerfection/topology/config"
 import "github.com/noPerfection/protocol/message"
 
 //.. rest of code
-runtimeEndpoint := message.NewEndpoint("runtime", 0)
+topologyEndpoint := message.NewEndpoint("topology", 0)
 
-handler, _ := topology.NewHandler("service.json", runtimeEndpoint)
+handler, _ := topology.NewHandler("service.json", topologyEndpoint)
 
 // Any handler's functions.
 
@@ -34,15 +34,15 @@ if err := handler.Start(); err != nil {
 }
 
 ```
-That's it. Runtime is running remotely.
+That's it. Topology is running remotely.
 Second, we need to interact with it from the code:
 
 ```go
-	// Now interact with the runtime manager through a runtime client.
-	runtimeClient, _ := topology.NewClient(runtimeEndpoint)
-	defer runtimeClient.Close()
+	// Now interact with the topology manager through a topology client.
+	topologyClient, _ := topology.NewClient(topologyEndpoint)
+	defer topologyClient.Close()
 
-	running, err := runtimeClient.IsServiceRunning("database")
+	running, err := topologyClient.IsServiceRunning("database")
 	if err != nil {
 		panic(err)
 	}
@@ -51,9 +51,9 @@ Second, we need to interact with it from the code:
 }
 ```
 
-## Runtime Handler
+## Topology Handler
 
-`topology.NewHandler(configPath, runtimeEndpoint)` returns a handler that serves runtime commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any runtime bootstrap changes, and uses `runtimeEndpoint` as its command endpoint.
+`topology.NewHandler(configPath, topologyEndpoint)` returns a handler that serves topology commands over noPerfection protocol sockets. The handler loads `configPath` using `config.Load`, saves any topology bootstrap changes, and uses `topologyEndpoint` as its command endpoint.
 
 The handler exposes these commands internally:
 
@@ -64,12 +64,12 @@ The handler exposes these commands internally:
 - `stop-service`
 - `is-service-running`
 
-Applications usually do not send these commands directly. Use `topology.NewClient(runtimeEndpoint)` instead.
+Applications usually do not send these commands directly. Use `topology.NewClient(topologyEndpoint)` instead.
 
-Before `Start()` is called, the returned handler also implements `topology.RuntimeInterface`. This lets setup code manipulate the runtime configuration directly:
+Before `Start()` is called, the returned handler also implements `topology.TopologyInterface`. This lets setup code manipulate the topology configuration directly:
 
 ```go
-handler, _ := topology.NewHandler("service.json", runtimeEndpoint)
+handler, _ := topology.NewHandler("service.json", topologyEndpoint)
 
 if err := handler.AddService(config.InlineTarget(service)); err != nil {
 	panic(err)
@@ -80,15 +80,15 @@ if err := handler.Start(); err != nil {
 }
 ```
 
-After `Start()` succeeds, direct runtime methods on the handler are unavailable and return an error. Use `topology.NewClient(runtimeEndpoint)` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
+After `Start()` succeeds, direct topology methods on the handler are unavailable and return an error. Use `topology.NewClient(topologyEndpoint)` for `AddService`, `SetService`, `RemoveService`, `StartService`, `StopService`, and `IsServiceRunning` after launch.
 
-## Runtime Client API
+## Topology Client API
 
-`topology.NewClient(runtimeEndpoint)` returns a `*topology.Client`. Configure request behavior with:
+`topology.NewClient(topologyEndpoint)` returns a `*topology.Client`. Configure request behavior with:
 
 ```go
-runtimeClient.Timeout(5 * time.Second)
-runtimeClient.Attempt(1)
+topologyClient.Timeout(5 * time.Second)
+topologyClient.Attempt(1)
 ```
 
 Available client methods:
@@ -124,12 +124,12 @@ service := config.Service{
 	},
 }
 
-if err := runtimeClient.AddService(config.InlineTarget(service)); err != nil {
+if err := topologyClient.AddService(config.InlineTarget(service)); err != nil {
 	panic(err)
 }
 
 service.StartCommand = "./worker --debug"
-if err := runtimeClient.SetService(service); err != nil {
+if err := topologyClient.SetService(service); err != nil {
 	panic(err)
 }
 ```
@@ -143,15 +143,15 @@ parent := &topology.ParentClient{
 	Port:       6000,
 }
 
-id, err := runtimeClient.StartService("worker", parent)
+id, err := topologyClient.StartService("worker", parent)
 if err != nil {
 	panic(err)
 }
 
-if running, err := runtimeClient.IsServiceRunning("worker"); err != nil {
+if running, err := topologyClient.IsServiceRunning("worker"); err != nil {
 	panic(err)
 } else if running {
-	if err := runtimeClient.StopService("worker"); err != nil {
+	if err := topologyClient.StopService("worker"); err != nil {
 		panic(err)
 	}
 }
@@ -162,7 +162,7 @@ _ = id
 ### Remove Services
 
 ```go
-if err := runtimeClient.RemoveService("worker"); err != nil {
+if err := topologyClient.RemoveService("worker"); err != nil {
 	panic(err)
 }
 ```
@@ -173,7 +173,7 @@ if err := runtimeClient.RemoveService("worker"); err != nil {
 
 Every managed service must have a handler that manages the service itself. By convention, this handler uses the `manager` category.
 
-The runtime uses the `manager` handler to:
+The topology uses the `manager` handler to:
 
 - connect to the service
 - send `heartbeat` requests for `IsServiceRunning`
@@ -199,7 +199,7 @@ Example service config:
 }
 ```
 
-Independent services are special: there can be only one independent service in the config, and it represents the service currently running the runtime handler. It cannot be added through `AddService` or stopped through `StopService`.
+Independent services are special: there can be only one independent service in the config, and it represents the service currently running the topology handler. It cannot be added through `AddService` or stopped through `StopService`.
 
 ## Tests
 
@@ -209,4 +209,4 @@ Run the tests:
 go test ./...
 ```
 
-Runtime tests compile on a fresh checkout. Tests that start sample binaries require local fixtures under `_test_services`.
+Topology tests compile on a fresh checkout. Tests that start sample binaries require local fixtures under `_test_services`.
