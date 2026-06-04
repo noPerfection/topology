@@ -8,10 +8,14 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
+func sr(service Service) ServiceRecord {
+	return NewServiceRecord(service)
+}
+
 func TestNormalizeInlineService(t *testing.T) {
 	app := NoPerfection{
-		Services: []Service{
-			{
+		Services: []ServiceRecord{
+			sr(Service{
 				Type: IndependentType,
 				Name: "public_api",
 				Handlers: []Handler{
@@ -23,16 +27,16 @@ func TestNormalizeInlineService(t *testing.T) {
 							{
 								Name: "call-user-api",
 								Proxies: []DepTarget{
-									InlineTarget(*New("nested_proxy", ProxyType)),
+									ServiceTarget(*New("nested_proxy", ProxyType)),
 								},
 							},
 						},
 					},
 				},
-			},
+			}),
 		},
 	}
-	app.Services[0].Handlers[0].CommandDeps[0].Proxies[0].Inline.Handlers = []Handler{
+	app.Services[0].Handlers[0].CommandDeps[0].Proxies[0].ServiceRecord.Handlers = []Handler{
 		{
 			Type:     ReplierType,
 			Category: "nested",
@@ -54,8 +58,8 @@ func TestNormalizeInlineService(t *testing.T) {
 
 func TestNormalizeServiceHandlerDeps(t *testing.T) {
 	app := NoPerfection{
-		Services: []Service{
-			{
+		Services: []ServiceRecord{
+			sr(Service{
 				Type: IndependentType,
 				Name: "api",
 				Handlers: []Handler{
@@ -69,7 +73,7 @@ func TestNormalizeServiceHandlerDeps(t *testing.T) {
 					{
 						Name: "api",
 						Proxies: []DepTarget{
-							InlineTarget(Service{
+							ServiceTarget(Service{
 								Type: ProxyType,
 								Name: "inline_proxy",
 								Handlers: []Handler{
@@ -83,7 +87,7 @@ func TestNormalizeServiceHandlerDeps(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		},
 	}
 
@@ -97,8 +101,8 @@ func TestNormalizeServiceHandlerDeps(t *testing.T) {
 
 func TestNormalizeMissingRef(t *testing.T) {
 	app := NoPerfection{
-		Services: []Service{
-			{
+		Services: []ServiceRecord{
+			sr(Service{
 				Type: IndependentType,
 				Name: "api",
 				Handlers: []Handler{
@@ -114,7 +118,7 @@ func TestNormalizeMissingRef(t *testing.T) {
 						},
 					},
 				},
-			},
+			}),
 		},
 	}
 
@@ -125,8 +129,8 @@ func TestNormalizeMissingRef(t *testing.T) {
 
 func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 	app := NoPerfection{
-		Services: []Service{
-			{
+		Services: []ServiceRecord{
+			sr(Service{
 				Type: IndependentType,
 				Name: "api",
 				Handlers: []Handler{
@@ -142,7 +146,7 @@ func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 						Proxies: []DepTarget{RefTarget("missing_proxy")},
 					},
 				},
-			},
+			}),
 		},
 	}
 
@@ -153,8 +157,8 @@ func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 
 func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 	app := NoPerfection{
-		Services: []Service{
-			{
+		Services: []ServiceRecord{
+			sr(Service{
 				Type: IndependentType,
 				Name: "api",
 				Handlers: []Handler{
@@ -170,8 +174,8 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 						},
 					},
 				},
-			},
-			{
+			}),
+			sr(Service{
 				Type: ProxyType,
 				Name: "auth_proxy",
 				Handlers: []Handler{
@@ -181,7 +185,7 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 						Endpoint: message.NewEndpoint("auth_1", 4301),
 					},
 				},
-			},
+			}),
 		},
 	}
 
@@ -201,8 +205,8 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 
 func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
 	app := NoPerfection{
-		Services: []Service{
-			{
+		Services: []ServiceRecord{
+			sr(Service{
 				Type: IndependentType,
 				Name: "api",
 				Handlers: []Handler{
@@ -218,8 +222,8 @@ func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
 						},
 					},
 				},
-			},
-			{
+			}),
+			sr(Service{
 				Type: ProxyType,
 				Name: "auth_proxy",
 				Handlers: []Handler{
@@ -229,7 +233,7 @@ func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
 						Endpoint: message.NewEndpoint("auth_1", 4301),
 					},
 				},
-			},
+			}),
 		},
 	}
 

@@ -26,7 +26,7 @@ func TestLoadMissingFile(t *testing.T) {
 func TestGetService(t *testing.T) {
 	a := NoPerfection{}
 	sample := New("api", IndependentType)
-	if err := a.SetService(*sample); err != nil {
+	if err := a.SetService(NewServiceRecord(*sample)); err != nil {
 		t.Fatalf("SetService: %v", err)
 	}
 
@@ -51,7 +51,7 @@ func TestGetByType(t *testing.T) {
 		*New("proxy", ProxyType),
 	}
 	for _, s := range services {
-		if err := a.SetService(s); err != nil {
+		if err := a.SetService(NewServiceRecord(s)); err != nil {
 			t.Fatalf("SetService: %v", err)
 		}
 	}
@@ -80,7 +80,7 @@ func TestFilterByType(t *testing.T) {
 		*New("proxy", ProxyType),
 	}
 	for _, s := range services {
-		if err := a.SetService(s); err != nil {
+		if err := a.SetService(NewServiceRecord(s)); err != nil {
 			t.Fatalf("SetService: %v", err)
 		}
 	}
@@ -115,7 +115,7 @@ func TestCountByType(t *testing.T) {
 		*New("proxy", ProxyType),
 	}
 	for _, s := range services {
-		if err := a.SetService(s); err != nil {
+		if err := a.SetService(NewServiceRecord(s)); err != nil {
 			t.Fatalf("SetService: %v", err)
 		}
 	}
@@ -136,10 +136,10 @@ func TestSetService(t *testing.T) {
 	first := New("api", IndependentType)
 	second := New("proxy", ProxyType)
 
-	if err := a.SetService(*first); err != nil {
+	if err := a.SetService(NewServiceRecord(*first)); err != nil {
 		t.Fatalf("SetService first: %v", err)
 	}
-	if err := a.SetService(*second); err != nil {
+	if err := a.SetService(NewServiceRecord(*second)); err != nil {
 		t.Fatalf("SetService second: %v", err)
 	}
 	if len(a.Services) != 2 {
@@ -148,7 +148,7 @@ func TestSetService(t *testing.T) {
 
 	updated := *first
 	updated.StartCommand = "go run ./cmd/api"
-	if err := a.SetService(updated); err != nil {
+	if err := a.SetService(NewServiceRecord(updated)); err != nil {
 		t.Fatalf("SetService update: %v", err)
 	}
 	if len(a.Services) != 2 {
@@ -168,10 +168,10 @@ func TestRemoveService(t *testing.T) {
 	a := NoPerfection{}
 	first := New("api", IndependentType)
 	second := New("proxy", ProxyType)
-	if err := a.SetService(*first); err != nil {
+	if err := a.SetService(NewServiceRecord(*first)); err != nil {
 		t.Fatalf("SetService first: %v", err)
 	}
-	if err := a.SetService(*second); err != nil {
+	if err := a.SetService(NewServiceRecord(*second)); err != nil {
 		t.Fatalf("SetService second: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func TestLoadSave(t *testing.T) {
 			Endpoint: message.NewEndpoint("api_1", 4101),
 		},
 	}
-	if err := original.SetService(*sample); err != nil {
+	if err := original.SetService(NewServiceRecord(*sample)); err != nil {
 		t.Fatalf("SetService: %v", err)
 	}
 

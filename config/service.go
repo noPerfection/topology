@@ -50,35 +50,61 @@ type Proxy struct {
 	Handlers []ProxyHandler `json:"handlers"`
 }
 
-// ServiceConfig returns a Service view of the proxy for registration and validation.
-func (p *Proxy) ServiceConfig() *Service {
-	if p == nil {
-		return nil
-	}
-	service := p.Service
-	service.Handlers = make([]Handler, len(p.Handlers))
-	for i, handler := range p.Handlers {
-		service.Handlers[i] = handler.Handler
-	}
-	return &service
-}
-
 // ValidateTypes validates the proxy and its outbound targets.
 func (p *Proxy) ValidateTypes() error {
 	if p == nil {
 		return fmt.Errorf("proxy struct is nil")
 	}
-	service := p.ServiceConfig()
-	if err := ValidateService(*service); err != nil {
-		return err
+	if len(p.Name) == 0 {
+		return fmt.Errorf("service name is empty")
 	}
+	if err := ValidateServiceType(p.Type); err != nil {
+		return fmt.Errorf("identity.ValidateServiceType: %v", err)
+	}
+
+	needsModuleURL := false
+	needsStartCommand := false
+	for i, dep := range p.HandlerDeps {
+		if err := ValidateDepService(dep); err != nil {
+			return fmt.Errorf("ValidateHandlerDep[%d]: %v", i, err)
+		}
+	}
+
 	for i, handler := range p.Handlers {
+		if err := ValidateHandlerType(handler.Type); err != nil {
+			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
+		}
+		if len(handler.Category) == 0 {
+			return fmt.Errorf("handler[%d] category is empty", i)
+		}
+		if len(handler.Endpoint.Id) == 0 && !handler.Endpoint.IsRemote() {
+			return fmt.Errorf("handler[%d] '%s' endpoint id is empty", i, handler.Category)
+		}
+		if handler.Endpoint.IsInproc() {
+			needsModuleURL = true
+		}
+		if handler.Endpoint.IsIpc() {
+			needsStartCommand = true
+		}
+		for _, dep := range handler.CommandDeps {
+			if err := ValidateDepService(dep); err != nil {
+				return fmt.Errorf("ValidateCommandDepService[%d]: %v", i, err)
+			}
+		}
 		for j, target := range handler.Outbounds {
 			if err := ValidateDepTarget(target); err != nil {
 				return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
 			}
 		}
 	}
+
+	if needsModuleURL && len(p.ModuleUrl) == 0 {
+		return fmt.Errorf("service('%s') has inproc endpoint and requires module-url", p.Name)
+	}
+	if needsStartCommand && len(p.StartCommand) == 0 {
+		return fmt.Errorf("service('%s') has ipc endpoint and requires start-command", p.Name)
+	}
+
 	return nil
 }
 

@@ -22,8 +22,8 @@ func TestDepTargetJSONRef(t *testing.T) {
 	if target.Name() != "auth_proxy" {
 		t.Fatalf("Name() = %q, want auth_proxy", target.Name())
 	}
-	if target.Inline != nil {
-		t.Fatal("Inline is set for ref target")
+	if !target.ServiceRecord.IsZero() {
+		t.Fatal("ServiceRecord is set for ref target")
 	}
 	if target.Proxy != nil {
 		t.Fatal("Proxy is set for ref target")
@@ -117,8 +117,8 @@ func TestDepTargetJSONInlineService(t *testing.T) {
 	if target.Ref != "" {
 		t.Fatalf("Path = %q, want empty", target.Ref)
 	}
-	if target.Inline == nil || target.Inline.Name != "inline_worker" {
-		t.Fatalf("Inline service = %#v, want inline_worker", target.Inline)
+	if target.ServiceRecord.Name != "inline_worker" {
+		t.Fatalf("ServiceRecord = %#v, want inline_worker", target.ServiceRecord)
 	}
 	if target.Proxy != nil {
 		t.Fatalf("Proxy = %#v, want nil", target.Proxy)
@@ -158,8 +158,8 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 	if target.Ref != "" {
 		t.Fatalf("Path = %q, want empty", target.Ref)
 	}
-	if target.Inline != nil {
-		t.Fatalf("Inline service = %#v, want nil", target.Inline)
+	if target.Proxy == nil || target.Type != ProxyType {
+		t.Fatalf("ServiceRecord = %#v, want proxy", target.ServiceRecord)
 	}
 	if target.Proxy == nil || target.Proxy.Name != "inline_audit" {
 		t.Fatalf("Proxy = %#v, want inline_audit", target.Proxy)
@@ -186,11 +186,11 @@ func TestDepTargetValidate(t *testing.T) {
 	if err := ValidateDepTarget(DepTarget{}); err == nil {
 		t.Fatal("ValidateDepTarget empty returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{Ref: "a", Inline: New("b", ProxyType)}); err == nil {
-		t.Fatal("ValidateDepTarget ref and inline returned nil error")
+	if err := ValidateDepTarget(DepTarget{Ref: "a", ServiceRecord: NewServiceRecord(*New("b", ProxyType))}); err == nil {
+		t.Fatal("ValidateDepTarget ref and record returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{Inline: New("b", ProxyType), Proxy: &Proxy{Service: *New("c", ProxyType)}}); err == nil {
-		t.Fatal("ValidateDepTarget inline and proxy returned nil error")
+	if err := ValidateDepTarget(DepTarget{ServiceRecord: ServiceRecord{}}); err == nil {
+		t.Fatal("ValidateDepTarget empty record returned nil error")
 	}
 	if err := ValidateDepTarget(RefTarget("auth_proxy")); err != nil {
 		t.Fatalf("ValidateDepTarget ref: %v", err)

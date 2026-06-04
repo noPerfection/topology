@@ -53,12 +53,12 @@ if err != nil {
     panic(err)
 }
 
-svc, err := a.GetService("public_api")
+record, err := a.GetService("public_api")
 if err != nil {
     panic(err)
 }
 
-updated := svc
+updated := record
 updated.Handlers = append(updated.Handlers, config.Handler{
     Type:     config.ReplierType,
     Category: "public-api",
@@ -103,8 +103,7 @@ Each `handler-deps` or `command-deps` entry must have a `name` and at least one 
 Each entry in `proxies` or `extensions` is a `DepTarget`. A target is exactly one of:
 
 - a **ref** string (`DepTarget.Ref`)
-- an inline **service** object (`DepTarget.Inline`)
-- an inline **proxy** object (`DepTarget.Proxy`)
+- a **service record** object (`DepTarget.ServiceRecord`) containing either a service or proxy
 
 `config.Load` calls `Normalize()` to register inline targets and verify references. JSON stays compact: each target is one value, not an object with separate `ref` / `service` / `proxy` keys.
 
@@ -149,7 +148,7 @@ serviceName, handlerCategory := target.RefPath()
 target.Name() // always the service name: "auth_proxy"
 ```
 
-`RefPath()` parses `DepTarget.Ref` into `(serviceName, handlerCategory)`. When the ref has no handler segment, `handlerCategory` is `""`. `Name()` returns the service name for ref, inline, and proxy targets.
+`RefPath()` parses `DepTarget.Ref` into `(serviceName, handlerCategory)`. When the ref has no handler segment, `handlerCategory` is `""`. `Name()` returns the service name for ref and service-record targets.
 
 Example JSON:
 

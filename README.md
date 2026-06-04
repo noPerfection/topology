@@ -70,7 +70,7 @@ Before `Start()` is called, the returned handler also implements `topology.Topol
 ```go
 handler, _ := topology.NewHandler("service.json")
 
-if err := handler.AddService(config.InlineTarget(service)); err != nil {
+if err := handler.AddService(config.NewServiceRecord(service)); err != nil {
 	panic(err)
 }
 
@@ -102,8 +102,9 @@ type NodeInterface interface {
 type TopologyInterface interface {
 	NodeInterface
 
-	AddService(target config.DepTarget) error
-	SetService(service config.Service) error
+	Service(serviceName string) (config.ServiceRecord, error)
+	AddService(record config.ServiceRecord) error
+	SetService(record config.ServiceRecord) error
 	RemoveService(serviceName string) error
 }
 ```
@@ -124,12 +125,13 @@ service := config.Service{
 	},
 }
 
-if err := topologyClient.AddService(config.InlineTarget(service)); err != nil {
+record := config.NewServiceRecord(service)
+if err := topologyClient.AddService(record); err != nil {
 	panic(err)
 }
 
 service.StartCommand = "./worker --debug"
-if err := topologyClient.SetService(service); err != nil {
+if err := topologyClient.SetService(config.NewServiceRecord(service)); err != nil {
 	panic(err)
 }
 ```

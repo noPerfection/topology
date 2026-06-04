@@ -11,12 +11,37 @@ func (a *NoPerfection) Normalize() error {
 
 	visiting := make(map[string]bool)
 	for i := range a.Services {
-		if err := a.normalizeService(&a.Services[i], visiting); err != nil {
+		if err := a.normalizeRecord(&a.Services[i], visiting); err != nil {
 			return fmt.Errorf("service %q: %w", a.Services[i].Name, err)
 		}
 	}
 
 	return a.validateDepRefs()
+}
+
+func (a *NoPerfection) normalizeRecord(record *ServiceRecord, visiting map[string]bool) error {
+	if record == nil {
+		return fmt.Errorf("service record is nil")
+	}
+	if record.Proxy != nil {
+		if err := record.Proxy.ValidateTypes(); err != nil {
+			return err
+		}
+		record.Service = serviceFromProxy(*record.Proxy)
+		if err := a.normalizeService(&record.Service, visiting); err != nil {
+			return err
+		}
+		for hi := range record.Proxy.Handlers {
+			for oi := range record.Proxy.Handlers[hi].Outbounds {
+				target := &record.Proxy.Handlers[hi].Outbounds[oi]
+				if err := a.normalizeDepTarget(target, visiting); err != nil {
+					return fmt.Errorf("outbound %q: %w", record.Proxy.Handlers[hi].Category, err)
+				}
+			}
+		}
+		return nil
+	}
+	return a.normalizeService(&record.Service, visiting)
 }
 
 func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bool) error {
@@ -51,10 +76,6 @@ func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bo
 			}
 		}
 	}
-
-	if err := a.SetService(*service); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -85,11 +106,11 @@ func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string
 		return nil
 	}
 
-	service := target.InlineService()
-	if err := a.normalizeService(service, visiting); err != nil {
+	record := target.ServiceRecord
+	if err := a.normalizeRecord(&record, visiting); err != nil {
 		return err
 	}
-	return a.SetService(*service)
+	return a.SetService(record)
 }
 
 func (a *NoPerfection) validateDepRefs() error {
@@ -130,14 +151,14 @@ func (a *NoPerfection) validateDepRef(target DepTarget) error {
 		if serviceName == "" {
 			return fmt.Errorf("dep target service name is empty")
 		}
-		service, err := a.GetService(serviceName)
+		record, err := a.GetService(serviceName)
 		if err != nil {
 			return fmt.Errorf("service %q not found: %w", serviceName, err)
 		}
 		if handlerCategory == "" {
 			return nil
 		}
-		if _, err := service.HandlerByCategory(handlerCategory); err != nil {
+		if _, err := record.HandlerByCategory(handlerCategory); err != nil {
 			return fmt.Errorf("service %q handler category %q: %w", serviceName, handlerCategory, err)
 		}
 		return nil

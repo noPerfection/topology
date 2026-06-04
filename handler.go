@@ -87,20 +87,20 @@ func (h *Handler) requireNotStarted() error {
 
 // AddService registers a service in the topology configuration before the
 // topology handler is started.
-func (h *Handler) AddService(target config.DepTarget) error {
+func (h *Handler) AddService(record config.ServiceRecord) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	return h.topology.AddService(target)
+	return h.topology.AddService(record)
 }
 
 // SetService updates a service in the topology configuration before the topology
 // handler is started.
-func (h *Handler) SetService(service config.Service) error {
+func (h *Handler) SetService(record config.ServiceRecord) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	return h.topology.SetService(service)
+	return h.topology.SetService(record)
 }
 
 // RemoveService removes a service from the topology configuration before the
@@ -139,9 +139,9 @@ func (h *Handler) StopService(serviceName string) error {
 }
 
 // Service returns a service configuration before the topology handler is started.
-func (h *Handler) Service(serviceName string) (config.Service, error) {
+func (h *Handler) Service(serviceName string) (config.ServiceRecord, error) {
 	if err := h.requireNotStarted(); err != nil {
-		return config.Service{}, err
+		return config.ServiceRecord{}, err
 	}
 	return h.topology.Service(serviceName)
 }
@@ -194,45 +194,43 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 	return req.Ok(datatype.New().Set("id", id))
 }
 
-// onAddService registers a service target in the topology configuration.
-// Requires 'service' as either a service name or inline config.Service object.
+// onAddService registers a service record in the topology configuration.
+// Requires 'service' as a ServiceRecord service or proxy object.
 func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
 	}
 
-	var target config.DepTarget
-	err = kv.Interface(&target)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
+	var record config.ServiceRecord
+	if err := kv.Interface(&record); err != nil {
+		return req.Fail(fmt.Sprintf("kv.Interface('config.ServiceRecord'): %v", err))
 	}
 
-	err = h.topology.AddService(target)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.AddService('%s'): %v", target.Name(), err))
+	if err := h.topology.AddService(record); err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.AddService('%s'): %v", record.Name, err))
 	}
 
 	return req.Ok(datatype.New())
 }
 
 // onSetService updates a service in the topology configuration.
-// Requires 'service' of the config.Service type.
+// Requires 'service' of the config.ServiceRecord type.
 func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
 	}
 
-	var service config.Service
-	err = kv.Interface(&service)
+	var record config.ServiceRecord
+	err = kv.Interface(&record)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
 
-	err = h.topology.SetService(service)
+	err = h.topology.SetService(record)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.SetService('%s'): %v", service.Name, err))
+		return req.Fail(fmt.Sprintf("h.topology.SetService('%s'): %v", record.Name, err))
 	}
 
 	return req.Ok(datatype.New())
@@ -277,12 +275,12 @@ func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	service, err := h.topology.Service(serviceName)
+	record, err := h.topology.Service(serviceName)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.Service('%s'): %v", serviceName, err))
 	}
 
-	return req.Ok(datatype.New().Set("service", service))
+	return req.Ok(datatype.New().Set("service", record))
 }
 
 // Start starts the dependency handler with the available operations.

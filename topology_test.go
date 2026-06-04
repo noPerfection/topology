@@ -37,10 +37,10 @@ func (test *TestDepManagerSuite) setServiceStartCommand(name string, startComman
 		}
 	}
 
-	test.topology.config.Services = append(test.topology.config.Services, config.Service{
+	test.topology.config.Services = append(test.topology.config.Services, config.NewServiceRecord(config.Service{
 		Name:         name,
 		StartCommand: startCommand,
-	})
+	}))
 }
 
 func (test *TestDepManagerSuite) requireTestBinary(binary string) {
@@ -65,8 +65,8 @@ func (test *TestDepManagerSuite) SetupTest() {
 
 	test.topology = &Topology{
 		config: &config.NoPerfection{
-			Services: []config.Service{
-				{
+			Services: []config.ServiceRecord{
+				config.NewServiceRecord(config.Service{
 					Type:         config.ProxyType,
 					Name:         "test-manager",
 					StartCommand: "test",
@@ -77,7 +77,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 							Endpoint: message.NewEndpoint("test-manager", 6000),
 						},
 					},
-				},
+				}),
 			},
 		},
 		sameServices:     make(map[string]int),
@@ -132,7 +132,7 @@ func (test *TestDepManagerSuite) Test_10_GenerateId() {
 	s().Equal(0, test.topology.sameServices[test.id])
 }
 
-func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
+func (test *TestDepManagerSuite) Test_12_AddRemoveService() {
 	s := test.Require
 
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
@@ -152,7 +152,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 			},
 		},
 	}
-	err = test.topology.AddService(config.InlineTarget(service))
+	err = test.topology.AddService(config.NewServiceRecord(service))
 	s().NoError(err)
 
 	got, err := test.topology.config.GetService("extra-service")
@@ -168,7 +168,7 @@ func (test *TestDepManagerSuite) Test_12_ServiceConfig() {
 	err = test.topology.RemoveService("missing")
 	s().Error(err)
 
-	err = test.topology.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.NewServiceRecord(config.Service{
 		Type:         config.ProxyType,
 		Name:         "plain-service",
 		StartCommand: "echo plain",
@@ -187,13 +187,10 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	s().NoError(cfg.SetService(test.topology.config.Services[0]))
 	test.topology = New(&cfg)
 
-	err = test.topology.AddService(config.RefTarget("test-manager"))
-	s().NoError(err)
-
-	err = test.topology.AddService(config.RefTarget("missing-service"))
+	err = test.topology.AddService(config.ServiceRecord{})
 	s().Error(err)
 
-	err = test.topology.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.NewServiceRecord(config.Service{
 		Type: config.ProxyType,
 		Name: "duplicate-socket",
 		Handlers: []config.Handler{
@@ -206,7 +203,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	}))
 	s().Error(err)
 
-	err = test.topology.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.NewServiceRecord(config.Service{
 		Type: config.ProxyType,
 		Name: "nested-parent",
 		Handlers: []config.Handler{
@@ -218,7 +215,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 					{
 						Name: "proxy",
 						Proxies: []config.DepTarget{
-							config.InlineTarget(config.Service{
+							config.ServiceTarget(config.Service{
 								Type: config.ProxyType,
 								Name: "nested-child",
 								Handlers: []config.Handler{
@@ -240,16 +237,16 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	_, err = test.topology.config.GetService("nested-parent")
 	s().NoError(err)
 	_, err = test.topology.config.GetService("nested-child")
-	s().NoError(err)
+	s().Error(err)
 
-	err = test.topology.AddService(config.InlineTarget(config.Service{
+	err = test.topology.AddService(config.NewServiceRecord(config.Service{
 		Type: config.ProxyType,
 		Name: "service-level-parent",
 		HandlerDeps: []config.DepService{
 			{
 				Name: "manager",
 				Proxies: []config.DepTarget{
-					config.InlineTarget(config.Service{
+					config.ServiceTarget(config.Service{
 						Type: config.ProxyType,
 						Name: "service-level-child",
 						Handlers: []config.Handler{
@@ -276,7 +273,42 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	_, err = test.topology.config.GetService("service-level-parent")
 	s().NoError(err)
 	_, err = test.topology.config.GetService("service-level-child")
+	s().Error(err)
+
+	err = test.topology.AddService(config.NewProxyRecord(config.Proxy{
+		Service: config.Service{
+			Type: config.ProxyType,
+			Name: "proxy-parent",
+		},
+		Handlers: []config.ProxyHandler{
+			{
+				Handler: config.Handler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("proxy-parent-manager", 6300),
+				},
+				Outbounds: []config.DepTarget{
+					config.ServiceTarget(config.Service{
+						Type: config.ProxyType,
+						Name: "proxy-outbound-child",
+						Handlers: []config.Handler{
+							{
+								Type:     config.ReplierType,
+								Category: ServiceManagerCategory,
+								Endpoint: message.NewEndpoint("proxy-outbound-child-manager", 6301),
+							},
+						},
+					}),
+				},
+			},
+		},
+	}))
 	s().NoError(err)
+
+	_, err = test.topology.config.GetService("proxy-parent")
+	s().NoError(err)
+	_, err = test.topology.config.GetService("proxy-outbound-child")
+	s().Error(err)
 }
 
 // Test_20_Run runs the given binary.

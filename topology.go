@@ -32,13 +32,13 @@ type TopologyInterface interface {
 	NodeInterface
 
 	// Service returns a service configuration by name.
-	Service(serviceName string) (config.Service, error)
+	Service(serviceName string) (config.ServiceRecord, error)
 
 	// AddService registers a service in the topology configuration.
-	AddService(target config.DepTarget) error
+	AddService(record config.ServiceRecord) error
 
 	// SetService updates an existing service in the topology configuration.
-	SetService(service config.Service) error
+	SetService(record config.ServiceRecord) error
 
 	// RemoveService removes a service from the topology configuration.
 	RemoveService(serviceName string) error
@@ -51,7 +51,7 @@ const DefaultTimeout = time.Second * 5
 const ServiceManagerCategory = "manager"
 
 type Process struct {
-	config *config.Service
+	config *config.ServiceRecord
 	id     string
 	cmd    *exec.Cmd
 	done   chan error // signalizes when the service finished
@@ -77,176 +77,56 @@ func New(cfg *config.NoPerfection) *Topology {
 	}
 }
 
-// AddService registers a service target in the topology configuration.
-// A ref target must already resolve in the configuration, while an inline
-// target and any inline dependencies are registered recursively.
-func (tp *Topology) AddService(target config.DepTarget) error {
+// AddService registers a service record in the topology configuration.
+func (tp *Topology) AddService(record config.ServiceRecord) error {
 	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
-	if err := config.ValidateDepTarget(target); err != nil {
-		return fmt.Errorf("config.ValidateDepTarget: %w", err)
-	}
-
-	if target.Ref != "" {
-		serviceName, _ := target.RefPath()
-		if err := tp.validateServiceRef(serviceName, make(map[string]bool)); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	if err := tp.addInlineService(target.InlineService(), make(map[string]bool), tp.usedEndpoints()); err != nil {
+	if err := tp.addServiceRecord(&record, tp.usedEndpoints()); err != nil {
 		return err
 	}
-
 	return tp.config.Save()
 }
 
 // Service returns a service configuration by name.
-func (tp *Topology) Service(serviceName string) (config.Service, error) {
+func (tp *Topology) Service(serviceName string) (config.ServiceRecord, error) {
 	if tp == nil || tp.config == nil {
-		return config.Service{}, fmt.Errorf("nil config")
+		return config.ServiceRecord{}, fmt.Errorf("nil config")
 	}
 
-	service, err := tp.config.GetService(serviceName)
+	record, err := tp.config.GetService(serviceName)
 	if err != nil {
-		return config.Service{}, fmt.Errorf("tp.config.GetService('%s'): %w", serviceName, err)
+		return config.ServiceRecord{}, fmt.Errorf("tp.config.GetService('%s'): %w", serviceName, err)
 	}
 
-	return service, nil
+	return record, nil
 }
 
-func (tp *Topology) validateServiceRef(serviceName string, visiting map[string]bool) error {
-	service, err := tp.config.GetService(serviceName)
-	if err != nil {
-		return fmt.Errorf("tp.config.GetService('%s'): %w", serviceName, err)
+func (tp *Topology) addServiceRecord(record *config.ServiceRecord, reservedEndpoints map[string]string) error {
+	if record == nil || record.IsZero() {
+		return fmt.Errorf("service record is empty")
 	}
-	if visiting[service.Name] {
-		return fmt.Errorf("cycle detected at service '%s'", service.Name)
-	}
-	visiting[service.Name] = true
-	defer delete(visiting, service.Name)
-	if err := service.ValidateTypes(); err != nil {
-		return fmt.Errorf("service.ValidateTypes('%s'): %w", service.Name, err)
-	}
-
-	for _, dep := range service.HandlerDeps {
-		if err := tp.validateDepServiceTargets(dep, visiting); err != nil {
-			return fmt.Errorf("service '%s' handler-deps category '%s': %w", service.Name, dep.Name, err)
-		}
-	}
-
-	for _, handler := range service.Handlers {
-		for _, dep := range handler.CommandDeps {
-			if err := tp.validateDepServiceTargets(dep, visiting); err != nil {
-				return fmt.Errorf("service '%s' command '%s': %w", service.Name, dep.Name, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (tp *Topology) validateDepServiceTargets(dep config.DepService, visiting map[string]bool) error {
-	for _, target := range dep.Proxies {
-		if err := tp.validateDepTargetExists(target, visiting); err != nil {
-			return fmt.Errorf("proxy: %w", err)
-		}
-	}
-	for _, target := range dep.Extensions {
-		if err := tp.validateDepTargetExists(target, visiting); err != nil {
-			return fmt.Errorf("extension: %w", err)
-		}
-	}
-	return nil
-}
-
-func (tp *Topology) validateDepTargetExists(target config.DepTarget, visiting map[string]bool) error {
-	if err := config.ValidateDepTarget(target); err != nil {
-		return err
-	}
-	if target.Ref != "" {
-		serviceName, _ := target.RefPath()
-		return tp.validateServiceRef(serviceName, visiting)
-	}
-	service := target.InlineService()
-	if _, err := tp.config.GetService(service.Name); err != nil {
-		return fmt.Errorf("inline service '%s' is not registered: %w", service.Name, err)
-	}
-	return tp.validateServiceRef(service.Name, visiting)
-}
-
-func (tp *Topology) addInlineService(service *config.Service, visiting map[string]bool, reservedEndpoints map[string]string) error {
-	if service == nil {
-		return fmt.Errorf("service is nil")
-	}
-	if len(service.Name) == 0 {
+	if len(record.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
-	if visiting[service.Name] {
-		return fmt.Errorf("cycle detected at service '%s'", service.Name)
+	if err := record.ValidateTypes(); err != nil {
+		return fmt.Errorf("serviceRecord.ValidateTypes('%s'): %w", record.Name, err)
 	}
-	visiting[service.Name] = true
-	defer delete(visiting, service.Name)
-
-	if err := service.ValidateTypes(); err != nil {
-		return fmt.Errorf("service.ValidateTypes('%s'): %w", service.Name, err)
-	}
-	if service.Type == config.IndependentType {
+	if record.Type == config.IndependentType {
 		return fmt.Errorf("independent service can not be added")
 	}
-	if _, err := tp.config.GetService(service.Name); err == nil {
-		return fmt.Errorf("service('%s') already added", service.Name)
+	if _, err := tp.config.GetService(record.Name); err == nil {
+		return fmt.Errorf("service('%s') already added", record.Name)
 	}
-	if err := tp.reserveAvailableEndpoints(service, reservedEndpoints); err != nil {
+	if err := tp.reserveAvailableEndpoints(&record.Service, reservedEndpoints); err != nil {
 		return err
 	}
 
-	for _, dep := range service.HandlerDeps {
-		if err := tp.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
-			return fmt.Errorf("service '%s' handler-deps category '%s': %w", service.Name, dep.Name, err)
-		}
-	}
-
-	for _, handler := range service.Handlers {
-		for _, dep := range handler.CommandDeps {
-			if err := tp.addOrValidateDepServiceTargets(dep, visiting, reservedEndpoints); err != nil {
-				return fmt.Errorf("service '%s' command '%s': %w", service.Name, dep.Name, err)
-			}
-		}
-	}
-
-	if err := tp.config.SetService(*service); err != nil {
+	if err := tp.config.SetService(*record); err != nil {
 		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
 	return nil
-}
-
-func (tp *Topology) addOrValidateDepServiceTargets(dep config.DepService, visiting map[string]bool, reservedEndpoints map[string]string) error {
-	for _, target := range dep.Proxies {
-		if err := tp.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
-			return fmt.Errorf("proxy: %w", err)
-		}
-	}
-	for _, target := range dep.Extensions {
-		if err := tp.addOrValidateNestedTarget(target, visiting, reservedEndpoints); err != nil {
-			return fmt.Errorf("extension: %w", err)
-		}
-	}
-	return nil
-}
-
-func (tp *Topology) addOrValidateNestedTarget(target config.DepTarget, visiting map[string]bool, reservedEndpoints map[string]string) error {
-	if err := config.ValidateDepTarget(target); err != nil {
-		return err
-	}
-	if target.Ref != "" {
-		serviceName, _ := target.RefPath()
-		return tp.validateServiceRef(serviceName, visiting)
-	}
-	return tp.addInlineService(target.InlineService(), visiting, reservedEndpoints)
 }
 
 func (tp *Topology) usedEndpoints() map[string]string {
@@ -292,40 +172,40 @@ func endpointKey(endpoint message.Endpoint) (string, error) {
 }
 
 // SetService updates an existing service in the topology configuration.
-func (tp *Topology) SetService(service config.Service) error {
+func (tp *Topology) SetService(record config.ServiceRecord) error {
 	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
-	if len(service.Name) == 0 {
+	if len(record.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
-	if err := config.ValidateServiceType(service.Type); err != nil {
-		return fmt.Errorf("config.ValidateServiceType('%s'): %w", service.Type, err)
+	if err := record.ValidateTypes(); err != nil {
+		return fmt.Errorf("record.ValidateTypes('%s'): %w", record.Name, err)
 	}
 
-	if service.Type == config.IndependentType {
-		if err := tp.setIndependentService(service); err != nil {
+	if record.Type == config.IndependentType {
+		if err := tp.setIndependentService(record); err != nil {
 			return err
 		}
 
 		return tp.config.Save()
 	}
 
-	if _, err := tp.config.GetService(service.Name); err != nil {
-		return fmt.Errorf("tp.config.GetService('%s'): %w", service.Name, err)
+	if _, err := tp.config.GetService(record.Name); err != nil {
+		return fmt.Errorf("tp.config.GetService('%s'): %w", record.Name, err)
 	}
 
-	if err := tp.config.SetService(service); err != nil {
+	if err := tp.config.SetService(record); err != nil {
 		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
 	return tp.config.Save()
 }
 
-func (tp *Topology) setIndependentService(service config.Service) error {
+func (tp *Topology) setIndependentService(record config.ServiceRecord) error {
 	current, err := tp.config.GetByType(config.IndependentType)
 	if err != nil {
-		if err := tp.config.SetService(service); err != nil {
+		if err := tp.config.SetService(record); err != nil {
 			return fmt.Errorf("tp.config.SetService: %w", err)
 		}
 		return nil
@@ -333,7 +213,7 @@ func (tp *Topology) setIndependentService(service config.Service) error {
 
 	topologyHandler, err := current.HandlerByCategory(TopologyHandlerCategory)
 	if err == nil {
-		nextTopologyHandler, err := service.HandlerByCategory(TopologyHandlerCategory)
+		nextTopologyHandler, err := record.HandlerByCategory(TopologyHandlerCategory)
 		if err != nil {
 			nextTopologyHandler = config.Handler{
 				Type:     config.HandlerType(TopologySocketType),
@@ -341,16 +221,16 @@ func (tp *Topology) setIndependentService(service config.Service) error {
 			}
 		}
 		nextTopologyHandler.Endpoint = topologyHandler.Endpoint
-		service.SetHandler(nextTopologyHandler)
+		record.SetHandler(nextTopologyHandler)
 	}
 
-	if current.Name != service.Name {
+	if current.Name != record.Name {
 		if err := tp.config.RemoveService(current.Name); err != nil {
 			return fmt.Errorf("tp.config.RemoveService('%s'): %w", current.Name, err)
 		}
 	}
 
-	if err := tp.config.SetService(service); err != nil {
+	if err := tp.config.SetService(record); err != nil {
 		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
@@ -414,7 +294,7 @@ func (tp *Topology) StopService(serviceName string) error {
 		return fmt.Errorf("service('%s') is independent service, impossible to stop since you are now using it", serviceName)
 	}
 
-	node, err := tp.newServiceManagerClient(&service)
+	node, err := tp.newServiceManagerClient(&service.Service)
 	if err != nil {
 		return err
 	}
@@ -464,7 +344,7 @@ func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
-	node, err := tp.newServiceManagerClient(&service)
+	node, err := tp.newServiceManagerClient(&service.Service)
 	if err != nil {
 		return false, err
 	}
@@ -572,7 +452,7 @@ func (tp *Topology) StartService(serviceName string, optionalParent ...string) (
 		return "", fmt.Errorf("empty parent")
 	}
 
-	node, err := tp.newServiceManagerClient(&serviceConfig)
+	node, err := tp.newServiceManagerClient(&serviceConfig.Service)
 	if err != nil {
 		return "", err
 	}

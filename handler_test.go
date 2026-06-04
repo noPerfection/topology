@@ -97,7 +97,7 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 		t.Fatalf("newHandler: %v", err)
 	}
 
-	err = handler.AddService(config.InlineTarget(config.Service{
+	err = handler.AddService(config.NewServiceRecord(config.Service{
 		Type: config.ProxyType,
 		Name: "pre-start-service",
 		Handlers: []config.Handler{
@@ -120,8 +120,8 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 func (test *TestHandlerSuite) TestTopologyInterfaceAfterStartBlocked() {
 	s := test.Require
 
-	s().Error(test.depHandler.AddService(config.RefTarget("blocked")))
-	s().Error(test.depHandler.SetService(config.Service{Name: "blocked", Type: config.ProxyType}))
+	s().Error(test.depHandler.AddService(config.NewServiceRecord(config.Service{Name: "blocked", Type: config.ProxyType})))
+	s().Error(test.depHandler.SetService(config.NewServiceRecord(config.Service{Name: "blocked", Type: config.ProxyType})))
 	s().Error(test.depHandler.RemoveService("blocked"))
 	_, err := test.depHandler.StartService("blocked")
 	s().Error(err)
