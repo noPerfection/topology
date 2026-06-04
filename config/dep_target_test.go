@@ -186,7 +186,7 @@ func TestDepTargetValidate(t *testing.T) {
 	if err := ValidateDepTarget(DepTarget{}); err == nil {
 		t.Fatal("ValidateDepTarget empty returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{Ref: "a", ServiceRecord: NewServiceRecord(*New("b", ProxyType))}); err == nil {
+	if err := ValidateDepTarget(DepTarget{Ref: "a", ServiceRecord: NewServiceRecord(Service{Name: "b", Type: ProxyType})}); err == nil {
 		t.Fatal("ValidateDepTarget ref and record returned nil error")
 	}
 	if err := ValidateDepTarget(DepTarget{ServiceRecord: ServiceRecord{}}); err == nil {

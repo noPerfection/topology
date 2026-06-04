@@ -108,15 +108,6 @@ func (p *Proxy) ValidateTypes() error {
 	return nil
 }
 
-// New generates a service configuration.
-func New(name string, serviceType Type) *Service {
-	return &Service{
-		Type:     serviceType,
-		Name:     name,
-		Handlers: make([]Handler, 0),
-	}
-}
-
 // ValidateService validates the service metadata and endpoint bootstrap settings.
 func ValidateService(service Service) error {
 	if len(service.Name) == 0 {
@@ -168,6 +159,10 @@ func ValidateService(service Service) error {
 
 	return nil
 }
+
+TODO: 
+The following methods should be for ServiceRecord, not Service.
+How to work with the handlers then?
 
 // ValidateTypes validates the parameters of the service.
 func (s *Service) ValidateTypes() error {

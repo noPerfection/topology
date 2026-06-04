@@ -75,7 +75,7 @@ if err := a.Save(); err != nil {
 
 ## Service Types
 
-Use `config.New(name, serviceType)` to create a service skeleton, then fill handlers and command dependency metadata.
+Create a `config.Service` or `config.Proxy` struct directly, then fill handlers and command dependency metadata.
 
 Supported service types:
 

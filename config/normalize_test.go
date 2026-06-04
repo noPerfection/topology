@@ -27,7 +27,7 @@ func TestNormalizeInlineService(t *testing.T) {
 							{
 								Name: "call-user-api",
 								Proxies: []DepTarget{
-									ServiceTarget(*New("nested_proxy", ProxyType)),
+									ServiceTarget(Service{Name: "nested_proxy", Type: ProxyType}),
 								},
 							},
 						},

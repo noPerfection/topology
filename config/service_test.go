@@ -25,7 +25,11 @@ func testService() (*Service, Handler, Handler, Handler) {
 		Endpoint: message.NewEndpoint("handler_3", 4103),
 	}
 
-	return New("service_id", IndependentType), handlerOfType, handler2OfType, handlerOfType2
+	return &Service{
+		Type:     IndependentType,
+		Name:     "service_id",
+		Handlers: make([]Handler, 0),
+	}, handlerOfType, handler2OfType, handlerOfType2
 }
 
 func TestServiceValidateTypes(t *testing.T) {

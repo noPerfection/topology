@@ -25,8 +25,8 @@ func TestLoadMissingFile(t *testing.T) {
 
 func TestGetService(t *testing.T) {
 	a := NoPerfection{}
-	sample := New("api", IndependentType)
-	if err := a.SetService(NewServiceRecord(*sample)); err != nil {
+	sample := Service{Name: "api", Type: IndependentType}
+	if err := a.SetService(NewServiceRecord(sample)); err != nil {
 		t.Fatalf("SetService: %v", err)
 	}
 
@@ -46,9 +46,9 @@ func TestGetService(t *testing.T) {
 func TestGetByType(t *testing.T) {
 	a := NoPerfection{}
 	services := []Service{
-		*New("api", IndependentType),
-		*New("worker", IndependentType),
-		*New("proxy", ProxyType),
+		{Name: "api", Type: IndependentType},
+		{Name: "worker", Type: IndependentType},
+		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
 		if err := a.SetService(NewServiceRecord(s)); err != nil {
@@ -75,9 +75,9 @@ func TestGetByType(t *testing.T) {
 func TestFilterByType(t *testing.T) {
 	a := NoPerfection{}
 	services := []Service{
-		*New("api", IndependentType),
-		*New("worker", IndependentType),
-		*New("proxy", ProxyType),
+		{Name: "api", Type: IndependentType},
+		{Name: "worker", Type: IndependentType},
+		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
 		if err := a.SetService(NewServiceRecord(s)); err != nil {
@@ -110,9 +110,9 @@ func TestFilterByType(t *testing.T) {
 func TestCountByType(t *testing.T) {
 	a := NoPerfection{}
 	services := []Service{
-		*New("api", IndependentType),
-		*New("worker", IndependentType),
-		*New("proxy", ProxyType),
+		{Name: "api", Type: IndependentType},
+		{Name: "worker", Type: IndependentType},
+		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
 		if err := a.SetService(NewServiceRecord(s)); err != nil {
@@ -133,20 +133,20 @@ func TestCountByType(t *testing.T) {
 
 func TestSetService(t *testing.T) {
 	a := NoPerfection{}
-	first := New("api", IndependentType)
-	second := New("proxy", ProxyType)
+	first := Service{Name: "api", Type: IndependentType}
+	second := Service{Name: "proxy", Type: ProxyType}
 
-	if err := a.SetService(NewServiceRecord(*first)); err != nil {
+	if err := a.SetService(NewServiceRecord(first)); err != nil {
 		t.Fatalf("SetService first: %v", err)
 	}
-	if err := a.SetService(NewServiceRecord(*second)); err != nil {
+	if err := a.SetService(NewServiceRecord(second)); err != nil {
 		t.Fatalf("SetService second: %v", err)
 	}
 	if len(a.Services) != 2 {
 		t.Fatalf("len(Services) = %d, want 2", len(a.Services))
 	}
 
-	updated := *first
+	updated := first
 	updated.StartCommand = "go run ./cmd/api"
 	if err := a.SetService(NewServiceRecord(updated)); err != nil {
 		t.Fatalf("SetService update: %v", err)
@@ -166,12 +166,12 @@ func TestSetService(t *testing.T) {
 
 func TestRemoveService(t *testing.T) {
 	a := NoPerfection{}
-	first := New("api", IndependentType)
-	second := New("proxy", ProxyType)
-	if err := a.SetService(NewServiceRecord(*first)); err != nil {
+	first := Service{Name: "api", Type: IndependentType}
+	second := Service{Name: "proxy", Type: ProxyType}
+	if err := a.SetService(NewServiceRecord(first)); err != nil {
 		t.Fatalf("SetService first: %v", err)
 	}
-	if err := a.SetService(NewServiceRecord(*second)); err != nil {
+	if err := a.SetService(NewServiceRecord(second)); err != nil {
 		t.Fatalf("SetService second: %v", err)
 	}
 
@@ -199,15 +199,18 @@ func TestLoadSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load missing file: %v", err)
 	}
-	sample := New("api", IndependentType)
-	sample.Handlers = []Handler{
-		{
-			Type:     ReplierType,
-			Category: "api",
-			Endpoint: message.NewEndpoint("api_1", 4101),
+	sample := Service{
+		Name: "api",
+		Type: IndependentType,
+		Handlers: []Handler{
+			{
+				Type:     ReplierType,
+				Category: "api",
+				Endpoint: message.NewEndpoint("api_1", 4101),
+			},
 		},
 	}
-	if err := original.SetService(NewServiceRecord(*sample)); err != nil {
+	if err := original.SetService(NewServiceRecord(sample)); err != nil {
 		t.Fatalf("SetService: %v", err)
 	}
 
