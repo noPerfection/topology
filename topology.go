@@ -89,7 +89,8 @@ func (tp *Topology) AddService(target config.DepTarget) error {
 	}
 
 	if target.Ref != "" {
-		if err := tp.validateServiceRef(target.Ref, make(map[string]bool)); err != nil {
+		serviceName, _ := target.RefPath()
+		if err := tp.validateServiceRef(serviceName, make(map[string]bool)); err != nil {
 			return err
 		}
 		return nil
@@ -166,7 +167,8 @@ func (tp *Topology) validateDepTargetExists(target config.DepTarget, visiting ma
 		return err
 	}
 	if target.Ref != "" {
-		return tp.validateServiceRef(target.Ref, visiting)
+		serviceName, _ := target.RefPath()
+		return tp.validateServiceRef(serviceName, visiting)
 	}
 	service := target.InlineService()
 	if _, err := tp.config.GetService(service.Name); err != nil {
@@ -241,7 +243,8 @@ func (tp *Topology) addOrValidateNestedTarget(target config.DepTarget, visiting 
 		return err
 	}
 	if target.Ref != "" {
-		return tp.validateServiceRef(target.Ref, visiting)
+		serviceName, _ := target.RefPath()
+		return tp.validateServiceRef(serviceName, visiting)
 	}
 	return tp.addInlineService(target.InlineService(), visiting, reservedEndpoints)
 }

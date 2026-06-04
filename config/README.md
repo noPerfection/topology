@@ -100,25 +100,91 @@ Each handler must define a `category`, which consumers can use to group and clas
 
 Each `handler-deps` or `command-deps` entry must have a `name` and at least one routing target: `proxies` and/or `extensions`. In `handler-deps`, `name` is the handler category. In `command-deps`, `name` is the command name.
 
-Each entry in `proxies` or `extensions` is a `DepTarget`: either a service name string (reference into `services`), an inline service object, or an inline proxy object. `config.Load` calls `Normalize()` to register inline targets and verify references. The JSON stays compact: a target is one value, not an object with separate `ref`/`service`/`proxy` keys.
+Each entry in `proxies` or `extensions` is a `DepTarget`. A target is exactly one of:
+
+- a **ref** string (`DepTarget.Ref`)
+- an inline **service** object (`DepTarget.Inline`)
+- an inline **proxy** object (`DepTarget.Proxy`)
+
+`config.Load` calls `Normalize()` to register inline targets and verify references. JSON stays compact: each target is one value, not an object with separate `ref` / `service` / `proxy` keys.
+
+### DepTarget `Ref`
+
+`Ref` is the stored reference path when the dependency points at an existing service in `services`. In JSON it is a single string. In Go it is `DepTarget.Ref`.
+
+Format:
+
+- `service_name` — depend on the service (any handler on that service)
+- `service_name/handler_category` — depend on one specific handler category on that service
+
+Rules:
+
+| Ref | Valid | Notes |
+|-----|-------|-------|
+| `"auth_proxy"` | yes | service name only |
+| `"auth_proxy/main"` | yes | service + handler category |
+| `""` | no | empty ref |
+| `"auth_proxy/"` | no | trailing slash, empty handler category |
+| `"/main"` | no | empty service name |
+| `"auth_proxy//main"` | no | empty path segment |
+
+Only the first `/` splits service and handler category. There is no deeper path syntax.
+
+After `Load` / `Normalize()`:
+
+- the service name must exist in `services`
+- if a handler category is present, that service must define a handler with that `category`
+
+Go helpers:
+
+```go
+// Build a ref target in code.
+config.RefTarget("auth_proxy")              // Ref: "auth_proxy"
+config.RefTarget("auth_proxy", "main")      // Ref: "auth_proxy/main"
+
+target := config.RefTarget("auth_proxy", "main")
+serviceName, handlerCategory := target.RefPath()
+// serviceName == "auth_proxy", handlerCategory == "main"
+
+target.Name() // always the service name: "auth_proxy"
+```
+
+`RefPath()` parses `DepTarget.Ref` into `(serviceName, handlerCategory)`. When the ref has no handler segment, `handlerCategory` is `""`. `Name()` returns the service name for ref, inline, and proxy targets.
+
+Example JSON:
 
 ```json
 "proxies": [
   "auth_proxy",
+  "auth_proxy/auth-proxy",
+  {
+    "type": "Extension",
+    "name": "inline_service_target",
+    "handlers": [ ... ]
+  },
   {
     "type": "Proxy",
-    "name": "inline_audit",
-    "handlers": [
-      {
-        "type": "Replier",
-        "category": "audit",
-        "endpoint": {"id": "audit_1", "port": 4301},
-        "outbounds": ["audit_sink"]
-      }
-    ]
+    "name": "inline_proxy_target",
+    "handlers": [ ... ]
+  }
+],
+"extensions": [
+  "user_service",
+  "user_service/user-service",
+  {
+    "type": "Extension",
+    "name": "inline_extension_target",
+    "handlers": [ ... ]
+  },
+  {
+    "type": "Proxy",
+    "name": "inline_extension_proxy_target",
+    "handlers": [ ... ]
   }
 ]
 ```
+
+See [examples/app-proxy-chain.json](examples/app-proxy-chain.json): the `dep_target_catalog` service lists all four target forms in both `proxies` and `extensions`. The rest of the file shows a smaller realistic chain.
 
 Proxy chains can be declared in service-level `handler-deps` metadata or per-handler `command-deps` metadata. Terminal services that only receive routed traffic do not need either section.
 

@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
-// DepTarget is either a service name reference, an inline Service definition,
+// DepTarget is either a service reference path, an inline Service definition,
 // or an inline Proxy definition.
 type DepTarget struct {
 	Ref    string
@@ -15,8 +16,13 @@ type DepTarget struct {
 }
 
 // RefTarget returns a dependency on an existing service by name.
-func RefTarget(name string) DepTarget {
-	return DepTarget{Ref: name}
+// An optional handler category selects service/handler.
+func RefTarget(service string, handlerCategory ...string) DepTarget {
+	ref := service
+	if len(handlerCategory) > 0 && handlerCategory[0] != "" {
+		ref = service + "/" + handlerCategory[0]
+	}
+	return DepTarget{Ref: ref}
 }
 
 // InlineTarget returns a dependency on an inline service definition.
@@ -31,6 +37,19 @@ func ProxyTarget(proxy Proxy) DepTarget {
 	return DepTarget{Proxy: &p}
 }
 
+// RefPath returns the referenced service name and handler category.
+// When the ref has no handler category, handlerCategory is empty.
+func (t DepTarget) RefPath() (serviceName string, handlerCategory string) {
+	if t.Ref == "" {
+		return "", ""
+	}
+	service, handlerCategory, err := parseRefPath(t.Ref)
+	if err != nil {
+		return "", ""
+	}
+	return service, handlerCategory
+}
+
 // Name returns the service name for this target (ref or inline).
 func (t DepTarget) Name() string {
 	if t.Inline != nil {
@@ -39,7 +58,8 @@ func (t DepTarget) Name() string {
 	if t.Proxy != nil {
 		return t.Proxy.Name
 	}
-	return t.Ref
+	service, _ := t.RefPath()
+	return service
 }
 
 // InlineService returns the service view for an inline service or proxy.
@@ -78,14 +98,14 @@ func (t *DepTarget) UnmarshalJSON(data []byte) error {
 	}
 
 	if trimmed[0] == '"' {
-		var name string
-		if err := json.Unmarshal(trimmed, &name); err != nil {
+		var ref string
+		if err := json.Unmarshal(trimmed, &ref); err != nil {
 			return fmt.Errorf("dep target ref: %w", err)
 		}
-		if name == "" {
-			return fmt.Errorf("dep target ref is empty")
+		if _, _, err := parseRefPath(ref); err != nil {
+			return err
 		}
-		t.Ref = name
+		t.Ref = ref
 		t.Inline = nil
 		t.Proxy = nil
 		return nil
@@ -124,6 +144,30 @@ func (t *DepTarget) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func parseRefPath(ref string) (service string, handlerCategory string, err error) {
+	if ref == "" {
+		return "", "", fmt.Errorf("dep target ref is empty")
+	}
+	if strings.HasSuffix(ref, "/") {
+		return "", "", fmt.Errorf("dep target ref %q has empty handler category", ref)
+	}
+	if strings.Contains(ref, "//") {
+		return "", "", fmt.Errorf("dep target ref %q has empty path segment", ref)
+	}
+
+	service, handlerCategory, ok := strings.Cut(ref, "/")
+	if !ok {
+		return ref, "", nil
+	}
+	if service == "" {
+		return "", "", fmt.Errorf("dep target service name is empty")
+	}
+	if handlerCategory == "" {
+		return "", "", fmt.Errorf("dep target handler category is empty")
+	}
+	return service, handlerCategory, nil
+}
+
 // ValidateDepTarget checks that the target is exactly one of ref, inline service, or inline proxy.
 func ValidateDepTarget(t DepTarget) error {
 	hasRef := t.Ref != ""
@@ -139,6 +183,9 @@ func ValidateDepTarget(t DepTarget) error {
 		return fmt.Errorf("dep target must set exactly one of ref, inline service, or inline proxy")
 	}
 	if hasRef {
+		if _, _, err := parseRefPath(t.Ref); err != nil {
+			return err
+		}
 		return nil
 	}
 	if hasInline {

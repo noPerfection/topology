@@ -13,7 +13,14 @@ func TestDepTargetJSONRef(t *testing.T) {
 		t.Fatalf("Unmarshal ref: %v", err)
 	}
 	if target.Ref != "auth_proxy" {
-		t.Fatalf("Ref = %q, want auth_proxy", target.Ref)
+		t.Fatalf("Path = %q, want auth_proxy", target.Ref)
+	}
+	service, category := target.RefPath()
+	if service != "auth_proxy" || category != "" {
+		t.Fatalf("Ref() = (%q, %q), want (auth_proxy, \"\")", service, category)
+	}
+	if target.Name() != "auth_proxy" {
+		t.Fatalf("Name() = %q, want auth_proxy", target.Name())
 	}
 	if target.Inline != nil {
 		t.Fatal("Inline is set for ref target")
@@ -28,6 +35,67 @@ func TestDepTargetJSONRef(t *testing.T) {
 	}
 	if string(out) != `"auth_proxy"` {
 		t.Fatalf("Marshal ref = %s, want \"auth_proxy\"", string(out))
+	}
+}
+
+func TestDepTargetJSONRefWithHandler(t *testing.T) {
+	data := []byte(`"auth_proxy/main"`)
+
+	var target DepTarget
+	if err := json.Unmarshal(data, &target); err != nil {
+		t.Fatalf("Unmarshal ref: %v", err)
+	}
+	service, category := target.RefPath()
+	if service != "auth_proxy" || category != "main" {
+		t.Fatalf("Ref() = (%q, %q), want (auth_proxy, main)", service, category)
+	}
+	if target.Name() != "auth_proxy" {
+		t.Fatalf("Name() = %q, want auth_proxy", target.Name())
+	}
+
+	out, err := json.Marshal(target)
+	if err != nil {
+		t.Fatalf("Marshal ref path: %v", err)
+	}
+	if string(out) != `"auth_proxy/main"` {
+		t.Fatalf("Marshal ref path = %s, want \"auth_proxy/main\"", string(out))
+	}
+}
+
+func TestDepTargetRefPathInvalid(t *testing.T) {
+	for _, ref := range []string{"", "service_name/", "/main", "service_name//main"} {
+		if err := ValidateDepTarget(DepTarget{Ref: ref}); err == nil {
+			t.Fatalf("ValidateDepTarget(%q) returned nil error", ref)
+		}
+
+		data, err := json.Marshal(ref)
+		if err != nil {
+			t.Fatalf("Marshal test ref %q: %v", ref, err)
+		}
+		var target DepTarget
+		if err := json.Unmarshal(data, &target); err == nil {
+			t.Fatalf("Unmarshal invalid ref %q returned nil error", ref)
+		}
+	}
+}
+
+func TestRefTargetBuilder(t *testing.T) {
+	serviceOnly := RefTarget("auth_proxy")
+	service, category := serviceOnly.RefPath()
+	if service != "auth_proxy" || category != "" {
+		t.Fatalf("service-only Ref() = (%q, %q), want (auth_proxy, \"\")", service, category)
+	}
+	if serviceOnly.Ref != "auth_proxy" {
+		t.Fatalf("service-only path = %q, want auth_proxy", serviceOnly.Ref)
+	}
+
+	target := RefTarget("auth_proxy", "main")
+	service, category = target.RefPath()
+	if service != "auth_proxy" || category != "main" {
+		t.Fatalf("Ref() = (%q, %q), want (auth_proxy, main)", service, category)
+	}
+	if target.Ref != "auth_proxy/main" {
+		t.Fatalf("stored path = %q, want auth_proxy/main", target.Ref)
 	}
 }
 
@@ -47,7 +115,7 @@ func TestDepTargetJSONInlineService(t *testing.T) {
 		t.Fatalf("Unmarshal inline: %v", err)
 	}
 	if target.Ref != "" {
-		t.Fatalf("Ref = %q, want empty", target.Ref)
+		t.Fatalf("Path = %q, want empty", target.Ref)
 	}
 	if target.Inline == nil || target.Inline.Name != "inline_worker" {
 		t.Fatalf("Inline service = %#v, want inline_worker", target.Inline)
@@ -88,7 +156,7 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 		t.Fatalf("Unmarshal inline proxy: %v", err)
 	}
 	if target.Ref != "" {
-		t.Fatalf("Ref = %q, want empty", target.Ref)
+		t.Fatalf("Path = %q, want empty", target.Ref)
 	}
 	if target.Inline != nil {
 		t.Fatalf("Inline service = %#v, want nil", target.Inline)

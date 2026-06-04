@@ -2,13 +2,107 @@
   "services": [
     {
       "type": "Independent",
+      "name": "dep_target_catalog",
+      "handlers": [
+        {
+          "type": "Replier",
+          "category": "catalog",
+          "endpoint": {
+            "id": "catalog_1",
+            "port": 4999
+          },
+          "command-deps": [
+            {
+              "name": "all-target-forms",
+              "proxies": [
+                "auth_proxy",
+                "auth_proxy/auth-proxy",
+                {
+                  "type": "Extension",
+                  "name": "inline_service_target",
+                  "handlers": [
+                    {
+                      "type": "Replier",
+                      "category": "inline-service",
+                      "endpoint": {
+                        "id": "inline_service_1",
+                        "port": 4991
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "Proxy",
+                  "name": "inline_proxy_target",
+                  "handlers": [
+                    {
+                      "type": "Replier",
+                      "category": "inline-proxy",
+                      "endpoint": {
+                        "id": "inline_proxy_1",
+                        "port": 4992
+                      },
+                      "routes": [
+                        "catalog"
+                      ],
+                      "outbounds": [
+                        "user_service"
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "extensions": [
+                "user_service",
+                "user_service/user-service",
+                {
+                  "type": "Extension",
+                  "name": "inline_extension_target",
+                  "handlers": [
+                    {
+                      "type": "Replier",
+                      "category": "inline-extension",
+                      "endpoint": {
+                        "id": "inline_extension_1",
+                        "port": 4993
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "Proxy",
+                  "name": "inline_extension_proxy_target",
+                  "handlers": [
+                    {
+                      "type": "Replier",
+                      "category": "inline-extension-proxy",
+                      "endpoint": {
+                        "id": "inline_extension_proxy_1",
+                        "port": 4994
+                      },
+                      "routes": [
+                        "catalog"
+                      ],
+                      "outbounds": [
+                        "audit_proxy/audit-proxy"
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "Independent",
       "name": "main",
       "handler-deps": [
         {
           "name": "public-api",
           "proxies": [
-            "auth_proxy",
-            "audit_proxy"
+            "auth_proxy"
           ]
         }
       ],
@@ -19,7 +113,15 @@
           "endpoint": {
             "id": "localhost",
             "port": 4101
-          }
+          },
+          "command-deps": [
+            {
+              "name": "authorize",
+              "proxies": [
+                "auth_proxy/auth-proxy"
+              ]
+            }
+          ]
         }
       ]
     },
@@ -60,7 +162,7 @@
             {
               "name": "record-audit",
               "extensions": [
-                "user_service"
+                "user_service/user-service"
               ]
             }
           ]

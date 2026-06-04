@@ -125,6 +125,24 @@ func (a *NoPerfection) validateDepServiceRefs(dep DepService) error {
 }
 
 func (a *NoPerfection) validateDepRef(target DepTarget) error {
+	if target.Ref != "" {
+		serviceName, handlerCategory := target.RefPath()
+		if serviceName == "" {
+			return fmt.Errorf("dep target service name is empty")
+		}
+		service, err := a.GetService(serviceName)
+		if err != nil {
+			return fmt.Errorf("service %q not found: %w", serviceName, err)
+		}
+		if handlerCategory == "" {
+			return nil
+		}
+		if _, err := service.HandlerByCategory(handlerCategory); err != nil {
+			return fmt.Errorf("service %q handler category %q: %w", serviceName, handlerCategory, err)
+		}
+		return nil
+	}
+
 	name := target.Name()
 	if name == "" {
 		return fmt.Errorf("dep target name is empty")

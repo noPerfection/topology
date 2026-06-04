@@ -151,6 +151,93 @@ func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 	}
 }
 
+func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
+	app := NoPerfection{
+		Services: []Service{
+			{
+				Type: IndependentType,
+				Name: "api",
+				Handlers: []Handler{
+					{
+						Type:     ReplierType,
+						Category: "api",
+						Endpoint: message.NewEndpoint("api_1", 4101),
+						CommandDeps: []DepService{
+							{
+								Name:    "route",
+								Proxies: []DepTarget{RefTarget("auth_proxy", "main")},
+							},
+						},
+					},
+				},
+			},
+			{
+				Type: ProxyType,
+				Name: "auth_proxy",
+				Handlers: []Handler{
+					{
+						Type:     ReplierType,
+						Category: "main",
+						Endpoint: message.NewEndpoint("auth_1", 4301),
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.Normalize(); err != nil {
+		t.Fatalf("Normalize with ref path: %v", err)
+	}
+
+	target := app.Services[0].Handlers[0].CommandDeps[0].Proxies[0]
+	if target.Ref != "auth_proxy/main" {
+		t.Fatalf("ref path = %q, want auth_proxy/main", target.Ref)
+	}
+	serviceName, category := target.RefPath()
+	if serviceName != "auth_proxy" || category != "main" {
+		t.Fatalf("Ref() = (%q, %q), want (auth_proxy, main)", serviceName, category)
+	}
+}
+
+func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
+	app := NoPerfection{
+		Services: []Service{
+			{
+				Type: IndependentType,
+				Name: "api",
+				Handlers: []Handler{
+					{
+						Type:     ReplierType,
+						Category: "api",
+						Endpoint: message.NewEndpoint("api_1", 4101),
+						CommandDeps: []DepService{
+							{
+								Name:    "route",
+								Proxies: []DepTarget{RefTarget("auth_proxy", "missing")},
+							},
+						},
+					},
+				},
+			},
+			{
+				Type: ProxyType,
+				Name: "auth_proxy",
+				Handlers: []Handler{
+					{
+						Type:     ReplierType,
+						Category: "main",
+						Endpoint: message.NewEndpoint("auth_1", 4301),
+					},
+				},
+			},
+		},
+	}
+
+	if err := app.Normalize(); err == nil {
+		t.Fatal("Normalize with missing ref path handler category returned nil error")
+	}
+}
+
 func TestLoadWithMixedDepTargets(t *testing.T) {
 	dir := t.TempDir()
 	filePath := filepath.Join(dir, "app.json")
@@ -226,13 +313,34 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 		t.Fatalf("len(Proxies) = %d, want 2", len(dep.Proxies))
 	}
 	if dep.Proxies[0].Ref != "auth_proxy" {
-		t.Fatalf("first proxy ref = %q, want auth_proxy", dep.Proxies[0].Ref)
+		t.Fatalf("first proxy path = %q, want auth_proxy", dep.Proxies[0].Ref)
 	}
 	if dep.Proxies[1].Proxy == nil || dep.Proxies[1].Proxy.Name != "inline_proxy" {
 		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Proxy)
 	}
 	handlerDep := app.Services[0].HandlerDeps[0]
 	if handlerDep.Proxies[0].Ref != "auth_proxy" {
-		t.Fatalf("handler-deps first proxy ref = %q, want auth_proxy", handlerDep.Proxies[0].Ref)
+		t.Fatalf("handler-deps first proxy path = %q, want auth_proxy", handlerDep.Proxies[0].Ref)
+	}
+}
+
+func TestLoadProxyChainExample(t *testing.T) {
+	app, err := Load(filepath.Join("examples", "app-proxy-chain.json"))
+	if err != nil {
+		t.Fatalf("Load app-proxy-chain example: %v", err)
+	}
+
+	for _, name := range []string{
+		"auth_proxy",
+		"audit_proxy",
+		"inline_service_target",
+		"inline_proxy_target",
+		"inline_extension_target",
+		"inline_extension_proxy_target",
+		"user_service",
+	} {
+		if _, err := app.GetService(name); err != nil {
+			t.Fatalf("GetService(%q): %v", name, err)
+		}
 	}
 }
