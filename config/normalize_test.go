@@ -228,8 +228,8 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 	if dep.Proxies[0].Ref != "auth_proxy" {
 		t.Fatalf("first proxy ref = %q, want auth_proxy", dep.Proxies[0].Ref)
 	}
-	if dep.Proxies[1].Inline == nil || dep.Proxies[1].Inline.Name != "inline_proxy" {
-		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Inline)
+	if dep.Proxies[1].Proxy == nil || dep.Proxies[1].Proxy.Name != "inline_proxy" {
+		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Proxy)
 	}
 	handlerDep := app.Services[0].HandlerDeps[0]
 	if handlerDep.Proxies[0].Ref != "auth_proxy" {

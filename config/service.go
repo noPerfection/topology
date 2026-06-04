@@ -22,6 +22,12 @@ type Handler struct {
 	CommandDeps []DepService     `json:"command-deps,omitempty"`
 }
 
+type ProxyHandler struct {
+	Handler
+	Routes    []string    `json:"routes,omitempty"` // whitelist routes
+	Outbounds []DepTarget `json:"outbounds"`
+}
+
 // Service type defined in the config.
 //
 // Fields
@@ -37,6 +43,43 @@ type Service struct {
 	HandlerDeps  []DepService      `json:"handler-deps,omitempty"`
 	Handlers     []Handler         `json:"handlers"`
 	Parameters   datatype.KeyValue `json:"parameters,omitempty"`
+}
+
+type Proxy struct {
+	Service
+	Handlers []ProxyHandler `json:"handlers"`
+}
+
+// ServiceConfig returns a Service view of the proxy for registration and validation.
+func (p *Proxy) ServiceConfig() *Service {
+	if p == nil {
+		return nil
+	}
+	service := p.Service
+	service.Handlers = make([]Handler, len(p.Handlers))
+	for i, handler := range p.Handlers {
+		service.Handlers[i] = handler.Handler
+	}
+	return &service
+}
+
+// ValidateTypes validates the proxy and its outbound targets.
+func (p *Proxy) ValidateTypes() error {
+	if p == nil {
+		return fmt.Errorf("proxy struct is nil")
+	}
+	service := p.ServiceConfig()
+	if err := ValidateService(*service); err != nil {
+		return err
+	}
+	for i, handler := range p.Handlers {
+		for j, target := range handler.Outbounds {
+			if err := ValidateDepTarget(target); err != nil {
+				return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
+			}
+		}
+	}
+	return nil
 }
 
 // New generates a service configuration.

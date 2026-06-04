@@ -25,9 +25,9 @@ type TestHandlerSuite struct {
 	logger            *log.Logger
 	depHandler        *Handler // the manager to test
 	depHandlerManager *sync_replier.Client
-	url               string        // dependency source code
-	id                string        // the id of the dependency
-	parent            *ParentClient // the info about the service to which dependency should connect
+	url               string // dependency source code
+	id                string // the id of the dependency
+	parent            string // the service name that dependency should connect back to
 
 	client *client.Socket // imitating the service
 }
@@ -58,11 +58,7 @@ func (test *TestHandlerSuite) SetupTest() {
 	test.url = "github.com/noPerfection/test-manager"
 
 	test.id = "test-manager"
-	test.parent = &ParentClient{
-		ServiceUrl: "topology",
-		Id:         "parent",
-		Port:       120,
-	}
+	test.parent = "parent"
 
 	handlerCfg := HandlerConfig()
 	socket, err := client.New(handlerCfg.Id, handlerCfg.Port, client.HandlerType(handlerCfg.Type))

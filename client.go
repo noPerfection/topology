@@ -154,12 +154,12 @@ func (c *Client) RemoveService(serviceName string) error {
 }
 
 // StartService starts the dependency service and returns the generated topology id.
-func (c *Client) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
+func (c *Client) StartService(serviceName string, optionalParent ...string) (string, error) {
 	if len(optionalParent) > 1 {
 		return "", fmt.Errorf("too many optional parameters, either no parameter or 1 parameter required")
 	}
-	if len(optionalParent) == 1 && optionalParent[0] == nil {
-		return "", fmt.Errorf("nil parent")
+	if len(optionalParent) == 1 && optionalParent[0] == "" {
+		return "", fmt.Errorf("empty parent")
 	}
 
 	parameters := datatype.New().Set("service", serviceName)

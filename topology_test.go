@@ -21,11 +21,11 @@ type TestDepManagerSuite struct {
 	suite.Suite
 
 	logger       *log.Logger
-	topology     *Topology     // the topology to test
-	currentDir   string        // executable to store the binaries and source codes
-	url          string        // dependency source code
-	id           string        // the id of the dependency
-	parent       *ParentClient // the info about the service to which dependency should connect
+	topology     *Topology // the topology to test
+	currentDir   string    // executable to store the binaries and source codes
+	url          string    // dependency source code
+	id           string    // the id of the dependency
+	parent       string    // the service name that dependency should connect back to
 	localTestDir string
 }
 
@@ -89,11 +89,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 	test.url = "github.com/noPerfection/test-manager"
 
 	test.id = "test-manager"
-	test.parent = &ParentClient{
-		ServiceUrl: "topology",
-		Id:         "parent",
-		Port:       120,
-	}
+	test.parent = "parent"
 
 	test.localTestDir = filepath.Join("_test_services")
 }
@@ -302,8 +298,8 @@ func (test *TestDepManagerSuite) Test_20_Run() {
 
 	_, err = test.topology.StartService("", test.parent)
 	s().Error(err) // missing service name
-	_, err = test.topology.StartService(test.id, nil)
-	s().Error(err) // missing parent
+	_, err = test.topology.StartService(test.id, "")
+	s().Error(err) // empty parent
 
 	test.setServiceStartCommand("no-command", "")
 	_, err = test.topology.StartService("no-command", test.parent)

@@ -85,10 +85,11 @@ func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string
 		return nil
 	}
 
-	if err := a.normalizeService(target.Inline, visiting); err != nil {
+	service := target.InlineService()
+	if err := a.normalizeService(service, visiting); err != nil {
 		return err
 	}
-	return a.SetService(*target.Inline)
+	return a.SetService(*service)
 }
 
 func (a *NoPerfection) validateDepRefs() error {

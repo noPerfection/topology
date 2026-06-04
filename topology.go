@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/protocol/message"
 	"github.com/noPerfection/topology/config"
@@ -17,8 +16,8 @@ type NodeInterface interface {
 	// StopService stops the given dependency service.
 	StopService(serviceName string) error
 
-	// StartService starts the dependency service with the given parent.
-	StartService(serviceName string, optionalParent ...*ParentClient) (string, error)
+	// StartService starts the dependency service with the given parent name.
+	StartService(serviceName string, optionalParent ...string) (string, error)
 
 	// IsServiceRunning checks is the service running or not.
 	IsServiceRunning(serviceName string) (bool, error)
@@ -96,7 +95,7 @@ func (tp *Topology) AddService(target config.DepTarget) error {
 		return nil
 	}
 
-	if err := tp.addInlineService(target.Inline, make(map[string]bool), tp.usedEndpoints()); err != nil {
+	if err := tp.addInlineService(target.InlineService(), make(map[string]bool), tp.usedEndpoints()); err != nil {
 		return err
 	}
 
@@ -169,10 +168,11 @@ func (tp *Topology) validateDepTargetExists(target config.DepTarget, visiting ma
 	if target.Ref != "" {
 		return tp.validateServiceRef(target.Ref, visiting)
 	}
-	if _, err := tp.config.GetService(target.Inline.Name); err != nil {
-		return fmt.Errorf("inline service '%s' is not registered: %w", target.Inline.Name, err)
+	service := target.InlineService()
+	if _, err := tp.config.GetService(service.Name); err != nil {
+		return fmt.Errorf("inline service '%s' is not registered: %w", service.Name, err)
 	}
-	return tp.validateServiceRef(target.Inline.Name, visiting)
+	return tp.validateServiceRef(service.Name, visiting)
 }
 
 func (tp *Topology) addInlineService(service *config.Service, visiting map[string]bool, reservedEndpoints map[string]string) error {
@@ -243,7 +243,7 @@ func (tp *Topology) addOrValidateNestedTarget(target config.DepTarget, visiting 
 	if target.Ref != "" {
 		return tp.validateServiceRef(target.Ref, visiting)
 	}
-	return tp.addInlineService(target.Inline, visiting, reservedEndpoints)
+	return tp.addInlineService(target.InlineService(), visiting, reservedEndpoints)
 }
 
 func (tp *Topology) usedEndpoints() map[string]string {
@@ -549,7 +549,7 @@ func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClien
 //
 // Note that, services can crash during the initialization.
 // In that case, you should use Topology.OnStop method.
-func (tp *Topology) StartService(serviceName string, optionalParent ...*ParentClient) (string, error) {
+func (tp *Topology) StartService(serviceName string, optionalParent ...string) (string, error) {
 	if tp == nil || tp.config == nil {
 		return "", fmt.Errorf("nil config")
 	}
@@ -565,8 +565,8 @@ func (tp *Topology) StartService(serviceName string, optionalParent ...*ParentCl
 	if len(optionalParent) > 1 {
 		return "", fmt.Errorf("too many optional parameters, either no parameter or 1 parameter required")
 	}
-	if len(optionalParent) == 1 && optionalParent[0] == nil {
-		return "", fmt.Errorf("nil parent")
+	if len(optionalParent) == 1 && optionalParent[0] == "" {
+		return "", fmt.Errorf("empty parent")
 	}
 
 	node, err := tp.newServiceManagerClient(&serviceConfig)
@@ -601,12 +601,7 @@ func (tp *Topology) StartService(serviceName string, optionalParent ...*ParentCl
 	args := []string{idFlag}
 
 	if len(optionalParent) == 1 {
-		parentKv, err := datatype.NewFromInterface(optionalParent[0])
-		if err != nil {
-			tp.refreshServiceCount(process.config.Name)
-			return "", fmt.Errorf("optionalParent: datatype.NewFromInterface(parent='%v'): %w", optionalParent[0], err)
-		}
-		parentFlag := fmt.Sprintf("--parent=%s", parentKv.String())
+		parentFlag := fmt.Sprintf("--parent=%s", optionalParent[0])
 		args = append(args, parentFlag)
 	}
 

@@ -100,7 +100,7 @@ Each handler must define a `category`, which consumers can use to group and clas
 
 Each `handler-deps` or `command-deps` entry must have a `name` and at least one routing target: `proxies` and/or `extensions`. In `handler-deps`, `name` is the handler category. In `command-deps`, `name` is the command name.
 
-Each entry in `proxies` or `extensions` is a `DepTarget`: either a service name string (reference into `services`) or an inline service object. `config.Load` calls `Normalize()` to register inline services and verify references.
+Each entry in `proxies` or `extensions` is a `DepTarget`: either a service name string (reference into `services`), an inline service object, or an inline proxy object. `config.Load` calls `Normalize()` to register inline targets and verify references. The JSON stays compact: a target is one value, not an object with separate `ref`/`service`/`proxy` keys.
 
 ```json
 "proxies": [
@@ -108,7 +108,14 @@ Each entry in `proxies` or `extensions` is a `DepTarget`: either a service name 
   {
     "type": "Proxy",
     "name": "inline_audit",
-    "handlers": [ ... ]
+    "handlers": [
+      {
+        "type": "Replier",
+        "category": "audit",
+        "endpoint": {"id": "audit_1", "port": 4301},
+        "outbounds": ["audit_sink"]
+      }
+    ]
   }
 ]
 ```
