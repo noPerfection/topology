@@ -105,7 +105,7 @@ Each entry in `proxies` or `extensions` is a `DepTarget`. A target is exactly on
 - a **ref** string (`DepTarget.Ref`)
 - a **service** object (`DepTarget.Service`) containing an inline service definition
 
-`config.Load` calls `Normalize()` to register inline targets and verify references. JSON stays compact: each target is one value, not an object with separate `ref` / `service` / `proxy` keys.
+`config.Load` calls `ValidateTopology()` to validate inline targets and verify references. Inline service definitions stay inline; refs must point at services declared in `services`. JSON stays compact: each target is one value, not an object with separate `ref` / `service` / `proxy` keys.
 
 ### DepTarget `Ref`
 
@@ -129,7 +129,7 @@ Rules:
 
 Only the first `/` splits service and handler category. There is no deeper path syntax.
 
-After `Load` / `Normalize()`:
+After `Load` / `ValidateTopology()`:
 
 - the service name must exist in `services`
 - if a handler category is present, that service must define a handler with that `category`

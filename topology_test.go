@@ -201,7 +201,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 			},
 		),
 	})
-	s().Error(err)
+	s().NoError(err)
 
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,
