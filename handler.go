@@ -87,7 +87,7 @@ func (h *Handler) requireNotStarted() error {
 
 // AddService registers a service in the topology configuration before the
 // topology handler is started.
-func (h *Handler) AddService(record config.ServiceRecord) error {
+func (h *Handler) AddService(record config.Service) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (h *Handler) AddService(record config.ServiceRecord) error {
 
 // SetService updates a service in the topology configuration before the topology
 // handler is started.
-func (h *Handler) SetService(record config.ServiceRecord) error {
+func (h *Handler) SetService(record config.Service) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
@@ -139,9 +139,9 @@ func (h *Handler) StopService(serviceName string) error {
 }
 
 // Service returns a service configuration before the topology handler is started.
-func (h *Handler) Service(serviceName string) (config.ServiceRecord, error) {
+func (h *Handler) Service(serviceName string) (config.Service, error) {
 	if err := h.requireNotStarted(); err != nil {
-		return config.ServiceRecord{}, err
+		return config.Service{}, err
 	}
 	return h.topology.Service(serviceName)
 }
@@ -194,17 +194,17 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 	return req.Ok(datatype.New().Set("id", id))
 }
 
-// onAddService registers a service record in the topology configuration.
-// Requires 'service' as a ServiceRecord service or proxy object.
+// onAddService registers a service in the topology configuration.
+// Requires 'service' as a service object.
 func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
 	}
 
-	var record config.ServiceRecord
+	var record config.Service
 	if err := kv.Interface(&record); err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface('config.ServiceRecord'): %v", err))
+		return req.Fail(fmt.Sprintf("kv.Interface('config.Service'): %v", err))
 	}
 
 	if err := h.topology.AddService(record); err != nil {
@@ -215,14 +215,14 @@ func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterf
 }
 
 // onSetService updates a service in the topology configuration.
-// Requires 'service' of the config.ServiceRecord type.
+// Requires 'service' of the config.Service type.
 func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterface {
 	kv, err := req.RouteParameters().NestedValue("service")
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
 	}
 
-	var record config.ServiceRecord
+	var record config.Service
 	err = kv.Interface(&record)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))

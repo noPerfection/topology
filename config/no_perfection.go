@@ -12,7 +12,7 @@ import (
 // NoPerfection is the configuration of the entire application.
 // Consists the supported services.
 type NoPerfection struct {
-	Services []ServiceRecord `json:"services"`
+	Services []Service `json:"services"`
 	filePath string
 }
 
@@ -20,7 +20,7 @@ type NoPerfection struct {
 // If the file does not exist, it creates a new configuration with the empty services list.
 func Load(filePath string) (NoPerfection, error) {
 	appConfig := NoPerfection{
-		Services: make([]ServiceRecord, 0),
+		Services: make([]Service, 0),
 		filePath: filePath,
 	}
 
@@ -62,21 +62,21 @@ func (a NoPerfection) Save() error {
 	return nil
 }
 
-// GetService returns a service record by name from the app configuration.
+// GetService returns a service by name from the app configuration.
 // If not found, return an error.
-func (a *NoPerfection) GetService(name string) (ServiceRecord, error) {
+func (a *NoPerfection) GetService(name string) (Service, error) {
 	for i := range a.Services {
 		if a.Services[i].Name == name {
 			return a.Services[i], nil
 		}
 	}
 
-	return ServiceRecord{}, fmt.Errorf("service('%s') not found", name)
+	return Service{}, fmt.Errorf("service('%s') not found", name)
 }
 
 // GetByType returns the first service of the given type from the app configuration.
 // If the service type is invalid or no service is found, return an error.
-func (a *NoPerfection) GetByType(serviceType Type) (*ServiceRecord, error) {
+func (a *NoPerfection) GetByType(serviceType Type) (*Service, error) {
 	if err := ValidateServiceType(serviceType); err != nil {
 		return nil, fmt.Errorf("ValidateServiceType: %w", err)
 	}
@@ -92,12 +92,12 @@ func (a *NoPerfection) GetByType(serviceType Type) (*ServiceRecord, error) {
 
 // FilterByType returns all services of the given type from the app configuration.
 // If the service type is invalid or no services are found, return an error.
-func (a *NoPerfection) FilterByType(serviceType Type) ([]*ServiceRecord, error) {
+func (a *NoPerfection) FilterByType(serviceType Type) ([]*Service, error) {
 	if err := ValidateServiceType(serviceType); err != nil {
 		return nil, fmt.Errorf("ValidateServiceType: %w", err)
 	}
 
-	services := make([]*ServiceRecord, 0)
+	services := make([]*Service, 0)
 	for i := range a.Services {
 		if a.Services[i].Type == serviceType {
 			services = append(services, &a.Services[i])
@@ -122,8 +122,8 @@ func (a *NoPerfection) CountByType(serviceType Type) int {
 	return count
 }
 
-// SetService sets a new service or proxy record into the configuration.
-func (a *NoPerfection) SetService(record ServiceRecord) error {
+// SetService sets a new service into the configuration.
+func (a *NoPerfection) SetService(record Service) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}

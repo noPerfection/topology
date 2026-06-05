@@ -28,11 +28,11 @@ func testService() (*Service, Handler, Handler, Handler) {
 	return &Service{
 		Type:     IndependentType,
 		Name:     "service_id",
-		Handlers: make([]Handler, 0),
+		Handlers: make([]HandlerVariant, 0),
 	}, handlerOfType, handler2OfType, handlerOfType2
 }
 
-func TestServiceValidateTypes(t *testing.T) {
+func TestValidateService(t *testing.T) {
 	_, handlerOfType, _, _ := testService()
 
 	invalidHandler := Handler{Type: HandlerType("invalid_handler_type")}
@@ -40,26 +40,26 @@ func TestServiceValidateTypes(t *testing.T) {
 	generatedService := &Service{
 		Name:     "generated",
 		Type:     "the_invalid_type",
-		Handlers: []Handler{handlerOfType},
+		Handlers: NewHandlerVariants(handlerOfType),
 	}
 
-	if err := generatedService.ValidateTypes(); err == nil {
-		t.Fatal("ValidateTypes with invalid service type returned nil error")
+	if err := ValidateService(*generatedService); err == nil {
+		t.Fatal("ValidateService with invalid service type returned nil error")
 	}
 
 	generatedService.Type = IndependentType
-	if err := generatedService.ValidateTypes(); err != nil {
-		t.Fatalf("ValidateTypes valid service: %v", err)
+	if err := ValidateService(*generatedService); err != nil {
+		t.Fatalf("ValidateService valid service: %v", err)
 	}
 
-	generatedService.Handlers = []Handler{{Type: ReplierType}}
-	if err := generatedService.ValidateTypes(); err == nil {
-		t.Fatal("ValidateTypes with empty handler category returned nil error")
+	generatedService.Handlers = NewHandlerVariants(Handler{Type: ReplierType})
+	if err := ValidateService(*generatedService); err == nil {
+		t.Fatal("ValidateService with empty handler category returned nil error")
 	}
 
-	generatedService.Handlers = []Handler{invalidHandler}
-	if err := generatedService.ValidateTypes(); err == nil {
-		t.Fatal("ValidateTypes with invalid handler type returned nil error")
+	generatedService.Handlers = NewHandlerVariants(invalidHandler)
+	if err := ValidateService(*generatedService); err == nil {
+		t.Fatal("ValidateService with invalid handler type returned nil error")
 	}
 }
 
@@ -67,13 +67,13 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	service := Service{
 		Type: ProxyType,
 		Name: "inproc-service",
-		Handlers: []Handler{
-			{
+		Handlers: NewHandlerVariants(
+			Handler{
 				Type:     ReplierType,
 				Category: "inproc",
 				Endpoint: message.NewEndpoint("inproc-handler", 0),
 			},
-		},
+		),
 	}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with inproc endpoint and no module-url returned nil error")
@@ -87,13 +87,13 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	service = Service{
 		Type: ProxyType,
 		Name: "tmp-service",
-		Handlers: []Handler{
-			{
+		Handlers: NewHandlerVariants(
+			Handler{
 				Type:     ReplierType,
 				Category: "tmp",
 				Endpoint: message.NewEndpoint("tmp/service.sock", 0),
 			},
-		},
+		),
 	}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with ipc endpoint and no start-command returned nil error")
@@ -107,13 +107,13 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	service = Service{
 		Type: ProxyType,
 		Name: "tcp-service",
-		Handlers: []Handler{
-			{
+		Handlers: NewHandlerVariants(
+			Handler{
 				Type:     ReplierType,
 				Category: "tcp",
 				Endpoint: message.NewEndpoint("tcp-service", 4101),
 			},
-		},
+		),
 	}
 	if err := ValidateService(service); err != nil {
 		t.Fatalf("ValidateService with tcp endpoint and no bootstrap fields: %v", err)
@@ -142,7 +142,7 @@ func TestValidateDepService(t *testing.T) {
 
 func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
-	serviceConfig.Handlers = []Handler{handlerOfType}
+	serviceConfig.Handlers = NewHandlerVariants(handlerOfType)
 	serviceConfig.Parameters = datatype.New().Set("region", "eu-west")
 
 	if err := ValidateService(*serviceConfig); err != nil {
@@ -205,7 +205,7 @@ func TestServiceParametersJSONRoundTrip(t *testing.T) {
 
 func TestServiceValidateHandlerDeps(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
-	serviceConfig.Handlers = []Handler{handlerOfType}
+	serviceConfig.Handlers = NewHandlerVariants(handlerOfType)
 	serviceConfig.HandlerDeps = []DepService{{Name: "orphan"}}
 
 	if err := ValidateService(*serviceConfig); err == nil {
@@ -227,7 +227,7 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 
 func TestServiceHandlerByCategory(t *testing.T) {
 	serviceConfig, handlerOfType, handler2OfType, handlerOfType2 := testService()
-	serviceConfig.Handlers = []Handler{handlerOfType, handler2OfType, handlerOfType2}
+	serviceConfig.Handlers = NewHandlerVariants(handlerOfType, handler2OfType, handlerOfType2)
 
 	if _, err := serviceConfig.HandlerByCategory(""); err == nil {
 		t.Fatal("HandlerByCategory with empty category returned nil error")
@@ -240,25 +240,26 @@ func TestServiceHandlerByCategory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandlerByCategory public: %v", err)
 	}
-	if foundHandler.Endpoint.Id != handlerOfType.Endpoint.Id {
-		t.Fatalf("handler id = %q, want %q", foundHandler.Endpoint.Id, handlerOfType.Endpoint.Id)
+	handler := foundHandler.AsHandler()
+	if handler.Endpoint.Id != handlerOfType.Endpoint.Id {
+		t.Fatalf("handler id = %q, want %q", handler.Endpoint.Id, handlerOfType.Endpoint.Id)
 	}
-	if foundHandler.Category != handlerOfType.Category {
-		t.Fatalf("handler category = %q, want %q", foundHandler.Category, handlerOfType.Category)
+	if handler.Category != handlerOfType.Category {
+		t.Fatalf("handler category = %q, want %q", handler.Category, handlerOfType.Category)
 	}
 }
 
 func TestServiceGetHandler(t *testing.T) {
 	serviceConfig, handlerOfType, _, handlerOfType2 := testService()
-	serviceConfig.Handlers = []Handler{
+	serviceConfig.Handlers = NewHandlerVariants(
 		handlerOfType,
-		{
+		Handler{
 			Type:     PairType,
 			Category: "pair",
 			Endpoint: message.NewEndpoint(handlerOfType.Endpoint.Id, 9999),
 		},
 		handlerOfType2,
-	}
+	)
 
 	if _, err := serviceConfig.GetHandler(message.Endpoint{}); err == nil {
 		t.Fatal("GetHandler with empty id returned nil error")
@@ -271,8 +272,9 @@ func TestServiceGetHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetHandler: %v", err)
 	}
-	if foundHandler.Type != handlerOfType.Type {
-		t.Fatalf("handler type = %q, want %q", foundHandler.Type, handlerOfType.Type)
+	handler := foundHandler.AsHandler()
+	if handler.Type != handlerOfType.Type {
+		t.Fatalf("handler type = %q, want %q", handler.Type, handlerOfType.Type)
 	}
 }
 
@@ -284,47 +286,47 @@ func TestServiceSetHandler(t *testing.T) {
 	}
 
 	var nilService *Service
-	nilService.SetHandler(handlerOfType)
+	nilService.SetHandler(NewHandlerVariant(handlerOfType))
 
-	serviceConfig.SetHandler(handlerOfType)
+	serviceConfig.SetHandler(NewHandlerVariant(handlerOfType))
 	if len(serviceConfig.Handlers) != 1 {
 		t.Fatalf("len(Handlers) = %d, want 1", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].Type != ReplierType {
-		t.Fatalf("handler type = %q, want %q", serviceConfig.Handlers[0].Type, ReplierType)
+	if serviceConfig.Handlers[0].AsHandler().Type != ReplierType {
+		t.Fatalf("handler type = %q, want %q", serviceConfig.Handlers[0].AsHandler().Type, ReplierType)
 	}
 
-	serviceConfig.SetHandler(handlerOfType2)
+	serviceConfig.SetHandler(NewHandlerVariant(handlerOfType2))
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) = %d, want 2", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].Type != ReplierType {
-		t.Fatalf("first handler type = %q, want %q", serviceConfig.Handlers[0].Type, ReplierType)
+	if serviceConfig.Handlers[0].AsHandler().Type != ReplierType {
+		t.Fatalf("first handler type = %q, want %q", serviceConfig.Handlers[0].AsHandler().Type, ReplierType)
 	}
-	if serviceConfig.Handlers[1].Type != SyncReplierType {
-		t.Fatalf("second handler type = %q, want %q", serviceConfig.Handlers[1].Type, SyncReplierType)
+	if serviceConfig.Handlers[1].AsHandler().Type != SyncReplierType {
+		t.Fatalf("second handler type = %q, want %q", serviceConfig.Handlers[1].AsHandler().Type, SyncReplierType)
 	}
 
 	updatedHandler := Handler{
 		Type:     PairType,
 		Category: "pair",
-		Endpoint: message.NewEndpoint(handlerOfType.Endpoint.Id, 0),
+		Endpoint: handlerOfType.Endpoint,
 	}
-	serviceConfig.SetHandler(updatedHandler)
+	serviceConfig.SetHandler(NewHandlerVariant(updatedHandler))
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) after update = %d, want 2", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].Type != PairType {
-		t.Fatalf("first handler type = %q, want %q", serviceConfig.Handlers[0].Type, PairType)
+	if serviceConfig.Handlers[0].AsHandler().Type != PairType {
+		t.Fatalf("first handler type = %q, want %q", serviceConfig.Handlers[0].AsHandler().Type, PairType)
 	}
-	if serviceConfig.Handlers[1].Type != SyncReplierType {
-		t.Fatalf("second handler type = %q, want %q", serviceConfig.Handlers[1].Type, SyncReplierType)
+	if serviceConfig.Handlers[1].AsHandler().Type != SyncReplierType {
+		t.Fatalf("second handler type = %q, want %q", serviceConfig.Handlers[1].AsHandler().Type, SyncReplierType)
 	}
 }
 
 func TestServiceRemoveHandler(t *testing.T) {
 	serviceConfig, handlerOfType, handler2OfType, handlerOfType2 := testService()
-	serviceConfig.Handlers = []Handler{handlerOfType, handler2OfType, handlerOfType2}
+	serviceConfig.Handlers = NewHandlerVariants(handlerOfType, handler2OfType, handlerOfType2)
 
 	if err := serviceConfig.RemoveHandler(message.Endpoint{}); err == nil {
 		t.Fatal("RemoveHandler with empty endpoint returned nil error")
@@ -339,10 +341,10 @@ func TestServiceRemoveHandler(t *testing.T) {
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) = %d, want 2", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].Endpoint.Id != handlerOfType.Endpoint.Id {
-		t.Fatalf("first handler id = %q, want %q", serviceConfig.Handlers[0].Endpoint.Id, handlerOfType.Endpoint.Id)
+	if serviceConfig.Handlers[0].AsHandler().Endpoint.Id != handlerOfType.Endpoint.Id {
+		t.Fatalf("first handler id = %q, want %q", serviceConfig.Handlers[0].AsHandler().Endpoint.Id, handlerOfType.Endpoint.Id)
 	}
-	if serviceConfig.Handlers[1].Endpoint.Id != handlerOfType2.Endpoint.Id {
-		t.Fatalf("second handler id = %q, want %q", serviceConfig.Handlers[1].Endpoint.Id, handlerOfType2.Endpoint.Id)
+	if serviceConfig.Handlers[1].AsHandler().Endpoint.Id != handlerOfType2.Endpoint.Id {
+		t.Fatalf("second handler id = %q, want %q", serviceConfig.Handlers[1].AsHandler().Endpoint.Id, handlerOfType2.Endpoint.Id)
 	}
 }

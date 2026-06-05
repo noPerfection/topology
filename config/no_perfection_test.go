@@ -26,7 +26,7 @@ func TestLoadMissingFile(t *testing.T) {
 func TestGetService(t *testing.T) {
 	a := NoPerfection{}
 	sample := Service{Name: "api", Type: IndependentType}
-	if err := a.SetService(NewServiceRecord(sample)); err != nil {
+	if err := a.SetService(sample); err != nil {
 		t.Fatalf("SetService: %v", err)
 	}
 
@@ -51,7 +51,7 @@ func TestGetByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.SetService(NewServiceRecord(s)); err != nil {
+		if err := a.SetService(s); err != nil {
 			t.Fatalf("SetService: %v", err)
 		}
 	}
@@ -80,7 +80,7 @@ func TestFilterByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.SetService(NewServiceRecord(s)); err != nil {
+		if err := a.SetService(s); err != nil {
 			t.Fatalf("SetService: %v", err)
 		}
 	}
@@ -115,7 +115,7 @@ func TestCountByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.SetService(NewServiceRecord(s)); err != nil {
+		if err := a.SetService(s); err != nil {
 			t.Fatalf("SetService: %v", err)
 		}
 	}
@@ -136,10 +136,10 @@ func TestSetService(t *testing.T) {
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
 
-	if err := a.SetService(NewServiceRecord(first)); err != nil {
+	if err := a.SetService(first); err != nil {
 		t.Fatalf("SetService first: %v", err)
 	}
-	if err := a.SetService(NewServiceRecord(second)); err != nil {
+	if err := a.SetService(second); err != nil {
 		t.Fatalf("SetService second: %v", err)
 	}
 	if len(a.Services) != 2 {
@@ -148,7 +148,7 @@ func TestSetService(t *testing.T) {
 
 	updated := first
 	updated.StartCommand = "go run ./cmd/api"
-	if err := a.SetService(NewServiceRecord(updated)); err != nil {
+	if err := a.SetService(updated); err != nil {
 		t.Fatalf("SetService update: %v", err)
 	}
 	if len(a.Services) != 2 {
@@ -168,10 +168,10 @@ func TestRemoveService(t *testing.T) {
 	a := NoPerfection{}
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
-	if err := a.SetService(NewServiceRecord(first)); err != nil {
+	if err := a.SetService(first); err != nil {
 		t.Fatalf("SetService first: %v", err)
 	}
-	if err := a.SetService(NewServiceRecord(second)); err != nil {
+	if err := a.SetService(second); err != nil {
 		t.Fatalf("SetService second: %v", err)
 	}
 
@@ -202,15 +202,15 @@ func TestLoadSave(t *testing.T) {
 	sample := Service{
 		Name: "api",
 		Type: IndependentType,
-		Handlers: []Handler{
-			{
+		Handlers: NewHandlerVariants(
+			Handler{
 				Type:     ReplierType,
 				Category: "api",
 				Endpoint: message.NewEndpoint("api_1", 4101),
 			},
-		},
+		),
 	}
-	if err := original.SetService(NewServiceRecord(sample)); err != nil {
+	if err := original.SetService(sample); err != nil {
 		t.Fatalf("SetService: %v", err)
 	}
 
@@ -236,8 +236,8 @@ func TestLoadSave(t *testing.T) {
 	if loaded.Services[0].Name != "api" {
 		t.Fatalf("Name = %q, want api", loaded.Services[0].Name)
 	}
-	if loaded.Services[0].Handlers[0].Endpoint.Port != 4101 {
-		t.Fatalf("Port = %d, want 4101", loaded.Services[0].Handlers[0].Endpoint.Port)
+	if loaded.Services[0].Handlers[0].AsHandler().Endpoint.Port != 4101 {
+		t.Fatalf("Port = %d, want 4101", loaded.Services[0].Handlers[0].AsHandler().Endpoint.Port)
 	}
 }
 

@@ -11,37 +11,12 @@ func (a *NoPerfection) Normalize() error {
 
 	visiting := make(map[string]bool)
 	for i := range a.Services {
-		if err := a.normalizeRecord(&a.Services[i], visiting); err != nil {
+		if err := a.normalizeService(&a.Services[i], visiting); err != nil {
 			return fmt.Errorf("service %q: %w", a.Services[i].Name, err)
 		}
 	}
 
 	return a.validateDepRefs()
-}
-
-func (a *NoPerfection) normalizeRecord(record *ServiceRecord, visiting map[string]bool) error {
-	if record == nil {
-		return fmt.Errorf("service record is nil")
-	}
-	if record.Proxy != nil {
-		if err := record.Proxy.ValidateTypes(); err != nil {
-			return err
-		}
-		record.Service = serviceFromProxy(*record.Proxy)
-		if err := a.normalizeService(&record.Service, visiting); err != nil {
-			return err
-		}
-		for hi := range record.Proxy.Handlers {
-			for oi := range record.Proxy.Handlers[hi].Outbounds {
-				target := &record.Proxy.Handlers[hi].Outbounds[oi]
-				if err := a.normalizeDepTarget(target, visiting); err != nil {
-					return fmt.Errorf("outbound %q: %w", record.Proxy.Handlers[hi].Category, err)
-				}
-			}
-		}
-		return nil
-	}
-	return a.normalizeService(&record.Service, visiting)
 }
 
 func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bool) error {
@@ -57,7 +32,7 @@ func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bo
 	visiting[service.Name] = true
 	defer delete(visiting, service.Name)
 
-	if err := service.ValidateTypes(); err != nil {
+	if err := ValidateService(*service); err != nil {
 		return err
 	}
 
@@ -69,10 +44,27 @@ func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bo
 	}
 
 	for hi := range service.Handlers {
-		for di := range service.Handlers[hi].CommandDeps {
-			dep := &service.Handlers[hi].CommandDeps[di]
+		handler := service.Handlers[hi].Handler
+		if service.Handlers[hi].ProxyHandler != nil {
+			handler = &service.Handlers[hi].ProxyHandler.Handler
+		}
+		if handler == nil {
+			return fmt.Errorf("handler %d is empty", hi)
+		}
+
+		for di := range handler.CommandDeps {
+			dep := &handler.CommandDeps[di]
 			if err := a.normalizeDepService(dep, visiting); err != nil {
 				return fmt.Errorf("command %q: %w", dep.Name, err)
+			}
+		}
+		if service.Type == ProxyType && service.Handlers[hi].ProxyHandler != nil {
+			proxyHandler := service.Handlers[hi].ProxyHandler
+			for oi := range proxyHandler.Outbounds {
+				target := &proxyHandler.Outbounds[oi]
+				if err := a.normalizeDepTarget(target, visiting); err != nil {
+					return fmt.Errorf("outbound %q: %w", handler.Category, err)
+				}
 			}
 		}
 	}
@@ -106,11 +98,11 @@ func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string
 		return nil
 	}
 
-	record := target.ServiceRecord
-	if err := a.normalizeRecord(&record, visiting); err != nil {
+	service := target.Service
+	if err := a.normalizeService(&service, visiting); err != nil {
 		return err
 	}
-	return a.SetService(record)
+	return a.SetService(service)
 }
 
 func (a *NoPerfection) validateDepRefs() error {
@@ -121,7 +113,8 @@ func (a *NoPerfection) validateDepRefs() error {
 			}
 		}
 		for _, handler := range service.Handlers {
-			for _, dep := range handler.CommandDeps {
+			baseHandler := handler.AsHandler()
+			for _, dep := range baseHandler.CommandDeps {
 				if err := a.validateDepServiceRefs(dep); err != nil {
 					return fmt.Errorf("service %q command %q: %w", service.Name, dep.Name, err)
 				}

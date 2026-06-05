@@ -97,17 +97,17 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 		t.Fatalf("newHandler: %v", err)
 	}
 
-	err = handler.AddService(config.NewServiceRecord(config.Service{
+	err = handler.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "pre-start-service",
-		Handlers: []config.Handler{
-			{
+		Handlers: config.NewHandlerVariants(
+			config.Handler{
 				Type:     config.ReplierType,
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("pre-start-manager", 6100),
 			},
-		},
-	}))
+		),
+	})
 	if err != nil {
 		t.Fatalf("handler.AddService before start: %v", err)
 	}
@@ -120,8 +120,8 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 func (test *TestHandlerSuite) TestTopologyInterfaceAfterStartBlocked() {
 	s := test.Require
 
-	s().Error(test.depHandler.AddService(config.NewServiceRecord(config.Service{Name: "blocked", Type: config.ProxyType})))
-	s().Error(test.depHandler.SetService(config.NewServiceRecord(config.Service{Name: "blocked", Type: config.ProxyType})))
+	s().Error(test.depHandler.AddService(config.Service{Name: "blocked", Type: config.ProxyType}))
+	s().Error(test.depHandler.SetService(config.Service{Name: "blocked", Type: config.ProxyType}))
 	s().Error(test.depHandler.RemoveService("blocked"))
 	_, err := test.depHandler.StartService("blocked")
 	s().Error(err)

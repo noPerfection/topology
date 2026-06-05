@@ -8,18 +8,14 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
-func sr(service Service) ServiceRecord {
-	return NewServiceRecord(service)
-}
-
 func TestNormalizeInlineService(t *testing.T) {
 	app := NoPerfection{
-		Services: []ServiceRecord{
-			sr(Service{
+		Services: []Service{
+			{
 				Type: IndependentType,
 				Name: "public_api",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "public-api",
 						Endpoint: message.NewEndpoint("public_1", 4101),
@@ -32,17 +28,17 @@ func TestNormalizeInlineService(t *testing.T) {
 							},
 						},
 					},
-				},
-			}),
+				),
+			},
 		},
 	}
-	app.Services[0].Handlers[0].CommandDeps[0].Proxies[0].ServiceRecord.Handlers = []Handler{
-		{
+	app.Services[0].Handlers[0].Handler.CommandDeps[0].Proxies[0].Service.Handlers = NewHandlerVariants(
+		Handler{
 			Type:     ReplierType,
 			Category: "nested",
 			Endpoint: message.NewEndpoint("nested_1", 4201),
 		},
-	}
+	)
 
 	if err := app.Normalize(); err != nil {
 		t.Fatalf("Normalize: %v", err)
@@ -58,17 +54,17 @@ func TestNormalizeInlineService(t *testing.T) {
 
 func TestNormalizeServiceHandlerDeps(t *testing.T) {
 	app := NoPerfection{
-		Services: []ServiceRecord{
-			sr(Service{
+		Services: []Service{
+			{
 				Type: IndependentType,
 				Name: "api",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
 					},
-				},
+				),
 				HandlerDeps: []DepService{
 					{
 						Name: "api",
@@ -76,18 +72,18 @@ func TestNormalizeServiceHandlerDeps(t *testing.T) {
 							ServiceTarget(Service{
 								Type: ProxyType,
 								Name: "inline_proxy",
-								Handlers: []Handler{
-									{
+								Handlers: NewHandlerVariants(
+									Handler{
 										Type:     ReplierType,
 										Category: "inline",
 										Endpoint: message.NewEndpoint("inline_1", 4201),
 									},
-								},
+								),
 							}),
 						},
 					},
 				},
-			}),
+			},
 		},
 	}
 
@@ -101,12 +97,12 @@ func TestNormalizeServiceHandlerDeps(t *testing.T) {
 
 func TestNormalizeMissingRef(t *testing.T) {
 	app := NoPerfection{
-		Services: []ServiceRecord{
-			sr(Service{
+		Services: []Service{
+			{
 				Type: IndependentType,
 				Name: "api",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -117,8 +113,8 @@ func TestNormalizeMissingRef(t *testing.T) {
 							},
 						},
 					},
-				},
-			}),
+				),
+			},
 		},
 	}
 
@@ -129,24 +125,24 @@ func TestNormalizeMissingRef(t *testing.T) {
 
 func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 	app := NoPerfection{
-		Services: []ServiceRecord{
-			sr(Service{
+		Services: []Service{
+			{
 				Type: IndependentType,
 				Name: "api",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
 					},
-				},
+				),
 				HandlerDeps: []DepService{
 					{
 						Name:    "api",
 						Proxies: []DepTarget{RefTarget("missing_proxy")},
 					},
 				},
-			}),
+			},
 		},
 	}
 
@@ -157,12 +153,12 @@ func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 
 func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 	app := NoPerfection{
-		Services: []ServiceRecord{
-			sr(Service{
+		Services: []Service{
+			{
 				Type: IndependentType,
 				Name: "api",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -173,19 +169,19 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 							},
 						},
 					},
-				},
-			}),
-			sr(Service{
+				),
+			},
+			{
 				Type: ProxyType,
 				Name: "auth_proxy",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "main",
 						Endpoint: message.NewEndpoint("auth_1", 4301),
 					},
-				},
-			}),
+				),
+			},
 		},
 	}
 
@@ -193,7 +189,7 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 		t.Fatalf("Normalize with ref path: %v", err)
 	}
 
-	target := app.Services[0].Handlers[0].CommandDeps[0].Proxies[0]
+	target := app.Services[0].Handlers[0].AsHandler().CommandDeps[0].Proxies[0]
 	if target.Ref != "auth_proxy/main" {
 		t.Fatalf("ref path = %q, want auth_proxy/main", target.Ref)
 	}
@@ -205,12 +201,12 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 
 func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
 	app := NoPerfection{
-		Services: []ServiceRecord{
-			sr(Service{
+		Services: []Service{
+			{
 				Type: IndependentType,
 				Name: "api",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -221,19 +217,19 @@ func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
 							},
 						},
 					},
-				},
-			}),
-			sr(Service{
+				),
+			},
+			{
 				Type: ProxyType,
 				Name: "auth_proxy",
-				Handlers: []Handler{
-					{
+				Handlers: NewHandlerVariants(
+					Handler{
 						Type:     ReplierType,
 						Category: "main",
 						Endpoint: message.NewEndpoint("auth_1", 4301),
 					},
-				},
-			}),
+				),
+			},
 		},
 	}
 
@@ -312,15 +308,15 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 		t.Fatalf("GetService auth_proxy: %v", err)
 	}
 
-	dep := app.Services[0].Handlers[0].CommandDeps[0]
+	dep := app.Services[0].Handlers[0].AsHandler().CommandDeps[0]
 	if len(dep.Proxies) != 2 {
 		t.Fatalf("len(Proxies) = %d, want 2", len(dep.Proxies))
 	}
 	if dep.Proxies[0].Ref != "auth_proxy" {
 		t.Fatalf("first proxy path = %q, want auth_proxy", dep.Proxies[0].Ref)
 	}
-	if dep.Proxies[1].Proxy == nil || dep.Proxies[1].Proxy.Name != "inline_proxy" {
-		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Proxy)
+	if dep.Proxies[1].Service.Name != "inline_proxy" {
+		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Service)
 	}
 	handlerDep := app.Services[0].HandlerDeps[0]
 	if handlerDep.Proxies[0].Ref != "auth_proxy" {

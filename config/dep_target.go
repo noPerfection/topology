@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-// DepTarget is either a service reference path or a service record.
+// DepTarget is either a service reference path or an inline service definition.
 type DepTarget struct {
 	Ref string
-	ServiceRecord
+	Service
 }
 
 // RefTarget returns a dependency on an existing service by name.
@@ -25,12 +25,7 @@ func RefTarget(service string, handlerCategory ...string) DepTarget {
 
 // ServiceTarget returns a dependency on an inline service definition.
 func ServiceTarget(service Service) DepTarget {
-	return DepTarget{ServiceRecord: NewServiceRecord(service)}
-}
-
-// ProxyTarget returns a dependency on an inline proxy definition.
-func ProxyTarget(proxy Proxy) DepTarget {
-	return DepTarget{ServiceRecord: NewProxyRecord(proxy)}
+	return DepTarget{Service: service}
 }
 
 // RefPath returns the referenced service name and handler category.
@@ -46,22 +41,22 @@ func (t DepTarget) RefPath() (serviceName string, handlerCategory string) {
 	return service, handlerCategory
 }
 
-// Name returns the service name for this target (ref or record).
+// Name returns the service name for this target (ref or inline service).
 func (t DepTarget) Name() string {
-	if !t.ServiceRecord.IsZero() {
-		return t.ServiceRecord.Name
+	if !t.Service.IsZero() {
+		return t.Service.Name
 	}
 	service, _ := t.RefPath()
 	return service
 }
 
-// MarshalJSON encodes the target as a JSON string (ref), service object, or proxy object.
+// MarshalJSON encodes the target as a JSON string (ref) or service object.
 func (t DepTarget) MarshalJSON() ([]byte, error) {
 	if err := ValidateDepTarget(t); err != nil {
 		return nil, err
 	}
-	if !t.ServiceRecord.IsZero() {
-		return json.Marshal(t.ServiceRecord)
+	if !t.Service.IsZero() {
+		return json.Marshal(t.Service)
 	}
 	if t.Ref != "" {
 		return json.Marshal(t.Ref)
@@ -69,7 +64,7 @@ func (t DepTarget) MarshalJSON() ([]byte, error) {
 	return nil, fmt.Errorf("dep target is empty")
 }
 
-// UnmarshalJSON accepts a JSON string, service object, or proxy object.
+// UnmarshalJSON accepts a JSON string or service object.
 func (t *DepTarget) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
@@ -85,16 +80,16 @@ func (t *DepTarget) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		t.Ref = ref
-		t.ServiceRecord = ServiceRecord{}
+		t.Service = Service{}
 		return nil
 	}
 
-	var record ServiceRecord
-	if err := json.Unmarshal(trimmed, &record); err != nil {
-		return fmt.Errorf("dep target service record: %w", err)
+	var service Service
+	if err := json.Unmarshal(trimmed, &service); err != nil {
+		return fmt.Errorf("dep target service: %w", err)
 	}
 	t.Ref = ""
-	t.ServiceRecord = record
+	t.Service = service
 	return nil
 }
 
@@ -122,10 +117,10 @@ func parseRefPath(ref string) (service string, handlerCategory string, err error
 	return service, handlerCategory, nil
 }
 
-// ValidateDepTarget checks that the target is exactly one of ref or service record.
+// ValidateDepTarget checks that the target is exactly one of ref or inline service.
 func ValidateDepTarget(t DepTarget) error {
 	hasRef := t.Ref != ""
-	hasRecord := !t.ServiceRecord.IsZero()
+	hasRecord := !t.Service.IsZero()
 	count := 0
 	for _, ok := range []bool{hasRef, hasRecord} {
 		if ok {
@@ -133,7 +128,7 @@ func ValidateDepTarget(t DepTarget) error {
 		}
 	}
 	if count != 1 {
-		return fmt.Errorf("dep target must set exactly one of ref or service record")
+		return fmt.Errorf("dep target must set exactly one of ref or inline service")
 	}
 	if hasRef {
 		if _, _, err := parseRefPath(t.Ref); err != nil {
@@ -141,8 +136,8 @@ func ValidateDepTarget(t DepTarget) error {
 		}
 		return nil
 	}
-	if err := t.ServiceRecord.ValidateTypes(); err != nil {
-		return fmt.Errorf("service record: %w", err)
+	if err := ValidateService(t.Service); err != nil {
+		return fmt.Errorf("service: %w", err)
 	}
 	return nil
 }

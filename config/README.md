@@ -103,7 +103,7 @@ Each `handler-deps` or `command-deps` entry must have a `name` and at least one 
 Each entry in `proxies` or `extensions` is a `DepTarget`. A target is exactly one of:
 
 - a **ref** string (`DepTarget.Ref`)
-- a **service record** object (`DepTarget.ServiceRecord`) containing either a service or proxy
+- a **service** object (`DepTarget.Service`) containing an inline service definition
 
 `config.Load` calls `Normalize()` to register inline targets and verify references. JSON stays compact: each target is one value, not an object with separate `ref` / `service` / `proxy` keys.
 

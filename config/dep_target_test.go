@@ -22,11 +22,8 @@ func TestDepTargetJSONRef(t *testing.T) {
 	if target.Name() != "auth_proxy" {
 		t.Fatalf("Name() = %q, want auth_proxy", target.Name())
 	}
-	if !target.ServiceRecord.IsZero() {
-		t.Fatal("ServiceRecord is set for ref target")
-	}
-	if target.Proxy != nil {
-		t.Fatal("Proxy is set for ref target")
+	if !target.Service.IsZero() {
+		t.Fatal("Service is set for ref target")
 	}
 
 	out, err := json.Marshal(target)
@@ -117,11 +114,8 @@ func TestDepTargetJSONInlineService(t *testing.T) {
 	if target.Ref != "" {
 		t.Fatalf("Path = %q, want empty", target.Ref)
 	}
-	if target.ServiceRecord.Name != "inline_worker" {
-		t.Fatalf("ServiceRecord = %#v, want inline_worker", target.ServiceRecord)
-	}
-	if target.Proxy != nil {
-		t.Fatalf("Proxy = %#v, want nil", target.Proxy)
+	if target.Service.Name != "inline_worker" {
+		t.Fatalf("Service = %#v, want inline_worker", target.Service)
 	}
 
 	out, err := json.Marshal(target)
@@ -158,14 +152,14 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 	if target.Ref != "" {
 		t.Fatalf("Path = %q, want empty", target.Ref)
 	}
-	if target.Proxy == nil || target.Type != ProxyType {
-		t.Fatalf("ServiceRecord = %#v, want proxy", target.ServiceRecord)
+	if target.Type != ProxyType {
+		t.Fatalf("Service = %#v, want proxy", target.Service)
 	}
-	if target.Proxy == nil || target.Proxy.Name != "inline_audit" {
-		t.Fatalf("Proxy = %#v, want inline_audit", target.Proxy)
+	if target.Service.Name != "inline_audit" {
+		t.Fatalf("Service = %#v, want inline_audit", target.Service)
 	}
-	if len(target.Proxy.Handlers) != 1 || len(target.Proxy.Handlers[0].Outbounds) != 1 {
-		t.Fatalf("Proxy handlers = %#v, want one handler with one outbound", target.Proxy.Handlers)
+	if len(target.Handlers) != 1 || len(target.Handlers[0].AsProxyHandler().Outbounds) != 1 {
+		t.Fatalf("Proxy handlers = %#v, want one handler with one outbound", target.Handlers)
 	}
 
 	out, err := json.Marshal(target)
@@ -177,8 +171,8 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 	if err := json.Unmarshal(out, &roundTrip); err != nil {
 		t.Fatalf("Unmarshal round trip: %v", err)
 	}
-	if roundTrip.Proxy == nil || roundTrip.Proxy.Name != "inline_audit" {
-		t.Fatalf("round trip proxy = %#v, want inline_audit", roundTrip.Proxy)
+	if roundTrip.Service.Name != "inline_audit" {
+		t.Fatalf("round trip proxy = %#v, want inline_audit", roundTrip.Service)
 	}
 }
 
@@ -186,11 +180,11 @@ func TestDepTargetValidate(t *testing.T) {
 	if err := ValidateDepTarget(DepTarget{}); err == nil {
 		t.Fatal("ValidateDepTarget empty returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{Ref: "a", ServiceRecord: NewServiceRecord(Service{Name: "b", Type: ProxyType})}); err == nil {
-		t.Fatal("ValidateDepTarget ref and record returned nil error")
+	if err := ValidateDepTarget(DepTarget{Ref: "a", Service: Service{Name: "b", Type: ProxyType}}); err == nil {
+		t.Fatal("ValidateDepTarget ref and service returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{ServiceRecord: ServiceRecord{}}); err == nil {
-		t.Fatal("ValidateDepTarget empty record returned nil error")
+	if err := ValidateDepTarget(DepTarget{Service: Service{}}); err == nil {
+		t.Fatal("ValidateDepTarget empty service returned nil error")
 	}
 	if err := ValidateDepTarget(RefTarget("auth_proxy")); err != nil {
 		t.Fatalf("ValidateDepTarget ref: %v", err)

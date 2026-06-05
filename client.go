@@ -64,7 +64,7 @@ func (c *Client) Close() error {
 }
 
 // Service returns a service configuration by name.
-func (c *Client) Service(serviceName string) (config.ServiceRecord, error) {
+func (c *Client) Service(serviceName string) (config.Service, error) {
 	req := message.Request{
 		Command: Service,
 		Parameters: datatype.New().
@@ -73,28 +73,28 @@ func (c *Client) Service(serviceName string) (config.ServiceRecord, error) {
 
 	reply, err := c.socket.Request(&req)
 	if err != nil {
-		return config.ServiceRecord{}, fmt.Errorf("socket.Request('%s'): %w", Service, err)
+		return config.Service{}, fmt.Errorf("socket.Request('%s'): %w", Service, err)
 	}
 
 	if !reply.IsOK() {
-		return config.ServiceRecord{}, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+		return config.Service{}, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
 	}
 
 	raw, err := reply.ReplyParameters().NestedValue("service")
 	if err != nil {
-		return config.ServiceRecord{}, fmt.Errorf("reply.ReplyParameters().NestedValue('service'): %w", err)
+		return config.Service{}, fmt.Errorf("reply.ReplyParameters().NestedValue('service'): %w", err)
 	}
 
-	var record config.ServiceRecord
+	var record config.Service
 	if err := raw.Interface(&record); err != nil {
-		return config.ServiceRecord{}, fmt.Errorf("raw.Interface('config.ServiceRecord'): %w", err)
+		return config.Service{}, fmt.Errorf("raw.Interface('config.Service'): %w", err)
 	}
 
 	return record, nil
 }
 
-// AddService registers a service record in the topology configuration.
-func (c *Client) AddService(record config.ServiceRecord) error {
+// AddService registers a service in the topology configuration.
+func (c *Client) AddService(record config.Service) error {
 	req := message.Request{
 		Command: AddService,
 		Parameters: datatype.New().
@@ -114,7 +114,7 @@ func (c *Client) AddService(record config.ServiceRecord) error {
 }
 
 // SetService updates an existing service in the topology configuration.
-func (c *Client) SetService(record config.ServiceRecord) error {
+func (c *Client) SetService(record config.Service) error {
 	req := message.Request{
 		Command: SetService,
 		Parameters: datatype.New().
