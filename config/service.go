@@ -12,9 +12,9 @@ import (
 
 type DepService struct {
 	// For command deps its command, for handler deps its handler catego
-	Name       string      `json:"name"`
-	Proxies    []DepTarget `json:"proxies,omitempty"`
-	Extensions []DepTarget `json:"extensions,omitempty"`
+	Name       string           `json:"name"`
+	Proxies    []ServicePointer `json:"proxies,omitempty"`
+	Extensions []ServicePointer `json:"extensions,omitempty"`
 }
 
 type Handler struct {
@@ -26,8 +26,8 @@ type Handler struct {
 
 type ProxyHandler struct {
 	Handler
-	Routes    []string    `json:"routes,omitempty"` // whitelist routes
-	Outbounds []DepTarget `json:"outbounds"`
+	Routes    []string         `json:"routes,omitempty"` // whitelist routes
+	Outbounds []ServicePointer `json:"outbounds"`
 }
 
 type HandlerVariant struct {
@@ -180,7 +180,7 @@ func ValidateService(service Service) error {
 		if service.Type == ProxyType {
 			proxyHandler := h.AsProxyHandler()
 			for j, target := range proxyHandler.Outbounds {
-				if err := ValidateDepTarget(target); err != nil {
+				if err := ValidateServicePointer(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
 				}
 			}
@@ -298,12 +298,12 @@ func ValidateDepService(dep DepService) error {
 	}
 
 	for i, target := range dep.Proxies {
-		if err := ValidateDepTarget(target); err != nil {
+		if err := ValidateServicePointer(target); err != nil {
 			return fmt.Errorf("proxies[%d]: %w", i, err)
 		}
 	}
 	for i, target := range dep.Extensions {
-		if err := ValidateDepTarget(target); err != nil {
+		if err := ValidateServicePointer(target); err != nil {
 			return fmt.Errorf("extensions[%d]: %w", i, err)
 		}
 	}

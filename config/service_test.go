@@ -127,14 +127,14 @@ func TestValidateDepService(t *testing.T) {
 
 	if err := ValidateDepService(DepService{
 		Name:    "call-user-api",
-		Proxies: []DepTarget{RefTarget("auth_proxy")},
+		Proxies: []ServicePointer{RefTarget("auth_proxy")},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with proxies: %v", err)
 	}
 
 	if err := ValidateDepService(DepService{
 		Name:       "get-user",
-		Extensions: []DepTarget{RefTarget("user_service")},
+		Extensions: []ServicePointer{RefTarget("user_service")},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with extensions: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 	serviceConfig.HandlerDeps = []DepService{
 		{
 			Name: "public",
-			Proxies: []DepTarget{
+			Proxies: []ServicePointer{
 				RefTarget("auth_proxy"),
 			},
 		},

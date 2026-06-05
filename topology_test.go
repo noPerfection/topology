@@ -214,7 +214,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				CommandDeps: []config.DepService{
 					{
 						Name: "proxy",
-						Proxies: []config.DepTarget{
+						Proxies: []config.ServicePointer{
 							config.ServiceTarget(config.Service{
 								Type: config.ProxyType,
 								Name: "nested-child",
@@ -245,7 +245,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		HandlerDeps: []config.DepService{
 			{
 				Name: "manager",
-				Proxies: []config.DepTarget{
+				Proxies: []config.ServicePointer{
 					config.ServiceTarget(config.Service{
 						Type: config.ProxyType,
 						Name: "service-level-child",
@@ -285,7 +285,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 					Category: ServiceManagerCategory,
 					Endpoint: message.NewEndpoint("proxy-parent-manager", 6300),
 				},
-				Outbounds: []config.DepTarget{
+				Outbounds: []config.ServicePointer{
 					config.ServiceTarget(config.Service{
 						Type: config.ProxyType,
 						Name: "proxy-outbound-child",

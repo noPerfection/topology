@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestDepTargetJSONRef(t *testing.T) {
+func TestServicePointerJSONRef(t *testing.T) {
 	data := []byte(`"auth_proxy"`)
 
-	var target DepTarget
+	var target ServicePointer
 	if err := json.Unmarshal(data, &target); err != nil {
 		t.Fatalf("Unmarshal ref: %v", err)
 	}
@@ -35,10 +35,10 @@ func TestDepTargetJSONRef(t *testing.T) {
 	}
 }
 
-func TestDepTargetJSONRefWithHandler(t *testing.T) {
+func TestServicePointerJSONRefWithHandler(t *testing.T) {
 	data := []byte(`"auth_proxy/main"`)
 
-	var target DepTarget
+	var target ServicePointer
 	if err := json.Unmarshal(data, &target); err != nil {
 		t.Fatalf("Unmarshal ref: %v", err)
 	}
@@ -59,17 +59,17 @@ func TestDepTargetJSONRefWithHandler(t *testing.T) {
 	}
 }
 
-func TestDepTargetRefPathInvalid(t *testing.T) {
+func TestServicePointerRefPathInvalid(t *testing.T) {
 	for _, ref := range []string{"", "service_name/", "/main", "service_name//main"} {
-		if err := ValidateDepTarget(DepTarget{Ref: ref}); err == nil {
-			t.Fatalf("ValidateDepTarget(%q) returned nil error", ref)
+		if err := ValidateServicePointer(ServicePointer{Ref: ref}); err == nil {
+			t.Fatalf("ValidateServicePointer(%q) returned nil error", ref)
 		}
 
 		data, err := json.Marshal(ref)
 		if err != nil {
 			t.Fatalf("Marshal test ref %q: %v", ref, err)
 		}
-		var target DepTarget
+		var target ServicePointer
 		if err := json.Unmarshal(data, &target); err == nil {
 			t.Fatalf("Unmarshal invalid ref %q returned nil error", ref)
 		}
@@ -96,7 +96,7 @@ func TestRefTargetBuilder(t *testing.T) {
 	}
 }
 
-func TestDepTargetJSONInlineService(t *testing.T) {
+func TestServicePointerJSONInlineService(t *testing.T) {
 	data := []byte(`{
 		"type": "Extension",
 		"name": "inline_worker",
@@ -107,7 +107,7 @@ func TestDepTargetJSONInlineService(t *testing.T) {
 		}]
 	}`)
 
-	var target DepTarget
+	var target ServicePointer
 	if err := json.Unmarshal(data, &target); err != nil {
 		t.Fatalf("Unmarshal inline: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestDepTargetJSONInlineService(t *testing.T) {
 		t.Fatalf("Marshal inline: %v", err)
 	}
 
-	var roundTrip DepTarget
+	var roundTrip ServicePointer
 	if err := json.Unmarshal(out, &roundTrip); err != nil {
 		t.Fatalf("Unmarshal round trip: %v", err)
 	}
@@ -132,7 +132,7 @@ func TestDepTargetJSONInlineService(t *testing.T) {
 	}
 }
 
-func TestDepTargetJSONInlineProxy(t *testing.T) {
+func TestServicePointerJSONInlineProxy(t *testing.T) {
 	data := []byte(`{
 		"type": "Proxy",
 		"name": "inline_audit",
@@ -145,7 +145,7 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 		}]
 	}`)
 
-	var target DepTarget
+	var target ServicePointer
 	if err := json.Unmarshal(data, &target); err != nil {
 		t.Fatalf("Unmarshal inline proxy: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 		t.Fatalf("Marshal inline proxy: %v", err)
 	}
 
-	var roundTrip DepTarget
+	var roundTrip ServicePointer
 	if err := json.Unmarshal(out, &roundTrip); err != nil {
 		t.Fatalf("Unmarshal round trip: %v", err)
 	}
@@ -176,17 +176,17 @@ func TestDepTargetJSONInlineProxy(t *testing.T) {
 	}
 }
 
-func TestDepTargetValidate(t *testing.T) {
-	if err := ValidateDepTarget(DepTarget{}); err == nil {
-		t.Fatal("ValidateDepTarget empty returned nil error")
+func TestServicePointerValidate(t *testing.T) {
+	if err := ValidateServicePointer(ServicePointer{}); err == nil {
+		t.Fatal("ValidateServicePointer empty returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{Ref: "a", Service: Service{Name: "b", Type: ProxyType}}); err == nil {
-		t.Fatal("ValidateDepTarget ref and service returned nil error")
+	if err := ValidateServicePointer(ServicePointer{Ref: "a", Service: Service{Name: "b", Type: ProxyType}}); err == nil {
+		t.Fatal("ValidateServicePointer ref and service returned nil error")
 	}
-	if err := ValidateDepTarget(DepTarget{Service: Service{}}); err == nil {
-		t.Fatal("ValidateDepTarget empty service returned nil error")
+	if err := ValidateServicePointer(ServicePointer{Service: Service{}}); err == nil {
+		t.Fatal("ValidateServicePointer empty service returned nil error")
 	}
-	if err := ValidateDepTarget(RefTarget("auth_proxy")); err != nil {
-		t.Fatalf("ValidateDepTarget ref: %v", err)
+	if err := ValidateServicePointer(RefTarget("auth_proxy")); err != nil {
+		t.Fatalf("ValidateServicePointer ref: %v", err)
 	}
 }

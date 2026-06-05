@@ -22,7 +22,7 @@ func TestNormalizeInlineService(t *testing.T) {
 						CommandDeps: []DepService{
 							{
 								Name: "call-user-api",
-								Proxies: []DepTarget{
+								Proxies: []ServicePointer{
 									ServiceTarget(Service{Name: "nested_proxy", Type: ProxyType}),
 								},
 							},
@@ -68,7 +68,7 @@ func TestNormalizeServiceHandlerDeps(t *testing.T) {
 				HandlerDeps: []DepService{
 					{
 						Name: "api",
-						Proxies: []DepTarget{
+						Proxies: []ServicePointer{
 							ServiceTarget(Service{
 								Type: ProxyType,
 								Name: "inline_proxy",
@@ -109,7 +109,7 @@ func TestNormalizeMissingRef(t *testing.T) {
 						CommandDeps: []DepService{
 							{
 								Name:    "route",
-								Proxies: []DepTarget{RefTarget("missing_proxy")},
+								Proxies: []ServicePointer{RefTarget("missing_proxy")},
 							},
 						},
 					},
@@ -139,7 +139,7 @@ func TestNormalizeMissingHandlerDepRef(t *testing.T) {
 				HandlerDeps: []DepService{
 					{
 						Name:    "api",
-						Proxies: []DepTarget{RefTarget("missing_proxy")},
+						Proxies: []ServicePointer{RefTarget("missing_proxy")},
 					},
 				},
 			},
@@ -165,7 +165,7 @@ func TestNormalizeRefPathWithHandlerCategory(t *testing.T) {
 						CommandDeps: []DepService{
 							{
 								Name:    "route",
-								Proxies: []DepTarget{RefTarget("auth_proxy", "main")},
+								Proxies: []ServicePointer{RefTarget("auth_proxy", "main")},
 							},
 						},
 					},
@@ -213,7 +213,7 @@ func TestNormalizeRefPathMissingHandlerCategory(t *testing.T) {
 						CommandDeps: []DepService{
 							{
 								Name:    "route",
-								Proxies: []DepTarget{RefTarget("auth_proxy", "missing")},
+								Proxies: []ServicePointer{RefTarget("auth_proxy", "missing")},
 							},
 						},
 					},

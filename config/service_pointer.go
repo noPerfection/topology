@@ -7,30 +7,30 @@ import (
 	"strings"
 )
 
-// DepTarget is either a service reference path or an inline service definition.
-type DepTarget struct {
+// ServicePointer is either a service reference path or an inline service definition.
+type ServicePointer struct {
 	Ref string
 	Service
 }
 
 // RefTarget returns a dependency on an existing service by name.
 // An optional handler category selects service/handler.
-func RefTarget(service string, handlerCategory ...string) DepTarget {
+func RefTarget(service string, handlerCategory ...string) ServicePointer {
 	ref := service
 	if len(handlerCategory) > 0 && handlerCategory[0] != "" {
 		ref = service + "/" + handlerCategory[0]
 	}
-	return DepTarget{Ref: ref}
+	return ServicePointer{Ref: ref}
 }
 
 // ServiceTarget returns a dependency on an inline service definition.
-func ServiceTarget(service Service) DepTarget {
-	return DepTarget{Service: service}
+func ServiceTarget(service Service) ServicePointer {
+	return ServicePointer{Service: service}
 }
 
 // RefPath returns the referenced service name and handler category.
 // When the ref has no handler category, handlerCategory is empty.
-func (t DepTarget) RefPath() (serviceName string, handlerCategory string) {
+func (t ServicePointer) RefPath() (serviceName string, handlerCategory string) {
 	if t.Ref == "" {
 		return "", ""
 	}
@@ -42,7 +42,7 @@ func (t DepTarget) RefPath() (serviceName string, handlerCategory string) {
 }
 
 // Name returns the service name for this target (ref or inline service).
-func (t DepTarget) Name() string {
+func (t ServicePointer) Name() string {
 	if !t.Service.IsZero() {
 		return t.Service.Name
 	}
@@ -51,8 +51,8 @@ func (t DepTarget) Name() string {
 }
 
 // MarshalJSON encodes the target as a JSON string (ref) or service object.
-func (t DepTarget) MarshalJSON() ([]byte, error) {
-	if err := ValidateDepTarget(t); err != nil {
+func (t ServicePointer) MarshalJSON() ([]byte, error) {
+	if err := ValidateServicePointer(t); err != nil {
 		return nil, err
 	}
 	if !t.Service.IsZero() {
@@ -65,7 +65,7 @@ func (t DepTarget) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON accepts a JSON string or service object.
-func (t *DepTarget) UnmarshalJSON(data []byte) error {
+func (t *ServicePointer) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return fmt.Errorf("dep target is empty")
@@ -117,8 +117,8 @@ func parseRefPath(ref string) (service string, handlerCategory string, err error
 	return service, handlerCategory, nil
 }
 
-// ValidateDepTarget checks that the target is exactly one of ref or inline service.
-func ValidateDepTarget(t DepTarget) error {
+// ValidateServicePointer checks that the target is exactly one of ref or inline service.
+func ValidateServicePointer(t ServicePointer) error {
 	hasRef := t.Ref != ""
 	hasRecord := !t.Service.IsZero()
 	count := 0

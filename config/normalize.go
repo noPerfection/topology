@@ -16,7 +16,7 @@ func (a *NoPerfection) Normalize() error {
 		}
 	}
 
-	return a.validateDepRefs()
+	return a.validateServicePointerRefs()
 }
 
 func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bool) error {
@@ -62,7 +62,7 @@ func (a *NoPerfection) normalizeService(service *Service, visiting map[string]bo
 			proxyHandler := service.Handlers[hi].ProxyHandler
 			for oi := range proxyHandler.Outbounds {
 				target := &proxyHandler.Outbounds[oi]
-				if err := a.normalizeDepTarget(target, visiting); err != nil {
+				if err := a.normalizeServicePointer(target, visiting); err != nil {
 					return fmt.Errorf("outbound %q: %w", handler.Category, err)
 				}
 			}
@@ -77,20 +77,20 @@ func (a *NoPerfection) normalizeDepService(dep *DepService, visiting map[string]
 	}
 
 	for i := range dep.Proxies {
-		if err := a.normalizeDepTarget(&dep.Proxies[i], visiting); err != nil {
+		if err := a.normalizeServicePointer(&dep.Proxies[i], visiting); err != nil {
 			return fmt.Errorf("proxies[%d]: %w", i, err)
 		}
 	}
 	for i := range dep.Extensions {
-		if err := a.normalizeDepTarget(&dep.Extensions[i], visiting); err != nil {
+		if err := a.normalizeServicePointer(&dep.Extensions[i], visiting); err != nil {
 			return fmt.Errorf("extensions[%d]: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string]bool) error {
-	if err := ValidateDepTarget(*target); err != nil {
+func (a *NoPerfection) normalizeServicePointer(target *ServicePointer, visiting map[string]bool) error {
+	if err := ValidateServicePointer(*target); err != nil {
 		return err
 	}
 
@@ -105,7 +105,7 @@ func (a *NoPerfection) normalizeDepTarget(target *DepTarget, visiting map[string
 	return a.SetService(service)
 }
 
-func (a *NoPerfection) validateDepRefs() error {
+func (a *NoPerfection) validateServicePointerRefs() error {
 	for _, service := range a.Services {
 		for _, dep := range service.HandlerDeps {
 			if err := a.validateDepServiceRefs(dep); err != nil {
@@ -126,19 +126,19 @@ func (a *NoPerfection) validateDepRefs() error {
 
 func (a *NoPerfection) validateDepServiceRefs(dep DepService) error {
 	for _, target := range dep.Proxies {
-		if err := a.validateDepRef(target); err != nil {
+		if err := a.validateServicePointer(target); err != nil {
 			return fmt.Errorf("proxy: %w", err)
 		}
 	}
 	for _, target := range dep.Extensions {
-		if err := a.validateDepRef(target); err != nil {
+		if err := a.validateServicePointer(target); err != nil {
 			return fmt.Errorf("extension: %w", err)
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateDepRef(target DepTarget) error {
+func (a *NoPerfection) validateServicePointer(target ServicePointer) error {
 	if target.Ref != "" {
 		serviceName, handlerCategory := target.RefPath()
 		if serviceName == "" {

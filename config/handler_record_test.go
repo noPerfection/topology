@@ -18,7 +18,7 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 					Category: "auth",
 					Endpoint: message.NewEndpoint("auth_1", 4301),
 				},
-				Outbounds: []DepTarget{RefTarget("user_service")},
+				Outbounds: []ServicePointer{RefTarget("user_service")},
 			}),
 		},
 	}
