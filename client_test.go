@@ -99,7 +99,7 @@ func (test *TestClientSuite) TearDownTest() {
 //
 //	// Let's run the dependency
 //	test.logger.Info("request to run the dependency", "srcUrl", src.Url, "id", test.id)
-//	id, err := test.client.StartService(src.Url, test.parent)
+//	id, err := test.client.StartService(src.Url)
 //	s().NoError(err)
 //
 //	// Just wait a bit for initialization of the service

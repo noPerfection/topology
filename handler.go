@@ -114,11 +114,11 @@ func (h *Handler) RemoveService(serviceName string) error {
 
 // StartService starts a dependency service before the topology handler is
 // started.
-func (h *Handler) StartService(serviceName string, optionalParent ...string) (string, error) {
+func (h *Handler) StartService(serviceName string) (string, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
-	return h.topology.StartService(serviceName, optionalParent...)
+	return h.topology.StartService(serviceName)
 }
 
 // IsServiceRunning checks a dependency service before the topology handler is
@@ -167,9 +167,6 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 // Requires:
 //   - 'service' string parameter.
 //
-// Optional:
-//   - 'parent' string with the parent service name.
-//
 // Returns nothing.
 // todo make it publish the result through publisher, so user won't wait for the result.
 func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInterface {
@@ -181,12 +178,7 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 		}
 	}
 
-	var optionalParent []string
-	if parentName, err := req.RouteParameters().StringValue("parent"); err == nil {
-		optionalParent = append(optionalParent, parentName)
-	}
-
-	id, err := h.topology.StartService(serviceName, optionalParent...)
+	id, err := h.topology.StartService(serviceName)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.StartService(service: '%s'): %v", serviceName, err))
 	}

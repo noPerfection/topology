@@ -323,26 +323,24 @@ func (test *TestDepManagerSuite) Test_20_Run() {
 
 	// running nil values must exist
 	var depTopology *Topology
-	_, err := depTopology.StartService(test.id, test.parent)
+	_, err := depTopology.StartService(test.id)
 	s().Error(err)
 
-	_, err = test.topology.StartService("", test.parent)
+	_, err = test.topology.StartService("")
 	s().Error(err) // missing service name
-	_, err = test.topology.StartService(test.id, "")
-	s().Error(err) // empty parent
 
 	test.setServiceStartCommand("no-command", "")
-	_, err = test.topology.StartService("no-command", test.parent)
+	_, err = test.topology.StartService("no-command")
 	s().Error(err) // no start command
 
 	// the binary doesn't exist
 	test.setServiceStartCommand(test.id, invalidBin)
-	_, err = test.topology.StartService(test.id, test.parent)
+	_, err = test.topology.StartService(test.id)
 	s().Error(err) // no binary
 
 	// Let's run it, it should exit immediately
 	test.setServiceStartCommand(test.id, localBin)
-	id, err := test.topology.StartService(test.id, test.parent)
+	id, err := test.topology.StartService(test.id)
 	s().NoError(err)
 
 	_, ok = test.topology.runningProcesses[id]
@@ -370,7 +368,7 @@ func (test *TestDepManagerSuite) Test_21_RunError() {
 	test.setServiceStartCommand(test.id, localBin)
 
 	// Let's run it
-	id, err := test.topology.StartService(test.id, test.parent)
+	id, err := test.topology.StartService(test.id)
 	s().NoError(err)
 
 	// make sure that it exists
@@ -399,7 +397,7 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 
 	// First, install the manager
 	// Let's run it
-	id, err := test.topology.StartService(test.id, test.parent)
+	id, err := test.topology.StartService(test.id)
 	s().NoError(err)
 	s().NotNil(test.topology.runningProcesses[id]) // cmd == nil indicates that the program was closed
 

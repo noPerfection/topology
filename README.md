@@ -95,7 +95,7 @@ Available client methods:
 ```go
 type NodeInterface interface {
 	StopService(serviceName string) error
-	StartService(serviceName string, optionalParent ...*topology.ParentClient) (string, error)
+	StartService(serviceName string) (string, error)
 	IsServiceRunning(serviceName string) (bool, error)
 }
 
@@ -138,13 +138,7 @@ if err := topologyClient.SetService(service); err != nil {
 ### Start, Check, and Stop Services
 
 ```go
-parent := &topology.ParentClient{
-	ServiceUrl: "api",
-	Id:         "api-manager",
-	Port:       6000,
-}
-
-id, err := topologyClient.StartService("worker", parent)
+id, err := topologyClient.StartService("worker")
 if err != nil {
 	panic(err)
 }

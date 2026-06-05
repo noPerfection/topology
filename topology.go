@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/noPerfection/log"
-	"github.com/noPerfection/protocol/message"
 	"github.com/noPerfection/topology/config"
 )
 
@@ -16,8 +15,8 @@ type NodeInterface interface {
 	// StopService stops the given dependency service.
 	StopService(serviceName string) error
 
-	// StartService starts the dependency service with the given parent name.
-	StartService(serviceName string, optionalParent ...string) (string, error)
+	// StartService starts the dependency service.
+	StartService(serviceName string) (string, error)
 
 	// IsServiceRunning checks is the service running or not.
 	IsServiceRunning(serviceName string) (bool, error)
@@ -82,9 +81,26 @@ func (tp *Topology) AddService(record config.Service) error {
 	if tp == nil || tp.config == nil {
 		return fmt.Errorf("nil config")
 	}
-	if err := tp.addService(&record, tp.usedEndpoints()); err != nil {
-		return err
+	if record.IsZero() {
+		return fmt.Errorf("service is empty")
 	}
+	if len(record.Name) == 0 {
+		return fmt.Errorf("service name is empty")
+	}
+	if err := config.ValidateService(record); err != nil {
+		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
+	}
+	if record.Type == config.IndependentType {
+		return fmt.Errorf("independent service can not be added")
+	}
+	if _, err := tp.config.GetService(record.Name); err == nil {
+		return fmt.Errorf("service('%s') already added", record.Name)
+	}
+
+	if err := tp.config.SetService(record); err != nil {
+		return fmt.Errorf("tp.config.SetService: %w", err)
+	}
+
 	return tp.config.Save()
 }
 
@@ -100,77 +116,6 @@ func (tp *Topology) Service(serviceName string) (config.Service, error) {
 	}
 
 	return record, nil
-}
-
-func (tp *Topology) addService(record *config.Service, reservedEndpoints map[string]string) error {
-	if record == nil || record.IsZero() {
-		return fmt.Errorf("service is empty")
-	}
-	if len(record.Name) == 0 {
-		return fmt.Errorf("service name is empty")
-	}
-	if err := config.ValidateService(*record); err != nil {
-		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
-	}
-	if record.Type == config.IndependentType {
-		return fmt.Errorf("independent service can not be added")
-	}
-	if _, err := tp.config.GetService(record.Name); err == nil {
-		return fmt.Errorf("service('%s') already added", record.Name)
-	}
-	if err := tp.reserveAvailableEndpoints(record, reservedEndpoints); err != nil {
-		return err
-	}
-
-	if err := tp.config.SetService(*record); err != nil {
-		return fmt.Errorf("tp.config.SetService: %w", err)
-	}
-
-	return nil
-}
-
-func (tp *Topology) usedEndpoints() map[string]string {
-	used := make(map[string]string)
-	for _, service := range tp.config.Services {
-		for _, variant := range service.Handlers {
-			handler := variant.AsHandler()
-			key, err := endpointKey(handler.Endpoint)
-			if err != nil {
-				continue
-			}
-			used[key] = fmt.Sprintf("service('%s') handler('%s')", service.Name, handler.Category)
-		}
-	}
-	return used
-}
-
-func (tp *Topology) reserveAvailableEndpoints(service *config.Service, reserved map[string]string) error {
-	seen := make(map[string]struct{})
-	for _, variant := range service.Handlers {
-		handler := variant.AsHandler()
-		key, err := endpointKey(handler.Endpoint)
-		if err != nil {
-			return fmt.Errorf("service('%s') handler('%s'): %w", service.Name, handler.Category, err)
-		}
-		if _, exists := seen[key]; exists {
-			return fmt.Errorf("service('%s') has duplicate endpoint '%s'", service.Name, key)
-		}
-		seen[key] = struct{}{}
-
-		if owner, exists := reserved[key]; exists {
-			return fmt.Errorf("service('%s') handler('%s') endpoint '%s' is already used by %s", service.Name, handler.Category, key, owner)
-		}
-		reserved[key] = fmt.Sprintf("service('%s') handler('%s')", service.Name, handler.Category)
-	}
-
-	return nil
-}
-
-func endpointKey(endpoint message.Endpoint) (string, error) {
-	if endpoint.Id == "" && !endpoint.IsRemote() {
-		return "", fmt.Errorf("endpoint id is empty")
-	}
-	return fmt.Sprintf("%s:%d", endpoint.Id, endpoint.Port), nil
 }
 
 // SetService updates an existing service in the topology configuration.
@@ -438,7 +383,7 @@ func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClien
 //
 // Note that, services can crash during the initialization.
 // In that case, you should use Topology.OnStop method.
-func (tp *Topology) StartService(serviceName string, optionalParent ...string) (string, error) {
+func (tp *Topology) StartService(serviceName string) (string, error) {
 	if tp == nil || tp.config == nil {
 		return "", fmt.Errorf("nil config")
 	}
@@ -450,13 +395,6 @@ func (tp *Topology) StartService(serviceName string, optionalParent ...string) (
 		return "", err
 	}
 	process := &Process{config: &serviceConfig}
-
-	if len(optionalParent) > 1 {
-		return "", fmt.Errorf("too many optional parameters, either no parameter or 1 parameter required")
-	}
-	if len(optionalParent) == 1 && optionalParent[0] == "" {
-		return "", fmt.Errorf("empty parent")
-	}
 
 	node, err := tp.newServiceManagerClient(&serviceConfig)
 	if err != nil {
@@ -488,11 +426,6 @@ func (tp *Topology) StartService(serviceName string, optionalParent ...string) (
 	idFlag := fmt.Sprintf("--id=%s", id)
 
 	args := []string{idFlag}
-
-	if len(optionalParent) == 1 {
-		parentFlag := fmt.Sprintf("--parent=%s", optionalParent[0])
-		args = append(args, parentFlag)
-	}
 
 	commandArgs := strings.Fields(process.config.StartCommand)
 	if len(commandArgs) == 0 {
