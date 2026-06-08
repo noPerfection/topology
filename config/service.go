@@ -26,8 +26,9 @@ type Handler struct {
 
 type ProxyHandler struct {
 	Handler
-	Routes    []string         `json:"routes,omitempty"` // whitelist routes
-	Outbounds []ServicePointer `json:"outbounds"`
+	Routes    []string            `json:"routes,omitempty"` // whitelist routes
+	Outbounds []ServicePointer    `json:"outbounds"`
+	Forward   []map[string]string `json:"forward,omitempty"` // command route => outbound ref
 }
 
 type HandlerVariant struct {
@@ -99,6 +100,14 @@ func (h *HandlerVariant) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 	if _, ok := raw["routes"]; ok {
+		var handler ProxyHandler
+		if err := json.Unmarshal(trimmed, &handler); err != nil {
+			return fmt.Errorf("proxy handler: %w", err)
+		}
+		*h = NewProxyHandlerVariant(handler)
+		return nil
+	}
+	if _, ok := raw["forward"]; ok {
 		var handler ProxyHandler
 		if err := json.Unmarshal(trimmed, &handler); err != nil {
 			return fmt.Errorf("proxy handler: %w", err)
@@ -184,6 +193,9 @@ func ValidateService(service Service) error {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
 				}
 			}
+			if err := ValidateProxyForwards(proxyHandler); err != nil {
+				return fmt.Errorf("handler[%d] forward: %w", i, err)
+			}
 		}
 	}
 
@@ -195,6 +207,50 @@ func ValidateService(service Service) error {
 	}
 
 	return nil
+}
+
+func ValidateProxyForwards(proxyHandler ProxyHandler) error {
+	for i, forward := range proxyHandler.Forward {
+		for route, outboundRef := range forward {
+			if !slices.Contains(proxyHandler.Routes, route) {
+				return fmt.Errorf("[%d] route %q is not listed in routes", i, route)
+			}
+			if !proxyHandlerHasOutboundRef(proxyHandler, outboundRef) {
+				return fmt.Errorf("[%d] outbound %q is not listed in outbounds", i, outboundRef)
+			}
+		}
+	}
+	return nil
+}
+
+func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
+	serviceName, handlerCategory, err := parseRefPath(ref)
+	if err != nil || serviceName == "" {
+		return false
+	}
+	if handlerCategory == "" {
+		handlerCategory = "main"
+	}
+
+	for _, outbound := range proxyHandler.Outbounds {
+		if outbound.Ref != "" {
+			outboundService, outboundCategory := outbound.RefPath()
+			if outboundCategory == "" {
+				outboundCategory = "main"
+			}
+			if outboundService == serviceName && outboundCategory == handlerCategory {
+				return true
+			}
+			continue
+		}
+		if outbound.Service.Name != serviceName {
+			continue
+		}
+		if _, err := outbound.Service.HandlerByCategory(handlerCategory); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // HandlerByCategory returns the handler config by the handler category.

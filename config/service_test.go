@@ -140,6 +140,78 @@ func TestValidateDepService(t *testing.T) {
 	}
 }
 
+func TestValidateProxyForwards(t *testing.T) {
+	proxyHandler := ProxyHandler{
+		Handler: Handler{
+			Type:     SyncReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("proxy", 4101),
+		},
+		Routes: []string{"hello", "age-verification"},
+		Outbounds: []ServicePointer{
+			RefTarget("default-name-proxy", "main"),
+			ServiceTarget(Service{
+				Type:      IndependentType,
+				Name:      "hello-world",
+				ModuleUrl: "github.com/noPerfection/hello-world",
+				Handlers: NewHandlerVariants(Handler{
+					Type:     ReplierType,
+					Category: "main",
+					Endpoint: message.NewEndpoint("hello-world", 4102),
+				}),
+			}),
+		},
+		Forward: []map[string]string{
+			{
+				"hello":            "default-name-proxy/main",
+				"age-verification": "hello-world",
+			},
+		},
+	}
+	service := Service{
+		Type:      ProxyType,
+		Name:      "proxy",
+		ModuleUrl: "github.com/noPerfection/proxy",
+		Handlers:  []HandlerVariant{NewProxyHandlerVariant(proxyHandler)},
+	}
+	if err := ValidateService(service); err != nil {
+		t.Fatalf("ValidateService with forward mappings: %v", err)
+	}
+
+	proxyHandler.Forward = []map[string]string{{"missing-route": "hello-world"}}
+	service.Handlers = []HandlerVariant{NewProxyHandlerVariant(proxyHandler)}
+	if err := ValidateService(service); err == nil {
+		t.Fatal("ValidateService with forward route missing from routes returned nil error")
+	}
+
+	proxyHandler.Forward = []map[string]string{{"hello": "missing-service"}}
+	service.Handlers = []HandlerVariant{NewProxyHandlerVariant(proxyHandler)}
+	if err := ValidateService(service); err == nil {
+		t.Fatal("ValidateService with forward outbound missing from outbounds returned nil error")
+	}
+}
+
+func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
+	data := []byte(`{
+		"type": "SyncReplier",
+		"category": "main",
+		"endpoint": {"id": "proxy", "port": 4101},
+		"forward": [{"hello": "hello-world"}],
+		"outbounds": ["hello-world"]
+	}`)
+
+	var variant HandlerVariant
+	if err := json.Unmarshal(data, &variant); err != nil {
+		t.Fatalf("json.Unmarshal proxy handler with forward: %v", err)
+	}
+	if variant.ProxyHandler == nil {
+		t.Fatal("variant.ProxyHandler is nil")
+	}
+	if len(variant.ProxyHandler.Forward) != 1 || variant.ProxyHandler.Forward[0]["hello"] != "hello-world" {
+		t.Fatalf("Forward = %#v, want hello mapping", variant.ProxyHandler.Forward)
+	}
+}
+
 func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
 	serviceConfig.Handlers = NewHandlerVariants(handlerOfType)
