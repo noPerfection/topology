@@ -130,62 +130,11 @@ func (tp *Topology) SetService(record config.Service) error {
 		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
 	}
 
-	if record.Type == config.IndependentType {
-		if err := tp.setIndependentService(record); err != nil {
-			return err
-		}
-
-		return tp.config.Save()
-	}
-
-	if _, err := tp.config.GetService(record.Name); err != nil {
-		return fmt.Errorf("tp.config.GetService('%s'): %w", record.Name, err)
-	}
-
 	if err := tp.config.SetService(record); err != nil {
 		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
 
 	return tp.config.Save()
-}
-
-func (tp *Topology) setIndependentService(record config.Service) error {
-	current, err := tp.config.GetByType(config.IndependentType)
-	if err != nil {
-		if err := tp.config.SetService(record); err != nil {
-			return fmt.Errorf("tp.config.SetService: %w", err)
-		}
-		return nil
-	}
-
-	topologyHandler, err := current.HandlerByCategory(TopologyHandlerCategory)
-	if err == nil {
-		nextTopologyHandler, err := record.HandlerByCategory(TopologyHandlerCategory)
-		if err != nil {
-			nextTopologyHandler = config.NewHandlerVariant(config.Handler{
-				Type:     config.HandlerType(TopologySocketType),
-				Category: TopologyHandlerCategory,
-			})
-		}
-		if nextTopologyHandler.ProxyHandler != nil {
-			nextTopologyHandler.ProxyHandler.Endpoint = topologyHandler.AsHandler().Endpoint
-		} else if nextTopologyHandler.Handler != nil {
-			nextTopologyHandler.Handler.Endpoint = topologyHandler.AsHandler().Endpoint
-		}
-		record.SetHandler(nextTopologyHandler)
-	}
-
-	if current.Name != record.Name {
-		if err := tp.config.RemoveService(current.Name); err != nil {
-			return fmt.Errorf("tp.config.RemoveService('%s'): %w", current.Name, err)
-		}
-	}
-
-	if err := tp.config.SetService(record); err != nil {
-		return fmt.Errorf("tp.config.SetService: %w", err)
-	}
-
-	return nil
 }
 
 // RemoveService removes a service from the topology configuration.
