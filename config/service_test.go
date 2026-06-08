@@ -161,11 +161,9 @@ func TestValidateProxyForwards(t *testing.T) {
 				}),
 			}),
 		},
-		Forward: []map[string]string{
-			{
-				"hello":            "default-name-proxy/main",
-				"age-verification": "hello-world",
-			},
+		Forward: map[string]string{
+			"hello":            "default-name-proxy/main",
+			"age-verification": "hello-world",
 		},
 	}
 	service := Service{
@@ -178,13 +176,13 @@ func TestValidateProxyForwards(t *testing.T) {
 		t.Fatalf("ValidateService with forward mappings: %v", err)
 	}
 
-	proxyHandler.Forward = []map[string]string{{"missing-route": "hello-world"}}
+	proxyHandler.Forward = map[string]string{"missing-route": "hello-world"}
 	service.Handlers = []HandlerVariant{NewProxyHandlerVariant(proxyHandler)}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward route missing from routes returned nil error")
 	}
 
-	proxyHandler.Forward = []map[string]string{{"hello": "missing-service"}}
+	proxyHandler.Forward = map[string]string{"hello": "missing-service"}
 	service.Handlers = []HandlerVariant{NewProxyHandlerVariant(proxyHandler)}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward outbound missing from outbounds returned nil error")
@@ -196,7 +194,7 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 		"type": "SyncReplier",
 		"category": "main",
 		"endpoint": {"id": "proxy", "port": 4101},
-		"forward": [{"hello": "hello-world"}],
+		"forward": {"hello": "hello-world"},
 		"outbounds": ["hello-world"]
 	}`)
 
@@ -207,7 +205,7 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 	if variant.ProxyHandler == nil {
 		t.Fatal("variant.ProxyHandler is nil")
 	}
-	if len(variant.ProxyHandler.Forward) != 1 || variant.ProxyHandler.Forward[0]["hello"] != "hello-world" {
+	if len(variant.ProxyHandler.Forward) != 1 || variant.ProxyHandler.Forward["hello"] != "hello-world" {
 		t.Fatalf("Forward = %#v, want hello mapping", variant.ProxyHandler.Forward)
 	}
 }

@@ -26,9 +26,9 @@ type Handler struct {
 
 type ProxyHandler struct {
 	Handler
-	Routes    []string            `json:"routes,omitempty"` // whitelist routes
-	Outbounds []ServicePointer    `json:"outbounds"`
-	Forward   []map[string]string `json:"forward,omitempty"` // command route => outbound ref
+	Routes    []string          `json:"routes,omitempty"` // whitelist routes
+	Outbounds []ServicePointer  `json:"outbounds"`
+	Forward   map[string]string `json:"forward,omitempty"` // command route => outbound ref
 }
 
 type HandlerVariant struct {
@@ -210,14 +210,12 @@ func ValidateService(service Service) error {
 }
 
 func ValidateProxyForwards(proxyHandler ProxyHandler) error {
-	for i, forward := range proxyHandler.Forward {
-		for route, outboundRef := range forward {
-			if !slices.Contains(proxyHandler.Routes, route) {
-				return fmt.Errorf("[%d] route %q is not listed in routes", i, route)
-			}
-			if !proxyHandlerHasOutboundRef(proxyHandler, outboundRef) {
-				return fmt.Errorf("[%d] outbound %q is not listed in outbounds", i, outboundRef)
-			}
+	for route, outboundRef := range proxyHandler.Forward {
+		if !slices.Contains(proxyHandler.Routes, route) {
+			return fmt.Errorf("route %q is not listed in routes", route)
+		}
+		if !proxyHandlerHasOutboundRef(proxyHandler, outboundRef) {
+			return fmt.Errorf("outbound %q is not listed in outbounds", outboundRef)
 		}
 	}
 	return nil
