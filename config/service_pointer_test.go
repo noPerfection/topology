@@ -3,6 +3,8 @@ package config
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/noPerfection/protocol/message"
 )
 
 func TestServicePointerJSONRef(t *testing.T) {
@@ -188,5 +190,25 @@ func TestServicePointerValidate(t *testing.T) {
 	}
 	if err := ValidateServicePointer(RefTarget("auth_proxy")); err != nil {
 		t.Fatalf("ValidateServicePointer ref: %v", err)
+	}
+}
+
+func TestServicePointerInlineIpcRequiresCompleteService(t *testing.T) {
+	inline := ServiceTarget(Service{
+		Type: ProxyType,
+		Name: "inline_proxy",
+		Handlers: NewHandlerVariants(Handler{
+			Type:     SyncReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("tmp/inline_proxy", 0),
+		}),
+	})
+	if err := ValidateServicePointer(inline); err == nil {
+		t.Fatal("ValidateServicePointer inline IPC without start-command returned nil error")
+	}
+
+	inline.StartCommand = "go run ./cmd/inline-proxy"
+	if err := ValidateServicePointer(inline); err != nil {
+		t.Fatalf("ValidateServicePointer complete inline IPC service: %v", err)
 	}
 }

@@ -145,6 +145,19 @@ func (s Service) IsZero() bool {
 	return s.Name == ""
 }
 
+func (s Service) IsIpc() bool {
+	for _, variant := range s.Handlers {
+		handler := variant.AsHandler()
+		if handler.Category == "manager" {
+			continue
+		}
+		if handler.Endpoint.IsIpc() {
+			return true
+		}
+	}
+	return false
+}
+
 // ValidateService validates the service metadata and endpoint bootstrap settings.
 func ValidateService(service Service) error {
 	if len(service.Name) == 0 {

@@ -120,6 +120,57 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	}
 }
 
+func TestServiceIsIpc(t *testing.T) {
+	service := Service{
+		Name: "proxy",
+		Type: ProxyType,
+		Handlers: NewHandlerVariants(
+			Handler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/proxy", 0),
+			},
+			Handler{
+				Category: "manager",
+				Endpoint: message.NewEndpoint("tmp/proxy_manager", 0),
+			},
+		),
+	}
+	if !service.IsIpc() {
+		t.Fatal("Service.IsIpc with IPC handler returned false")
+	}
+}
+
+func TestServiceIsIpcSkipsManager(t *testing.T) {
+	service := Service{
+		Name: "proxy",
+		Handlers: NewHandlerVariants(
+			Handler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("localhost", 8000),
+			},
+			Handler{
+				Category: "manager",
+				Endpoint: message.NewEndpoint("tmp/manager", 0),
+			},
+		),
+	}
+	if service.IsIpc() {
+		t.Fatal("Service.IsIpc returned true for manager-only IPC handler")
+	}
+}
+
+func TestServiceIsIpcRemoteHandler(t *testing.T) {
+	service := Service{
+		Handlers: NewHandlerVariants(Handler{
+			Category: "main",
+			Endpoint: message.NewEndpoint("localhost", 8000),
+		}),
+	}
+	if service.IsIpc() {
+		t.Fatal("Service.IsIpc returned true for remote handler")
+	}
+}
+
 func TestValidateDepService(t *testing.T) {
 	if err := ValidateDepService(DepService{Name: "orphan"}); err == nil {
 		t.Fatal("ValidateDepService without proxies or extensions returned nil error")
