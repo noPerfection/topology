@@ -20,6 +20,7 @@ const (
 	StartService            = "start-service"
 	StopService             = "stop-service"
 	Service                 = "service"
+	Services                = "services"
 	AddService              = "add-service"
 	SetService              = "set-service"
 	RemoveService           = "remove-service"
@@ -144,6 +145,14 @@ func (h *Handler) Service(serviceName string) (config.Service, error) {
 		return config.Service{}, err
 	}
 	return h.topology.Service(serviceName)
+}
+
+// Services returns service configurations before the topology handler is started.
+func (h *Handler) Services() ([]config.Service, error) {
+	if err := h.requireNotStarted(); err != nil {
+		return nil, err
+	}
+	return h.topology.Services()
 }
 
 // onIsServiceRunning checks whether the dependency is running or not.
@@ -275,6 +284,16 @@ func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface
 	return req.Ok(datatype.New().Set("service", record))
 }
 
+// onServices returns the configuration for all services.
+func (h *Handler) onServices(req message.RequestInterface) message.ReplyInterface {
+	records, err := h.topology.Services()
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.Services: %v", err))
+	}
+
+	return req.Ok(datatype.New().Set("services", records))
+}
+
 // Start starts the dependency handler with the available operations.
 func (h *Handler) Start() error {
 	if h == nil {
@@ -295,6 +314,9 @@ func (h *Handler) Start() error {
 	}
 	if err := h.handler.Route(Service, h.onService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Service, err)
+	}
+	if err := h.handler.Route(Services, h.onServices); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", Services, err)
 	}
 	if err := h.handler.Route(AddService, h.onAddService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", AddService, err)

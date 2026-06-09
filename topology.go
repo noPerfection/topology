@@ -33,6 +33,9 @@ type TopologyInterface interface {
 	// Service returns a service configuration by name.
 	Service(serviceName string) (config.Service, error)
 
+	// Services returns the list of configured services.
+	Services() ([]config.Service, error)
+
 	// AddService registers a service in the topology configuration.
 	AddService(record config.Service) error
 
@@ -116,6 +119,18 @@ func (tp *Topology) Service(serviceName string) (config.Service, error) {
 	}
 
 	return record, nil
+}
+
+// Services returns all configured services.
+func (tp *Topology) Services() ([]config.Service, error) {
+	if tp == nil || tp.config == nil {
+		return nil, fmt.Errorf("nil config")
+	}
+
+	services := make([]config.Service, len(tp.config.Services))
+	copy(services, tp.config.Services)
+
+	return services, nil
 }
 
 // SetService updates an existing service in the topology configuration.

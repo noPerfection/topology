@@ -93,6 +93,39 @@ func (c *Client) Service(serviceName string) (config.Service, error) {
 	return record, nil
 }
 
+// Services returns all service configurations.
+func (c *Client) Services() ([]config.Service, error) {
+	req := message.Request{
+		Command:    Services,
+		Parameters: datatype.New(),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return nil, fmt.Errorf("socket.Request('%s'): %w", Services, err)
+	}
+
+	if !reply.IsOK() {
+		return nil, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	rawServices, err := reply.ReplyParameters().NestedListValue("services")
+	if err != nil {
+		return nil, fmt.Errorf("reply.ReplyParameters().NestedListValue('services'): %w", err)
+	}
+
+	records := make([]config.Service, 0, len(rawServices))
+	for i, rawService := range rawServices {
+		var record config.Service
+		if err := rawService.Interface(&record); err != nil {
+			return nil, fmt.Errorf("rawServices[%d].Interface('config.Service'): %w", i, err)
+		}
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
 // AddService registers a service in the topology configuration.
 func (c *Client) AddService(record config.Service) error {
 	req := message.Request{
