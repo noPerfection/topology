@@ -61,7 +61,7 @@ const DefaultTimeout = time.Second * 5
 
 const ipcManagerProbeTimeout = 100 * time.Millisecond
 
-const ServiceManagerCategory = "manager"
+const ServiceManagerCategory = config.ServiceManagerCategory
 
 type Process struct {
 	config *config.Service

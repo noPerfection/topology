@@ -10,6 +10,8 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
+const ServiceManagerCategory = "manager"
+
 type DepService struct {
 	// For command deps its command, for handler deps its handler catego
 	Name       string           `json:"name"`
@@ -146,9 +148,12 @@ func (s Service) IsZero() bool {
 }
 
 func (s Service) IsIpc() bool {
+	if s.IsInproc() {
+		return false
+	}
 	for _, variant := range s.Handlers {
 		handler := variant.AsHandler()
-		if handler.Category == "manager" {
+		if handler.Category == ServiceManagerCategory {
 			continue
 		}
 		if handler.Endpoint.IsIpc() {
@@ -156,6 +161,48 @@ func (s Service) IsIpc() bool {
 		}
 	}
 	return false
+}
+
+func (s Service) IsInproc() bool {
+	for _, variant := range s.Handlers {
+		handler := variant.AsHandler()
+		if handler.Category == ServiceManagerCategory {
+			continue
+		}
+		if handler.Endpoint.IsInproc() {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateOutboundService validates a minimal inline service used as a proxy outbound.
+// Bootstrap fields such as module-url and start-command are not required.
+func ValidateOutboundService(service Service) error {
+	if len(service.Name) == 0 {
+		return fmt.Errorf("service name is empty")
+	}
+	if err := ValidateServiceType(service.Type); err != nil {
+		return fmt.Errorf("identity.ValidateServiceType: %v", err)
+	}
+	if len(service.Handlers) == 0 {
+		return fmt.Errorf("service %q must have at least one handler", service.Name)
+	}
+
+	for i, h := range service.Handlers {
+		handler := h.AsHandler()
+		if err := ValidateHandlerType(handler.Type); err != nil {
+			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
+		}
+		if len(handler.Category) == 0 {
+			return fmt.Errorf("handler[%d] category is empty", i)
+		}
+		if len(handler.Endpoint.Id) == 0 && !handler.Endpoint.IsRemote() {
+			return fmt.Errorf("handler[%d] '%s' endpoint id is empty", i, handler.Category)
+		}
+	}
+
+	return nil
 }
 
 // ValidateService validates the service metadata and endpoint bootstrap settings.
@@ -202,7 +249,7 @@ func ValidateService(service Service) error {
 		if service.Type == ProxyType {
 			proxyHandler := h.AsProxyHandler()
 			for j, target := range proxyHandler.Outbounds {
-				if err := ValidateServicePointer(target); err != nil {
+				if err := ValidateOutboundServicePointer(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
 				}
 			}

@@ -212,3 +212,18 @@ func TestServicePointerInlineIpcRequiresCompleteService(t *testing.T) {
 		t.Fatalf("ValidateServicePointer complete inline IPC service: %v", err)
 	}
 }
+
+func TestOutboundServicePointerAllowsMinimalInlineService(t *testing.T) {
+	inline := ServiceTarget(Service{
+		Type: ProxyType,
+		Name: "default-name-proxy",
+		Handlers: NewHandlerVariants(Handler{
+			Type:     SyncReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
+		}),
+	})
+	if err := ValidateOutboundServicePointer(inline); err != nil {
+		t.Fatalf("ValidateOutboundServicePointer minimal inline IPC service: %v", err)
+	}
+}

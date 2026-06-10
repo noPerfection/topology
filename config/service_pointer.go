@@ -52,16 +52,18 @@ func (t ServicePointer) Name() string {
 
 // MarshalJSON encodes the target as a JSON string (ref) or service object.
 func (t ServicePointer) MarshalJSON() ([]byte, error) {
-	if err := ValidateServicePointer(t); err != nil {
-		return nil, err
+	hasRef := t.Ref != ""
+	hasRecord := !t.Service.IsZero()
+	if hasRef == hasRecord {
+		return nil, fmt.Errorf("dep target must set exactly one of ref or inline service")
 	}
-	if !t.Service.IsZero() {
-		return json.Marshal(t.Service)
-	}
-	if t.Ref != "" {
+	if hasRef {
+		if _, _, err := parseRefPath(t.Ref); err != nil {
+			return nil, err
+		}
 		return json.Marshal(t.Ref)
 	}
-	return nil, fmt.Errorf("dep target is empty")
+	return json.Marshal(t.Service)
 }
 
 // UnmarshalJSON accepts a JSON string or service object.
@@ -115,6 +117,32 @@ func parseRefPath(ref string) (service string, handlerCategory string, err error
 		return "", "", fmt.Errorf("dep target handler category is empty")
 	}
 	return service, handlerCategory, nil
+}
+
+// ValidateOutboundServicePointer checks proxy outbound targets.
+// Inline services are validated with ValidateOutboundService.
+func ValidateOutboundServicePointer(t ServicePointer) error {
+	hasRef := t.Ref != ""
+	hasRecord := !t.Service.IsZero()
+	count := 0
+	for _, ok := range []bool{hasRef, hasRecord} {
+		if ok {
+			count++
+		}
+	}
+	if count != 1 {
+		return fmt.Errorf("dep target must set exactly one of ref or inline service")
+	}
+	if hasRef {
+		if _, _, err := parseRefPath(t.Ref); err != nil {
+			return err
+		}
+		return nil
+	}
+	if err := ValidateOutboundService(t.Service); err != nil {
+		return fmt.Errorf("service: %w", err)
+	}
+	return nil
 }
 
 // ValidateServicePointer checks that the target is exactly one of ref or inline service.

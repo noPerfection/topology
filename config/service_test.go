@@ -149,13 +149,35 @@ func TestServiceIsIpcSkipsManager(t *testing.T) {
 				Endpoint: message.NewEndpoint("localhost", 8000),
 			},
 			Handler{
-				Category: "manager",
+				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("tmp/manager", 0),
 			},
 		),
 	}
 	if service.IsIpc() {
-		t.Fatal("Service.IsIpc returned true for manager-only IPC handler")
+		t.Fatal("Service.IsIpc returned true when only manager handler is IPC")
+	}
+}
+
+func TestServiceIsIpcMainIpcManagerInproc(t *testing.T) {
+	service := Service{
+		Name: "proxy",
+		Handlers: NewHandlerVariants(
+			Handler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/proxy", 0),
+			},
+			Handler{
+				Category: ServiceManagerCategory,
+				Endpoint: message.NewEndpoint("inproc/proxy_manager", 0),
+			},
+		),
+	}
+	if service.IsInproc() {
+		t.Fatal("Service.IsInproc returned true when only manager handler is inproc")
+	}
+	if !service.IsIpc() {
+		t.Fatal("Service.IsIpc returned false for main IPC handler with inproc manager")
 	}
 }
 
@@ -168,6 +190,74 @@ func TestServiceIsIpcRemoteHandler(t *testing.T) {
 	}
 	if service.IsIpc() {
 		t.Fatal("Service.IsIpc returned true for remote handler")
+	}
+}
+
+func TestServiceIsInproc(t *testing.T) {
+	service := Service{
+		Name: "extension",
+		Handlers: NewHandlerVariants(
+			Handler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("inproc/extension", 0),
+			},
+		),
+	}
+	if !service.IsInproc() {
+		t.Fatal("Service.IsInproc with inproc handler returned false")
+	}
+}
+
+func TestServiceIsInprocSkipsManager(t *testing.T) {
+	service := Service{
+		Name: "extension",
+		Handlers: NewHandlerVariants(
+			Handler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("localhost", 8000),
+			},
+			Handler{
+				Category: ServiceManagerCategory,
+				Endpoint: message.NewEndpoint("inproc/extension_manager", 0),
+			},
+		),
+	}
+	if service.IsInproc() {
+		t.Fatal("Service.IsInproc returned true when only manager handler is inproc")
+	}
+}
+
+func TestServiceIsIpcFalseWhenMainInproc(t *testing.T) {
+	service := Service{
+		Name: "extension",
+		Handlers: NewHandlerVariants(
+			Handler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("inproc/extension", 0),
+			},
+			Handler{
+				Category: ServiceManagerCategory,
+				Endpoint: message.NewEndpoint("tmp/manager", 0),
+			},
+		),
+	}
+	if !service.IsInproc() {
+		t.Fatal("Service.IsInproc returned false for main inproc handler")
+	}
+	if service.IsIpc() {
+		t.Fatal("Service.IsIpc returned true when main handler is inproc")
+	}
+}
+
+func TestServiceIsInprocRemoteHandler(t *testing.T) {
+	service := Service{
+		Handlers: NewHandlerVariants(Handler{
+			Category: "main",
+			Endpoint: message.NewEndpoint("localhost", 8000),
+		}),
+	}
+	if service.IsInproc() {
+		t.Fatal("Service.IsInproc returned true for remote handler")
 	}
 }
 
@@ -188,6 +278,21 @@ func TestValidateDepService(t *testing.T) {
 		Extensions: []ServicePointer{RefTarget("user_service")},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with extensions: %v", err)
+	}
+}
+
+func TestValidateOutboundServiceAllowsMinimalProxyOutbound(t *testing.T) {
+	outbound := Service{
+		Type: ProxyType,
+		Name: "default-name-proxy",
+		Handlers: NewHandlerVariants(Handler{
+			Type:     SyncReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
+		}),
+	}
+	if err := ValidateOutboundService(outbound); err != nil {
+		t.Fatalf("ValidateOutboundService minimal proxy outbound: %v", err)
 	}
 }
 

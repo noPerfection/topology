@@ -103,8 +103,8 @@ func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[st
 			proxyHandler := service.Handlers[hi].ProxyHandler
 			for oi := range proxyHandler.Outbounds {
 				target := &proxyHandler.Outbounds[oi]
-				if err := a.validateServicePointerTopology(target, visiting); err != nil {
-					return fmt.Errorf("outbound %q: %w", handler.Category, err)
+				if err := ValidateOutboundServicePointer(*target); err != nil {
+					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
 				}
 			}
 		}
@@ -161,7 +161,7 @@ func (a *NoPerfection) validateServiceRefs(service Service) error {
 			return fmt.Errorf("handler-deps category %q: %w", dep.Name, err)
 		}
 	}
-	for _, handler := range service.Handlers {
+	for hi, handler := range service.Handlers {
 		baseHandler := handler.AsHandler()
 		for _, dep := range baseHandler.CommandDeps {
 			if err := a.validateDepServiceRefs(dep); err != nil {
@@ -169,9 +169,9 @@ func (a *NoPerfection) validateServiceRefs(service Service) error {
 			}
 		}
 		if service.Type == ProxyType && handler.ProxyHandler != nil {
-			for _, target := range handler.ProxyHandler.Outbounds {
-				if err := a.validateServicePointer(target); err != nil {
-					return fmt.Errorf("outbound %q: %w", baseHandler.Category, err)
+			for oi, target := range handler.ProxyHandler.Outbounds {
+				if err := a.validateOutboundServicePointer(target); err != nil {
+					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
 				}
 			}
 		}
@@ -189,6 +189,28 @@ func (a *NoPerfection) validateDepServiceRefs(dep DepService) error {
 		if err := a.validateServicePointer(target); err != nil {
 			return fmt.Errorf("extension: %w", err)
 		}
+	}
+	return nil
+}
+
+func (a *NoPerfection) validateOutboundServicePointer(target ServicePointer) error {
+	if err := ValidateOutboundServicePointer(target); err != nil {
+		return err
+	}
+	if target.Ref == "" {
+		return nil
+	}
+
+	serviceName, handlerCategory := target.RefPath()
+	record, err := a.GetService(serviceName)
+	if err != nil {
+		return fmt.Errorf("service %q not found: %w", serviceName, err)
+	}
+	if handlerCategory == "" {
+		return nil
+	}
+	if _, err := record.HandlerByCategory(handlerCategory); err != nil {
+		return fmt.Errorf("service %q handler category %q: %w", serviceName, handlerCategory, err)
 	}
 	return nil
 }
