@@ -2,6 +2,7 @@ package topology
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -117,8 +118,138 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 	}
 }
 
+func TestHandlerStartSkipsWhenTopologyAlreadyRunning(t *testing.T) {
+	appConfig := config.NoPerfection{}
+	first, err := newHandler(&appConfig)
+	if err != nil {
+		t.Fatalf("newHandler first: %v", err)
+	}
+	second, err := newHandler(&appConfig)
+	if err != nil {
+		t.Fatalf("newHandler second: %v", err)
+	}
+	third, err := newHandler(&appConfig)
+	if err != nil {
+		t.Fatalf("newHandler third: %v", err)
+	}
+
+	if err := first.Start(); err != nil {
+		t.Fatalf("first.Start: %v", err)
+	}
+	defer closeTopologyHandler(t)
+
+	if err := second.Start(); err != nil {
+		t.Fatalf("second.Start: %v", err)
+	}
+	if err := third.Start(); err != nil {
+		t.Fatalf("third.Start: %v", err)
+	}
+
+	client, err := NewClient()
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
+	}
+	defer client.Close()
+	client.Timeout(50 * time.Millisecond)
+	client.Attempt(2)
+
+	running, err := client.IsRunning()
+	if err != nil {
+		t.Fatalf("client.IsRunning: %v", err)
+	}
+	if !running {
+		t.Fatal("client.IsRunning returned false")
+	}
+}
+
+func TestHandlerConcurrentPreStartCallsAcrossInstances(t *testing.T) {
+	cfgPath := filepath.Join(t.TempDir(), "app.json")
+	appConfig, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+
+	handlers := make([]*Handler, 5)
+	for i := range handlers {
+		handlers[i], err = newHandler(&appConfig)
+		if err != nil {
+			t.Fatalf("newHandler[%d]: %v", i, err)
+		}
+	}
+
+	for i := range handlers {
+		if err := handlers[0].AddService(testHandlerService("set-service-" + string(rune('a'+i)))); err != nil {
+			t.Fatalf("seed service %d: %v", i, err)
+		}
+	}
+
+	start := make(chan struct{})
+	errs := make(chan error, len(handlers)*4)
+	var wg sync.WaitGroup
+	for i, handler := range handlers {
+		wg.Add(1)
+		go func(index int, handler *Handler) {
+			defer wg.Done()
+			<-start
+
+			errs <- handler.SetService(testHandlerService("set-service-" + string(rune('a'+index))))
+			errs <- handler.AddService(testHandlerService("add-service-" + string(rune('a'+index))))
+			errs <- handler.RemoveService("set-service-" + string(rune('a'+index)))
+			_, err := handler.StartService("set-service-" + string(rune('a'+index)))
+			errs <- err
+		}(i, handler)
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		_ = err // Some calls are expected to fail; this test verifies concurrent access is safe.
+	}
+
+	for i, handler := range handlers {
+		if err := handler.Start(); err != nil {
+			t.Fatalf("handler[%d].Start: %v", i, err)
+		}
+	}
+	defer closeTopologyHandler(t)
+}
+
+func testHandlerService(name string) config.Service {
+	return config.Service{
+		Type: config.IndependentType,
+		Name: name,
+		Handlers: config.NewHandlerVariants(config.Handler{
+			Type:     config.ReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("localhost", 9000),
+		}),
+	}
+}
+
+func closeTopologyHandler(t *testing.T) {
+	t.Helper()
+
+	controlConfig := control.CreateInternalConfig(HandlerConfig())
+	manager, err := sync_replier.NewClient(controlConfig.Id, controlConfig.Port)
+	if err != nil {
+		t.Fatalf("sync_replier.NewClient: %v", err)
+	}
+	defer manager.Close()
+
+	_, err = manager.Request(&message.Request{
+		Command:    control.HandlerClose,
+		Parameters: datatype.New(),
+	})
+	if err != nil {
+		t.Fatalf("control.HandlerClose: %v", err)
+	}
+
+	time.Sleep(250 * time.Millisecond)
+}
+
 func (test *TestHandlerSuite) TestTopologyInterfaceAfterStartBlocked() {
-	s := test.Require
+	s := test.Suite.Require
 
 	s().Error(test.depHandler.AddService(config.Service{Name: "blocked", Type: config.ProxyType}))
 	s().Error(test.depHandler.SetService(config.Service{Name: "blocked", Type: config.ProxyType}))

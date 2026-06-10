@@ -63,6 +63,30 @@ func (c *Client) Close() error {
 	return c.socket.Close()
 }
 
+// IsRunning checks whether the topology handler endpoint is available.
+func (c *Client) IsRunning() (bool, error) {
+	req := message.Request{
+		Command:    IsRunning,
+		Parameters: datatype.New(),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return false, fmt.Errorf("socket.Request('%s'): %w", IsRunning, err)
+	}
+
+	if !reply.IsOK() {
+		return false, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	res, err := reply.ReplyParameters().BoolValue("running")
+	if err != nil {
+		return false, fmt.Errorf("reply.Parameters.GetBoolean('running'): %w", err)
+	}
+
+	return res, nil
+}
+
 // Service returns a service configuration by name.
 func (c *Client) Service(serviceName string) (config.Service, error) {
 	req := message.Request{

@@ -3,11 +3,15 @@ package topology
 
 import (
 	"fmt"
+	"sync"
+	"time"
 
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
+	clientSyncReplier "github.com/noPerfection/protocol/client/sync_replier"
 	"github.com/noPerfection/protocol/handler/base"
 	handlerConfig "github.com/noPerfection/protocol/handler/config"
+	"github.com/noPerfection/protocol/handler/control"
 	"github.com/noPerfection/protocol/handler/replier"
 	"github.com/noPerfection/protocol/message"
 	"github.com/noPerfection/topology/config"
@@ -16,6 +20,7 @@ import (
 const (
 	TopologyHandlerCategory   = "service_topology" // handler category
 	TopologySocketType        = handlerConfig.ReplierType
+	IsRunning                 = "is-running"
 	IsServiceRunning          = "is-service-running"
 	IsServiceRunningByManager = "is-service-running-by-manager"
 	StartService              = "start-service"
@@ -34,9 +39,12 @@ type Handler struct {
 	handler  base.Interface    // Receive commands
 	topology TopologyInterface // Route to the functions from topology
 	started  bool
+	mu       sync.Mutex
 }
 
 var _ TopologyInterface = (*Handler)(nil)
+
+var topologyMutationMu sync.Mutex
 
 // HandlerConfig returns the handler configuration for the topology endpoint.
 // Then use it as the handler's config with the SetConfig method.
@@ -92,97 +100,167 @@ func (h *Handler) requireNotStarted() error {
 // AddService registers a service in the topology configuration before the
 // topology handler is started.
 func (h *Handler) AddService(record config.Service) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.AddService(record)
 }
 
 // SetService updates a service in the topology configuration before the topology
 // handler is started.
 func (h *Handler) SetService(record config.Service) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.SetService(record)
 }
 
 // RemoveService removes a service from the topology configuration before the
 // topology handler is started.
 func (h *Handler) RemoveService(serviceName string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.RemoveService(serviceName)
 }
 
 // StartService starts a dependency service before the topology handler is
 // started.
 func (h *Handler) StartService(serviceName string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.StartService(serviceName)
 }
 
 // StartServiceByConfig registers and starts a dependency service before the
 // topology handler is started.
 func (h *Handler) StartServiceByConfig(record config.Service) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.StartServiceByConfig(record)
 }
 
 // IsServiceRunning checks a dependency service before the topology handler is
 // started.
 func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return false, err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.IsServiceRunning(serviceName)
 }
 
 // IsServiceRunningByManager checks a dependency service manager before the
 // topology handler is started.
 func (h *Handler) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return false, err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.IsServiceRunningByManager(serviceName, handler)
 }
 
 // StopService stops a dependency service before the topology handler is started.
 func (h *Handler) StopService(serviceName string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.StopService(serviceName)
 }
 
 // StopServiceByManager stops a dependency service manager before the topology
 // handler is started.
 func (h *Handler) StopServiceByManager(serviceName string, handler config.Handler) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.StopServiceByManager(serviceName, handler)
 }
 
 // Service returns a service configuration before the topology handler is started.
 func (h *Handler) Service(serviceName string) (config.Service, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return config.Service{}, err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.Service(serviceName)
 }
 
 // Services returns service configurations before the topology handler is started.
 func (h *Handler) Services() ([]config.Service, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if err := h.requireNotStarted(); err != nil {
 		return nil, err
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.topology.Services()
+}
+
+func (h *Handler) onIsRunning(req message.RequestInterface) message.ReplyInterface {
+	return req.Ok(datatype.New().Set("running", true))
 }
 
 // onIsServiceRunning checks whether the dependency is running or not.
@@ -402,10 +480,24 @@ func (h *Handler) Start() error {
 	if h == nil {
 		return fmt.Errorf("handler is nil")
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if h.started {
-		return fmt.Errorf("topology handler already started")
+		return nil
+	}
+	if h.isTopologyAlreadyRunning() {
+		h.started = true
+		return nil
+	}
+	if h.restartExistingTopologyHandler() {
+		h.started = true
+		return nil
 	}
 
+	if err := h.handler.Route(IsRunning, h.onIsRunning); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", IsRunning, err)
+	}
 	if err := h.handler.Route(IsServiceRunning, h.onIsServiceRunning); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", IsServiceRunning, err)
 	}
@@ -445,4 +537,34 @@ func (h *Handler) Start() error {
 	}
 	h.started = true
 	return nil
+}
+
+func (h *Handler) isTopologyAlreadyRunning() bool {
+	client, err := NewClient()
+	if err != nil {
+		return false
+	}
+	defer client.Close()
+
+	client.Timeout(50 * time.Millisecond)
+	client.Attempt(2)
+	running, err := client.IsRunning()
+	return err == nil && running
+}
+
+func (h *Handler) restartExistingTopologyHandler() bool {
+	controlConfig := control.CreateInternalConfig(HandlerConfig())
+	client, err := clientSyncReplier.NewClient(controlConfig.Id, controlConfig.Port)
+	if err != nil {
+		return false
+	}
+	defer client.Close()
+
+	client.Timeout(50 * time.Millisecond)
+	client.Attempt(2)
+	reply, err := client.Request(&message.Request{
+		Command:    control.HandlerStart,
+		Parameters: datatype.New(),
+	})
+	return err == nil && reply.IsOK()
 }
