@@ -26,8 +26,8 @@ func TestLoadMissingFile(t *testing.T) {
 func TestGetService(t *testing.T) {
 	a := NoPerfection{}
 	sample := Service{Name: "api", Type: IndependentType}
-	if err := a.SetService(sample); err != nil {
-		t.Fatalf("SetService: %v", err)
+	if err := a.AddService(sample); err != nil {
+		t.Fatalf("AddService: %v", err)
 	}
 
 	found, err := a.GetService("api")
@@ -51,8 +51,8 @@ func TestGetByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.SetService(s); err != nil {
-			t.Fatalf("SetService: %v", err)
+		if err := a.AddService(s); err != nil {
+			t.Fatalf("AddService: %v", err)
 		}
 	}
 
@@ -80,8 +80,8 @@ func TestFilterByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.SetService(s); err != nil {
-			t.Fatalf("SetService: %v", err)
+		if err := a.AddService(s); err != nil {
+			t.Fatalf("AddService: %v", err)
 		}
 	}
 
@@ -115,8 +115,8 @@ func TestCountByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.SetService(s); err != nil {
-			t.Fatalf("SetService: %v", err)
+		if err := a.AddService(s); err != nil {
+			t.Fatalf("AddService: %v", err)
 		}
 	}
 
@@ -136,11 +136,14 @@ func TestSetService(t *testing.T) {
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
 
-	if err := a.SetService(first); err != nil {
-		t.Fatalf("SetService first: %v", err)
+	if err := a.SetService(first); err == nil {
+		t.Fatal("SetService missing service returned nil error")
 	}
-	if err := a.SetService(second); err != nil {
-		t.Fatalf("SetService second: %v", err)
+	if err := a.AddService(first); err != nil {
+		t.Fatalf("AddService first: %v", err)
+	}
+	if err := a.AddService(second); err != nil {
+		t.Fatalf("AddService second: %v", err)
 	}
 	if len(a.Services) != 2 {
 		t.Fatalf("len(Services) = %d, want 2", len(a.Services))
@@ -168,11 +171,11 @@ func TestRemoveService(t *testing.T) {
 	a := NoPerfection{}
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
-	if err := a.SetService(first); err != nil {
-		t.Fatalf("SetService first: %v", err)
+	if err := a.AddService(first); err != nil {
+		t.Fatalf("AddService first: %v", err)
 	}
-	if err := a.SetService(second); err != nil {
-		t.Fatalf("SetService second: %v", err)
+	if err := a.AddService(second); err != nil {
+		t.Fatalf("AddService second: %v", err)
 	}
 
 	if err := a.RemoveService(""); err == nil {
@@ -210,8 +213,8 @@ func TestLoadSave(t *testing.T) {
 			},
 		),
 	}
-	if err := original.SetService(sample); err != nil {
-		t.Fatalf("SetService: %v", err)
+	if err := original.AddService(sample); err != nil {
+		t.Fatalf("AddService: %v", err)
 	}
 
 	if err := original.Save(); err != nil {

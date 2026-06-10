@@ -14,16 +14,19 @@ import (
 )
 
 const (
-	TopologyHandlerCategory = "service_topology" // handler category
-	TopologySocketType      = handlerConfig.ReplierType
-	IsServiceRunning        = "is-service-running"
-	StartService            = "start-service"
-	StopService             = "stop-service"
-	Service                 = "service"
-	Services                = "services"
-	AddService              = "add-service"
-	SetService              = "set-service"
-	RemoveService           = "remove-service"
+	TopologyHandlerCategory   = "service_topology" // handler category
+	TopologySocketType        = handlerConfig.ReplierType
+	IsServiceRunning          = "is-service-running"
+	IsServiceRunningByManager = "is-service-running-by-manager"
+	StartService              = "start-service"
+	StartServiceByConfig      = "start-service-by-config"
+	StopService               = "stop-service"
+	StopServiceByManager      = "stop-service-by-manager"
+	Service                   = "service"
+	Services                  = "services"
+	AddService                = "add-service"
+	SetService                = "set-service"
+	RemoveService             = "remove-service"
 )
 
 // Handler acts as the router from other app processes to the topology.
@@ -122,6 +125,15 @@ func (h *Handler) StartService(serviceName string) (string, error) {
 	return h.topology.StartService(serviceName)
 }
 
+// StartServiceByConfig registers and starts a dependency service before the
+// topology handler is started.
+func (h *Handler) StartServiceByConfig(record config.Service) (string, error) {
+	if err := h.requireNotStarted(); err != nil {
+		return "", err
+	}
+	return h.topology.StartServiceByConfig(record)
+}
+
 // IsServiceRunning checks a dependency service before the topology handler is
 // started.
 func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
@@ -131,12 +143,30 @@ func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
 	return h.topology.IsServiceRunning(serviceName)
 }
 
+// IsServiceRunningByManager checks a dependency service manager before the
+// topology handler is started.
+func (h *Handler) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+	if err := h.requireNotStarted(); err != nil {
+		return false, err
+	}
+	return h.topology.IsServiceRunningByManager(serviceName, handler)
+}
+
 // StopService stops a dependency service before the topology handler is started.
 func (h *Handler) StopService(serviceName string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
 	return h.topology.StopService(serviceName)
+}
+
+// StopServiceByManager stops a dependency service manager before the topology
+// handler is started.
+func (h *Handler) StopServiceByManager(serviceName string, handler config.Handler) error {
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	return h.topology.StopServiceByManager(serviceName, handler)
 }
 
 // Service returns a service configuration before the topology handler is started.
@@ -172,6 +202,33 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 	return req.Ok(params)
 }
 
+// onIsServiceRunningByManager checks whether the dependency is running by its
+// manager handler.
+// Requires 'service' string parameter and 'handler' as a config.Handler object.
+func (h *Handler) onIsServiceRunningByManager(req message.RequestInterface) message.ReplyInterface {
+	serviceName, err := req.RouteParameters().StringValue("service")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
+	}
+
+	kv, err := req.RouteParameters().NestedValue("handler")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
+	}
+
+	var handler config.Handler
+	if err := kv.Interface(&handler); err != nil {
+		return req.Fail(fmt.Sprintf("kv.Interface('config.Handler'): %v", err))
+	}
+
+	running, err := h.topology.IsServiceRunningByManager(serviceName, handler)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.IsServiceRunningByManager: %v", err))
+	}
+
+	return req.Ok(datatype.New().Set("running", running))
+}
+
 // onStartService starts the dependency service.
 // Requires:
 //   - 'service' string parameter.
@@ -190,6 +247,27 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 	id, err := h.topology.StartService(serviceName)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.StartService(service: '%s'): %v", serviceName, err))
+	}
+
+	return req.Ok(datatype.New().Set("id", id))
+}
+
+// onStartServiceByConfig registers and starts the dependency service.
+// Requires 'service' as a service object.
+func (h *Handler) onStartServiceByConfig(req message.RequestInterface) message.ReplyInterface {
+	kv, err := req.RouteParameters().NestedValue("service")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
+	}
+
+	var record config.Service
+	if err := kv.Interface(&record); err != nil {
+		return req.Fail(fmt.Sprintf("kv.Interface('config.Service'): %v", err))
+	}
+
+	id, err := h.topology.StartServiceByConfig(record)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.StartServiceByConfig('%s'): %v", record.Name, err))
 	}
 
 	return req.Ok(datatype.New().Set("id", id))
@@ -269,6 +347,31 @@ func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInter
 	return req.Ok(datatype.New())
 }
 
+// onStopServiceByManager stops the dependency by its manager handler.
+// Requires 'service' string parameter and 'handler' as a config.Handler object.
+func (h *Handler) onStopServiceByManager(req message.RequestInterface) message.ReplyInterface {
+	serviceName, err := req.RouteParameters().StringValue("service")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
+	}
+
+	kv, err := req.RouteParameters().NestedValue("handler")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
+	}
+
+	var handler config.Handler
+	if err := kv.Interface(&handler); err != nil {
+		return req.Fail(fmt.Sprintf("kv.Interface('config.Handler'): %v", err))
+	}
+
+	if err := h.topology.StopServiceByManager(serviceName, handler); err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.StopServiceByManager: %v", err))
+	}
+
+	return req.Ok(datatype.New())
+}
+
 // onService returns the configuration for a service.
 func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface {
 	serviceName, err := req.RouteParameters().StringValue("service")
@@ -306,11 +409,20 @@ func (h *Handler) Start() error {
 	if err := h.handler.Route(IsServiceRunning, h.onIsServiceRunning); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", IsServiceRunning, err)
 	}
+	if err := h.handler.Route(IsServiceRunningByManager, h.onIsServiceRunningByManager); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", IsServiceRunningByManager, err)
+	}
 	if err := h.handler.Route(StartService, h.onStartService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", StartService, err)
 	}
+	if err := h.handler.Route(StartServiceByConfig, h.onStartServiceByConfig); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", StartServiceByConfig, err)
+	}
 	if err := h.handler.Route(StopService, h.onStopService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", StopService, err)
+	}
+	if err := h.handler.Route(StopServiceByManager, h.onStopServiceByManager); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", StopServiceByManager, err)
 	}
 	if err := h.handler.Route(Service, h.onService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Service, err)

@@ -294,25 +294,41 @@ func (a *NoPerfection) CountByType(serviceType Type) int {
 	return count
 }
 
-// SetService sets a new service into the configuration.
+// AddService adds a new service into the configuration.
+func (a *NoPerfection) AddService(record Service) error {
+	if a == nil {
+		return fmt.Errorf("app struct is nil")
+	}
+	if len(record.Name) == 0 {
+		return fmt.Errorf("service name is empty")
+	}
+
+	for _, old := range a.Services {
+		if old.Name == record.Name {
+			return fmt.Errorf("service('%s') already exists", record.Name)
+		}
+	}
+	a.Services = append(a.Services, record)
+	return nil
+}
+
+// SetService updates an existing service in the configuration.
 func (a *NoPerfection) SetService(record Service) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
+	if len(record.Name) == 0 {
+		return fmt.Errorf("service name is empty")
+	}
 
-	found := false
 	for i, old := range a.Services {
 		if old.Name == record.Name {
-			found = true
 			a.Services[i] = record
-			break
+			return nil
 		}
 	}
-	if !found {
-		a.Services = append(a.Services, record)
-	}
 
-	return nil
+	return fmt.Errorf("service('%s') not found", record.Name)
 }
 
 // RemoveService removes a service by name from the app configuration.

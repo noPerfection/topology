@@ -212,6 +212,32 @@ func (c *Client) StartService(serviceName string) (string, error) {
 	return id, nil
 }
 
+// StartServiceByConfig registers a service configuration, starts it, and returns
+// the generated topology id.
+func (c *Client) StartServiceByConfig(record config.Service) (string, error) {
+	req := message.Request{
+		Command: StartServiceByConfig,
+		Parameters: datatype.New().
+			Set("service", record),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return "", fmt.Errorf("socket.Submit('%s'): %w", StartServiceByConfig, err)
+	}
+
+	if !reply.IsOK() {
+		return "", fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	id, err := reply.ReplyParameters().StringValue("id")
+	if err != nil {
+		return "", fmt.Errorf("reply.Parameters.GetString('id'): %w", err)
+	}
+
+	return id, nil
+}
+
 // IsServiceRunning checks is the service running or not.
 func (c *Client) IsServiceRunning(serviceName string) (bool, error) {
 	req := message.Request{
@@ -237,6 +263,33 @@ func (c *Client) IsServiceRunning(serviceName string) (bool, error) {
 	return res, nil
 }
 
+// IsServiceRunningByManager checks whether a service is running by directly
+// contacting its manager handler.
+func (c *Client) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+	req := message.Request{
+		Command: IsServiceRunningByManager,
+		Parameters: datatype.New().
+			Set("service", serviceName).
+			Set("handler", handler),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return false, fmt.Errorf("socket.Request('%s'): %w", IsServiceRunningByManager, err)
+	}
+
+	if !reply.IsOK() {
+		return false, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	res, err := reply.ReplyParameters().BoolValue("running")
+	if err != nil {
+		return false, fmt.Errorf("reply.Parameters.GetBoolean('running'): %w", err)
+	}
+
+	return res, nil
+}
+
 // StopService stops the running dependency service.
 func (c *Client) StopService(serviceName string) error {
 	req := message.Request{
@@ -256,6 +309,36 @@ func (c *Client) StopService(serviceName string) error {
 	reply, err := c.socket.Request(&req)
 	if err != nil {
 		return fmt.Errorf("socket.Submit('%s'): %w", StopService, err)
+	}
+
+	if !reply.IsOK() {
+		return fmt.Errorf("c.socket.Requeset(request='%v'): reply failed with: %s", req, reply.ErrorMessage())
+	}
+
+	return nil
+}
+
+// StopServiceByManager stops the running dependency service by directly
+// contacting its manager handler.
+func (c *Client) StopServiceByManager(serviceName string, handler config.Handler) error {
+	req := message.Request{
+		Command: StopServiceByManager,
+		Parameters: datatype.New().
+			Set("service", serviceName).
+			Set("handler", handler),
+	}
+
+	if c == nil {
+		return fmt.Errorf("dep manager not initialized")
+	}
+
+	if c.socket == nil {
+		return fmt.Errorf("dep manager socket was closed")
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return fmt.Errorf("socket.Submit('%s'): %w", StopServiceByManager, err)
 	}
 
 	if !reply.IsOK() {

@@ -44,6 +44,15 @@ type TopologyInterface interface {
 
 	// RemoveService removes a service from the topology configuration.
 	RemoveService(serviceName string) error
+
+	// StartServiceByConfig registers a service configuration and starts it.
+	StartServiceByConfig(record config.Service) (string, error)
+
+	// IsServiceRunningByManager checks whether a service manager is running.
+	IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error)
+
+	// StopServiceByManager stops the service behind the given service manager.
+	StopServiceByManager(serviceName string, handler config.Handler) error
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
@@ -93,15 +102,12 @@ func (tp *Topology) AddService(record config.Service) error {
 	if err := config.ValidateService(record); err != nil {
 		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
 	}
-	if record.Type == config.IndependentType {
-		return fmt.Errorf("independent service can not be added")
-	}
 	if _, err := tp.config.GetService(record.Name); err == nil {
 		return fmt.Errorf("service('%s') already added", record.Name)
 	}
 
-	if err := tp.config.SetService(record); err != nil {
-		return fmt.Errorf("tp.config.SetService: %w", err)
+	if err := tp.config.AddService(record); err != nil {
+		return fmt.Errorf("tp.config.AddService: %w", err)
 	}
 
 	return tp.config.Save()
@@ -276,6 +282,81 @@ func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
 	return running, nil
 }
 
+// IsServiceRunningByManager checks whether a service is running by directly
+// contacting its manager handler.
+func (tp *Topology) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+	if tp == nil {
+		return false, fmt.Errorf("nil topology")
+	}
+	if len(serviceName) == 0 {
+		return false, fmt.Errorf("service name is empty")
+	}
+	if handler.Category != ServiceManagerCategory {
+		return false, fmt.Errorf("handler category must be %q", ServiceManagerCategory)
+	}
+
+	node, err := newNodeClient(handler.Endpoint)
+	if err != nil {
+		return false, err
+	}
+	defer node.Close()
+
+	node.Attempt(1)
+	node.Timeout(tp.timeout)
+
+	running, err := node.IsServiceRunning(serviceName)
+	if err != nil {
+		return false, nil
+	}
+
+	return running, nil
+}
+
+// StopServiceByManager stops a service by directly contacting its manager
+// handler.
+func (tp *Topology) StopServiceByManager(serviceName string, handler config.Handler) error {
+	if tp == nil {
+		return fmt.Errorf("nil topology")
+	}
+	if len(serviceName) == 0 {
+		return fmt.Errorf("service name is empty")
+	}
+	if handler.Category != ServiceManagerCategory {
+		return fmt.Errorf("handler category must be %q", ServiceManagerCategory)
+	}
+
+	node, err := newNodeClient(handler.Endpoint)
+	if err != nil {
+		return err
+	}
+	defer node.Close()
+
+	node.Timeout(tp.timeout)
+	node.Attempt(2)
+
+	running, err := node.IsServiceRunning(serviceName)
+	if err != nil {
+		return fmt.Errorf("node.IsServiceRunning('%s'): %w", serviceName, err)
+	}
+	if !running {
+		return nil
+	}
+
+	if err := node.StopService(serviceName); err != nil {
+		return fmt.Errorf("node.StopService('%s'): %w", serviceName, err)
+	}
+
+	running, err = node.IsServiceRunning(serviceName)
+	if err != nil {
+		return fmt.Errorf("StopServiceByManager -> node.IsServiceRunning('%s'): %w", serviceName, err)
+	}
+	if running {
+		return fmt.Errorf("topology is running even after closing")
+	}
+
+	return nil
+}
+
 // OnStop returns a signal through the channel when the process spawned by the Topology stops.
 // If the process is not existing, then it will simply return error.
 func (tp *Topology) OnStop(id string) chan error {
@@ -358,7 +439,6 @@ func (tp *Topology) StartService(serviceName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	process := &Process{config: &serviceConfig}
 
 	node, err := tp.newServiceManagerClient(&serviceConfig)
 	if err != nil {
@@ -376,6 +456,12 @@ func (tp *Topology) StartService(serviceName string) (string, error) {
 	if running {
 		return "", fmt.Errorf("service('%s') is already running", serviceName)
 	}
+
+	return tp.startServiceConfig(serviceConfig)
+}
+
+func (tp *Topology) startServiceConfig(serviceConfig config.Service) (string, error) {
+	process := &Process{config: &serviceConfig}
 
 	if len(process.config.StartCommand) == 0 {
 		return "", fmt.Errorf("no start command")
@@ -428,6 +514,46 @@ func (tp *Topology) StartService(serviceName string) (string, error) {
 	tp.wait(id)
 
 	return id, nil
+}
+
+// StartServiceByConfig starts an IPC service from its full configuration without
+// requiring it to be registered in the root topology.
+func (tp *Topology) StartServiceByConfig(record config.Service) (string, error) {
+	if tp == nil {
+		return "", fmt.Errorf("nil topology")
+	}
+	if record.IsZero() {
+		return "", fmt.Errorf("service is empty")
+	}
+	if len(record.Name) == 0 {
+		return "", fmt.Errorf("service name is empty")
+	}
+	if err := config.ValidateService(record); err != nil {
+		return "", fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
+	}
+	if record.Type == config.IndependentType {
+		return "", fmt.Errorf("independent service can not be started by config")
+	}
+	if !record.IsIpc() {
+		return "", fmt.Errorf("service('%s') is not ipc service", record.Name)
+	}
+	if len(record.StartCommand) == 0 {
+		return "", fmt.Errorf("service('%s') has no start command given", record.Name)
+	}
+
+	managerHandler, err := record.HandlerByCategory(ServiceManagerCategory)
+	if err != nil {
+		return "", fmt.Errorf("service %q manager handler: %w", record.Name, err)
+	}
+	running, err := tp.IsServiceRunningByManager(record.Name, managerHandler.AsHandler())
+	if err != nil {
+		return "", fmt.Errorf("tp.IsServiceRunningByManager('%s'): %w", record.Name, err)
+	}
+	if running {
+		return "", nil
+	}
+
+	return tp.startServiceConfig(record)
 }
 
 // The wait is invoked if the spawned dependency stops.

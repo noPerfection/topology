@@ -184,7 +184,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
 	cfg, err := config.Load(cfgPath)
 	s().NoError(err)
-	s().NoError(cfg.SetService(test.topology.config.Services[0]))
+	s().NoError(cfg.AddService(test.topology.config.Services[0]))
 	test.topology = New(&cfg)
 
 	err = test.topology.AddService(config.Service{})
