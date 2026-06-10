@@ -59,7 +59,7 @@ type TopologyInterface interface {
 // Topology.IsServiceRunning method uses this value before considering the endpoint as not running.
 const DefaultTimeout = time.Second * 5
 
-const startServiceProbeTimeout = 50 * time.Millisecond
+const ipcManagerProbeTimeout = 100 * time.Millisecond
 
 const ServiceManagerCategory = "manager"
 
@@ -223,7 +223,7 @@ func (tp *Topology) StopService(serviceName string) error {
 	}
 	defer node.Close()
 
-	node.Timeout(tp.timeout)
+	node.Timeout(tp.managerProbeTimeout(service))
 	node.Attempt(2)
 
 	running, err := node.IsServiceRunning(serviceName)
@@ -239,7 +239,7 @@ func (tp *Topology) StopService(serviceName string) error {
 		if process != nil && tp.waitForProcess(process, tp.timeout*3) == nil {
 			return nil
 		}
-		running, runningErr := tp.isServiceRunningWithTimeout(serviceName, service, startServiceProbeTimeout)
+		running, runningErr := tp.isServiceRunningWithTimeout(serviceName, service, tp.managerProbeTimeout(service))
 		if runningErr == nil && !running {
 			return nil
 		}
@@ -269,7 +269,7 @@ func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
-	return tp.isServiceRunningWithTimeout(serviceName, service, tp.timeout)
+	return tp.isServiceRunningWithTimeout(serviceName, service, tp.managerProbeTimeout(service))
 }
 
 func (tp *Topology) isServiceRunningWithTimeout(serviceName string, service config.Service, timeout time.Duration) (bool, error) {
@@ -288,6 +288,21 @@ func (tp *Topology) isServiceRunningWithTimeout(serviceName string, service conf
 	}
 
 	return running, nil
+}
+
+func (tp *Topology) managerProbeTimeout(service config.Service) time.Duration {
+	managerHandler, err := service.HandlerByCategory(ServiceManagerCategory)
+	if err != nil {
+		return tp.timeout
+	}
+	return tp.managerProbeTimeoutForHandler(managerHandler.AsHandler())
+}
+
+func (tp *Topology) managerProbeTimeoutForHandler(handler config.Handler) time.Duration {
+	if handler.Endpoint.IsIpc() {
+		return ipcManagerProbeTimeout
+	}
+	return tp.timeout
 }
 
 // IsServiceRunningByManager checks whether a service is running by directly
@@ -310,7 +325,7 @@ func (tp *Topology) IsServiceRunningByManager(serviceName string, handler config
 	defer node.Close()
 
 	node.Attempt(1)
-	node.Timeout(tp.timeout)
+	node.Timeout(tp.managerProbeTimeoutForHandler(handler))
 
 	running, err := node.IsServiceRunning(serviceName)
 	if err != nil {
@@ -476,7 +491,7 @@ func (tp *Topology) StartService(serviceName string) (string, error) {
 	defer node.Close()
 
 	node.Attempt(1)
-	node.Timeout(startServiceProbeTimeout)
+	node.Timeout(tp.managerProbeTimeout(serviceConfig))
 
 	running, err := node.IsServiceRunning(serviceName)
 	if err == nil && running {
