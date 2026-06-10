@@ -59,6 +59,8 @@ type TopologyInterface interface {
 // Topology.IsServiceRunning method uses this value before considering the endpoint as not running.
 const DefaultTimeout = time.Second * 5
 
+const startServiceProbeTimeout = 50 * time.Millisecond
+
 const ServiceManagerCategory = "manager"
 
 type Process struct {
@@ -234,19 +236,20 @@ func (tp *Topology) StopService(serviceName string) error {
 
 	process := tp.processForService(serviceName)
 	if err := node.StopService(serviceName); err != nil {
+		if process != nil && tp.waitForProcess(process, tp.timeout*3) == nil {
+			return nil
+		}
+		running, runningErr := tp.isServiceRunningWithTimeout(serviceName, service, startServiceProbeTimeout)
+		if runningErr == nil && !running {
+			return nil
+		}
 		return fmt.Errorf("node.StopService('%s'): %w", serviceName, err)
 	}
 
-	if process == nil || process.done == nil {
-		return nil
-	}
-
-	select {
-	case <-process.done:
-		return nil
-	case <-time.After(tp.timeout * 3):
+	if err := tp.waitForProcess(process, tp.timeout*3); err != nil {
 		return fmt.Errorf("service('%s') is still running after stop", serviceName)
 	}
+	return nil
 }
 
 // IsServiceRunning checks whether the given service is running or not.
@@ -266,6 +269,10 @@ func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
 		return true, nil
 	}
 
+	return tp.isServiceRunningWithTimeout(serviceName, service, tp.timeout)
+}
+
+func (tp *Topology) isServiceRunningWithTimeout(serviceName string, service config.Service, timeout time.Duration) (bool, error) {
 	node, err := tp.newServiceManagerClient(&service)
 	if err != nil {
 		return false, err
@@ -273,7 +280,7 @@ func (tp *Topology) IsServiceRunning(serviceName string) (bool, error) {
 	defer node.Close()
 
 	node.Attempt(1)
-	node.Timeout(tp.timeout)
+	node.Timeout(timeout)
 
 	running, err := node.IsServiceRunning(serviceName)
 	if err != nil {
@@ -419,6 +426,18 @@ func (tp *Topology) processForService(serviceName string) *Process {
 	return nil
 }
 
+func (tp *Topology) waitForProcess(process *Process, timeout time.Duration) error {
+	if process == nil || process.done == nil {
+		return nil
+	}
+	select {
+	case <-process.done:
+		return nil
+	case <-time.After(timeout):
+		return fmt.Errorf("process did not stop")
+	}
+}
+
 func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClient, error) {
 	handler, err := service.HandlerByCategory(ServiceManagerCategory)
 	if err != nil {
@@ -457,7 +476,7 @@ func (tp *Topology) StartService(serviceName string) (string, error) {
 	defer node.Close()
 
 	node.Attempt(1)
-	node.Timeout(tp.timeout)
+	node.Timeout(startServiceProbeTimeout)
 
 	running, err := node.IsServiceRunning(serviceName)
 	if err == nil && running {
@@ -573,6 +592,7 @@ func (tp *Topology) wait(id string) {
 		process := tp.runningProcesses[id]
 		err := process.cmd.Wait() // it can return an error
 		process.done <- err
+		close(process.done)
 		delete(tp.runningProcesses, id)
 		tp.refreshServiceCount(process.config.Name)
 	}()

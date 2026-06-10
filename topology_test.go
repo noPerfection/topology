@@ -447,12 +447,16 @@ func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
 		timeout:          time.Millisecond * 100,
 	}
 
+	startedAt := time.Now()
 	id, err := tp.StartService("ipc-proxy")
 	if err != nil {
 		t.Fatalf("StartService: %v", err)
 	}
 	if id == "" {
 		t.Fatal("expected generated process id")
+	}
+	if elapsed := time.Since(startedAt); elapsed > 500*time.Millisecond {
+		t.Fatalf("StartService took %s, expected short manager probe", elapsed)
 	}
 }
 
