@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/noPerfection/log"
 	"github.com/noPerfection/os/path"
@@ -416,6 +417,43 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 	running, err = test.topology.IsServiceRunning(test.id)
 	s().NoError(err)
 	s().False(running)
+}
+
+func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
+	tp := &Topology{
+		config: &config.NoPerfection{
+			Services: []config.Service{
+				{
+					Type:         config.ProxyType,
+					Name:         "ipc-proxy",
+					StartCommand: "true",
+					Handlers: config.NewHandlerVariants(
+						config.Handler{
+							Type:     config.SyncReplierType,
+							Category: "main",
+							Endpoint: message.NewEndpoint("tmp/unreachable_proxy", 0),
+						},
+						config.Handler{
+							Type:     config.SyncReplierType,
+							Category: ServiceManagerCategory,
+							Endpoint: message.NewEndpoint("tmp/unreachable_proxy_manager", 0),
+						},
+					),
+				},
+			},
+		},
+		sameServices:     make(map[string]int),
+		runningProcesses: make(map[string]*Process),
+		timeout:          time.Millisecond * 100,
+	}
+
+	id, err := tp.StartService("ipc-proxy")
+	if err != nil {
+		t.Fatalf("StartService: %v", err)
+	}
+	if id == "" {
+		t.Fatal("expected generated process id")
+	}
 }
 
 // In order for 'go test' to run this suite, we need to create

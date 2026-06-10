@@ -41,12 +41,12 @@ func newClient(serviceEndpoint message.Endpoint) (*Client, error) {
 
 // newNodeClient connects to a service manager handler endpoint.
 func newNodeClient(serviceEndpoint message.Endpoint) (*NodeClient, error) {
-	c, err := newClient(serviceEndpoint)
+	socket, err := client.New(serviceEndpoint.Id, serviceEndpoint.Port, client.SyncReplierType)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("client.New: %w", err)
 	}
 
-	return &NodeClient{Client: c}, nil
+	return &NodeClient{Client: &Client{socket: socket}}, nil
 }
 
 // Timeout of the client socket.

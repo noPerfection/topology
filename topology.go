@@ -232,20 +232,21 @@ func (tp *Topology) StopService(serviceName string) error {
 		return nil
 	}
 
+	process := tp.processForService(serviceName)
 	if err := node.StopService(serviceName); err != nil {
 		return fmt.Errorf("node.StopService('%s'): %w", serviceName, err)
 	}
 
-	running, err = node.IsServiceRunning(serviceName)
-	if err != nil {
-		return fmt.Errorf("StopService -> node.IsServiceRunning('%s'): %w", serviceName, err)
+	if process == nil || process.done == nil {
+		return nil
 	}
 
-	if running {
-		return fmt.Errorf("topology is running even after closing")
+	select {
+	case <-process.done:
+		return nil
+	case <-time.After(tp.timeout * 3):
+		return fmt.Errorf("service('%s') is still running after stop", serviceName)
 	}
-
-	return nil
 }
 
 // IsServiceRunning checks whether the given service is running or not.
@@ -409,6 +410,15 @@ func (tp *Topology) refreshServiceCount(serviceName string) {
 	tp.sameServices[serviceName] = count
 }
 
+func (tp *Topology) processForService(serviceName string) *Process {
+	for _, process := range tp.runningProcesses {
+		if process != nil && process.config != nil && process.config.Name == serviceName {
+			return process
+		}
+	}
+	return nil
+}
+
 func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClient, error) {
 	handler, err := service.HandlerByCategory(ServiceManagerCategory)
 	if err != nil {
@@ -450,11 +460,8 @@ func (tp *Topology) StartService(serviceName string) (string, error) {
 	node.Timeout(tp.timeout)
 
 	running, err := node.IsServiceRunning(serviceName)
-	if err != nil {
-		return "", fmt.Errorf("StartService -> node.IsServiceRunning('%s'): %w", serviceName, err)
-	}
-	if running {
-		return "", fmt.Errorf("service('%s') is already running", serviceName)
+	if err == nil && running {
+		return "", nil
 	}
 
 	return tp.startServiceConfig(serviceConfig)
