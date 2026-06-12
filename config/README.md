@@ -1,15 +1,40 @@
 # noPerfection Configuration
 
-This module provides Go types and JSON helpers for an application configuration made of services.
+This package defines the static JSON configuration model for a noPerfection topology. It contains Go types, JSON marshal/unmarshal helpers, `Load`, `NoPerfection.Save`, and validation. It does not run a topology server or client.
 
-It is a static data library only:
+## Topology Model
 
-- `config` defines service metadata (`Service`, `Handler`, `Endpoint`, `DepService`, `DepTarget`)
-- `config` defines the top-level `NoPerfection` struct (`services: [...]`), `Load`, and `NoPerfection.Save`
+The config describes a topology as a graph.
 
-There is no topology config server, engine, or client API in this module.
+- A `Service` is a node in the graph.
+- A `Handler` is an entry point on that node.
+- A `DepService` is an edge declaration: it says which other nodes a handler or command may call.
+- A `ServicePointer` is the target of that edge, either by reference or as an inline nested service.
 
-## App structure
+This separation keeps identity, transport, and routing independent:
+
+- `Service` owns deployment metadata such as `module-url` and `start-command`.
+- `Handler` owns endpoint metadata such as protocol type, category, and address.
+- `DepService` owns dependency intent without embedding the target service into every caller.
+- `ServicePointer` lets the same dependency point to a shared service or define an inline private service.
+
+```
+NoPerfection
+└── services[]: Service
+    ├── handler-deps[]: DepService          (service-wide routing by handler category)
+    └── handlers[]: Handler
+        ├── IndependentHandler              (single endpoint)
+        └── ProxyHandler                    (endpoint + outbound routing)
+            └── command-deps[]: DepService  (per-command routing)
+                ├── proxies[]: ServicePointer
+                └── extensions[]: ServicePointer
+```
+
+See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a complete graph.
+
+## Root Config
+
+`NoPerfection` is the JSON document root. It contains the services that can be resolved by name and validated as one topology.
 
 ```json
 {
@@ -17,176 +42,91 @@ There is no topology config server, engine, or client API in this module.
     {
       "type": "Independent",
       "name": "public_api",
-      "handler-deps": [
-        {
-          "name": "public-api",
-          "proxies": ["auth_proxy", "audit_proxy"]
-        }
-      ],
-      "handlers": [
-        {
-          "type": "Replier",
-          "category": "public-api",
-          "endpoint": {
-            "id": "public_1",
-            "port": 4101
-          }
-        }
-      ]
+      "handlers": []
     }
   ]
 }
 ```
 
-See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a full proxy-chain example.
+`Load` reads this document and validates the whole graph. `Save` writes the same structure back to disk.
 
-## Usage
+## Services
 
-```go
-import (
-    "github.com/noPerfection/protocol/message"
-    config "github.com/noPerfection/topology/config"
-)
+A `Service` is the unit that gets registered, looked up, started, and referenced by dependencies. Its `name` is the stable identity used by refs such as `"auth_proxy"` or `"auth_proxy/main"`.
 
-a, err := config.Load("app.json")
-if err != nil {
-    panic(err)
-}
+The `type` describes the role the service plays in routing:
 
-record, err := a.GetService("public_api")
-if err != nil {
-    panic(err)
-}
+| `type` | Role |
+|--------|------|
+| `Independent` | A normal service that handles its own traffic. |
+| `Proxy` | A service that can forward commands to other services. May contain both plain handlers and proxy handlers. |
+| `Extension` | A service used as an extension target in dependency routing. |
 
-updated := record
-updated.Handlers = append(updated.Handlers, config.Handler{
-    Type:     config.ReplierType,
-    Category: "public-api",
-    Endpoint: message.NewEndpoint("public_2", 4102),
-})
-if err := a.SetService(updated); err != nil {
-    panic(err)
-}
+Bootstrap fields live on the service, not on each handler, because starting or loading code is a property of the service process/module:
 
-if err := a.Save(); err != nil {
-    panic(err)
-}
-```
+- `module-url` — how to load an inproc handler.
+- `start-command` — how to start an IPC handler.
 
-## Service Types
+`handler-deps` belongs here when routing is tied to a handler category regardless of command. `parameters` is free-form service metadata and is intentionally not interpreted by this package.
 
-Create a `config.Service` or `config.Proxy` struct directly, then fill handlers and command dependency metadata.
+## Handlers
 
-Supported service types:
+A service may expose multiple handlers because one service can have several entry points: public API, internal API, manager endpoint, publisher, pair socket, and so on. The `category` is the stable label used to choose between those entry points.
 
-- `Independent`
-- `Proxy`
-- `Extension`
+In JSON, each `handlers[]` entry is either an `IndependentHandler` or a `ProxyHandler`. The unmarshaller chooses `ProxyHandler` when proxy routing fields such as `outbounds`, `routes`, or `forward` are present.
 
-Supported handler types:
+`IndependentHandler` is the base shape: protocol type, category, endpoint, and optional command-level dependencies. It represents an endpoint that receives or serves traffic.
 
-- `SyncReplier`
-- `Replier`
-- `Publisher`
-- `Pair`
+`ProxyHandler` embeds the same base shape and adds outbound routing:
 
-Each handler must define a `category`, which consumers can use to group and classify handlers.
+- `outbounds` — where proxied traffic may be sent.
+- `routes` — optional whitelist of command routes this handler accepts.
+- `forward` — optional map from a route to a specific outbound.
 
-`port` is optional on an endpoint; omitted means `0`. Services only need bootstrap metadata when a zero-port endpoint requires it:
+A `Proxy` service is allowed to contain plain independent handlers. This is useful for manager endpoints or other service-local handlers that should not participate in proxy routing.
 
-- `port: 0` with an id that does not start with `tmp/` is treated as inproc and requires `module-url`
-- `port: 0` with an id that starts with `tmp` is treated as an IPC endpoint and requires `start-command`
-- non-zero ports do not require either `module-url` or `start-command`
+## Dependencies
 
-Each `handler-deps` or `command-deps` entry must have a `name` and at least one routing target: `proxies` and/or `extensions`. In `handler-deps`, `name` is the handler category. In `command-deps`, `name` is the command name.
+Dependencies are declared separately from services so callers describe intent, while targets remain reusable and independently validated.
 
-Each entry in `proxies` or `extensions` is a `DepTarget`. A target is exactly one of:
+`DepService` is used in two scopes. In `handler-deps`, `name` is a handler category on the service. In `command-deps`, `name` is a command handled by the parent handler.
 
-- a **ref** string (`DepTarget.Ref`)
-- a **service** object (`DepTarget.Service`) containing an inline service definition
+| Declared in | `name` means |
+|-------------|--------------|
+| `handler-deps` | handler category on this service |
+| `command-deps` | command name handled by the parent handler |
 
-`config.Load` calls `ValidateTopology()` to validate inline targets and verify references. Inline service definitions stay inline; refs must point at services declared in `services`. JSON stays compact: each target is one value, not an object with separate `ref` / `service` / `proxy` keys.
+Each dependency lists proxy targets, extension targets, or both. Proxies are for routed calls through another service. Extensions are for extension-style targets.
 
-### DepTarget `Ref`
+`ServicePointer` is the target value in `proxies` and `extensions`. It is either:
 
-`Ref` is the stored reference path when the dependency points at an existing service in `services`. In JSON it is a single string. In Go it is `DepTarget.Ref`.
+- a **ref** to an existing service in `services`, e.g. `"auth_proxy"` or `"auth_proxy/main"`.
+- an **inline service** object defined directly in the JSON.
 
-Format:
+Refs make shared dependencies explicit. Inline services keep private or nested dependencies close to the caller without requiring a top-level service entry.
 
-- `service_name` — depend on the service (any handler on that service)
-- `service_name/handler_category` — depend on one specific handler category on that service
+## Ref Format
 
-Rules:
+Refs point to services declared in the root `services` list.
 
-| Ref | Valid | Notes |
-|-----|-------|-------|
-| `"auth_proxy"` | yes | service name only |
-| `"auth_proxy/main"` | yes | service + handler category |
-| `""` | no | empty ref |
-| `"auth_proxy/"` | no | trailing slash, empty handler category |
-| `"/main"` | no | empty service name |
-| `"auth_proxy//main"` | no | empty path segment |
+- `service_name`: references a service.
+- `service_name/handler_category`: references one handler category on a service.
 
-Only the first `/` splits service and handler category. There is no deeper path syntax.
+Invalid refs include empty strings, trailing slashes, empty service names, and empty path segments such as `"auth_proxy//main"`.
 
-After `Load` / `ValidateTopology()`:
+## Endpoint Bootstrap Rules
 
-- the service name must exist in `services`
-- if a handler category is present, that service must define a handler with that `category`
+Endpoint `port` defaults to `0` when omitted.
 
-Go helpers:
+- `port: 0` with an id starting with `tmp` is IPC and requires `start-command`.
+- `port: 0` with any other id is inproc and requires `module-url`.
+- non-zero ports do not require bootstrap metadata.
+- manager handlers (`category: "manager"`) are ignored when deciding service bootstrap requirements.
 
-```go
-// Build a ref target in code.
-config.RefTarget("auth_proxy")              // Ref: "auth_proxy"
-config.RefTarget("auth_proxy", "main")      // Ref: "auth_proxy/main"
+## Validation
 
-target := config.RefTarget("auth_proxy", "main")
-serviceName, handlerCategory := target.RefPath()
-// serviceName == "auth_proxy", handlerCategory == "main"
+`Load` calls `ValidateTopology`.
 
-target.Name() // always the service name: "auth_proxy"
-```
+Validation checks service names, service types, handler types, handler categories, endpoint ids, dependency target shape, inline service definitions, and ref existence. If a ref includes a handler category, the referenced service must contain that category.
 
-`RefPath()` parses `DepTarget.Ref` into `(serviceName, handlerCategory)`. When the ref has no handler segment, `handlerCategory` is `""`. `Name()` returns the service name for ref and service-record targets.
-
-Example JSON:
-
-```json
-"proxies": [
-  "auth_proxy",
-  "auth_proxy/auth-proxy",
-  {
-    "type": "Extension",
-    "name": "inline_service_target",
-    "handlers": [ ... ]
-  },
-  {
-    "type": "Proxy",
-    "name": "inline_proxy_target",
-    "handlers": [ ... ]
-  }
-],
-"extensions": [
-  "user_service",
-  "user_service/user-service",
-  {
-    "type": "Extension",
-    "name": "inline_extension_target",
-    "handlers": [ ... ]
-  },
-  {
-    "type": "Proxy",
-    "name": "inline_extension_proxy_target",
-    "handlers": [ ... ]
-  }
-]
-```
-
-See [examples/app-proxy-chain.json](examples/app-proxy-chain.json): the `dep_target_catalog` service lists all four target forms in both `proxies` and `extensions`. The rest of the file shows a smaller realistic chain.
-
-Proxy chains can be declared in service-level `handler-deps` metadata or per-handler `command-deps` metadata. Terminal services that only receive routed traffic do not need either section.
-
-## Packages removed from this module
-
-Previous versions included a dev topology layer (`engine`, `handler`, `client`, `watch`) for serving config over noPerfection sockets. That topology API has been removed. Consumers should load JSON with `config.Load` and save it with `NoPerfection.Save`.
+For `ProxyHandler`, validation also checks outbound targets and verifies that `forward` entries refer to declared routes and outbounds.
