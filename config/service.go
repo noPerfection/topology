@@ -10,7 +10,10 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
-const ServiceManagerCategory = "manager"
+const (
+	ServiceManagerCategory  = "manager"
+	InprocHandlersParameter = "inproc-handlers"
+)
 
 type DepService struct {
 	// For command deps its command, for handler deps its handler catego
@@ -210,6 +213,48 @@ func (s Service) IsInproc() bool {
 	return false
 }
 
+// IsInprocHandler reports whether the handler with the given category should be
+// treated as in-process for the service. For Proxy and Extension services, a
+// handler listed in parameters.inproc-handlers is treated as inproc even when
+// its endpoint is IPC or TCP. Otherwise the handler endpoint is used.
+func (s Service) IsInprocHandler(category string) (bool, error) {
+	handlerVariant, err := s.HandlerByCategory(category)
+	if err != nil {
+		return false, err
+	}
+	handler, ok := handlerVariant.AsIndependentHandler()
+	if !ok {
+		return false, fmt.Errorf("handler of '%s' category is not an independent handler", category)
+	}
+	if s.Type == ProxyType || s.Type == ExtensionType {
+		if serviceParameterHasInprocHandler(s, category) {
+			return true, nil
+		}
+	}
+	return handler.Endpoint.IsInproc(), nil
+}
+
+func serviceParameterHasInprocHandler(service Service, category string) bool {
+	if service.Parameters == nil || category == "" {
+		return false
+	}
+	raw, exists := service.Parameters[InprocHandlersParameter]
+	if !exists {
+		return false
+	}
+	switch categories := raw.(type) {
+	case []string:
+		return slices.Contains(categories, category)
+	case []interface{}:
+		for _, item := range categories {
+			if name, ok := item.(string); ok && name == category {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ValidateOutboundService validates a minimal inline service used as a proxy outbound.
 // Bootstrap fields such as module-url and start-command are not required.
 func ValidateOutboundService(service Service) error {
@@ -314,7 +359,6 @@ func ValidateService(service Service) error {
 	if needsStartCommand && len(service.StartCommand) == 0 {
 		return fmt.Errorf("service('%s') has ipc endpoint and requires start-command", service.Name)
 	}
-
 	return nil
 }
 

@@ -261,6 +261,71 @@ func TestServiceIsInprocRemoteHandler(t *testing.T) {
 	}
 }
 
+func TestServiceIsInprocHandler(t *testing.T) {
+	t.Run("missing handler", func(t *testing.T) {
+		service := Service{Name: "proxy", Type: ProxyType}
+		if _, err := service.IsInprocHandler("main"); err == nil {
+			t.Fatal("IsInprocHandler with missing handler returned nil error")
+		}
+	})
+
+	t.Run("inproc endpoint", func(t *testing.T) {
+		service := Service{
+			Name: "extension",
+			Type: ExtensionType,
+			Handlers: NewHandlerVariants(IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("inproc/extension", 0),
+			}),
+		}
+		inproc, err := service.IsInprocHandler("main")
+		if err != nil {
+			t.Fatalf("IsInprocHandler: %v", err)
+		}
+		if !inproc {
+			t.Fatal("IsInprocHandler returned false for inproc endpoint")
+		}
+	})
+
+	t.Run("proxy parameter override", func(t *testing.T) {
+		service := Service{
+			Name: "proxy",
+			Type: ProxyType,
+			Parameters: datatype.New().Set(InprocHandlersParameter, []string{"main"}),
+			Handlers: NewHandlerVariants(IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/proxy", 0),
+			}),
+		}
+		inproc, err := service.IsInprocHandler("main")
+		if err != nil {
+			t.Fatalf("IsInprocHandler: %v", err)
+		}
+		if !inproc {
+			t.Fatal("IsInprocHandler returned false for handler listed in inproc-handlers")
+		}
+	})
+
+	t.Run("independent ignores parameter", func(t *testing.T) {
+		service := Service{
+			Name: "service",
+			Type: IndependentType,
+			Parameters: datatype.New().Set(InprocHandlersParameter, []string{"main"}),
+			Handlers: NewHandlerVariants(IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/service", 0),
+			}),
+		}
+		inproc, err := service.IsInprocHandler("main")
+		if err != nil {
+			t.Fatalf("IsInprocHandler: %v", err)
+		}
+		if inproc {
+			t.Fatal("IsInprocHandler returned true for IPC handler on Independent with inproc-handlers parameter")
+		}
+	})
+}
+
 func TestValidateDepService(t *testing.T) {
 	if err := ValidateDepService(DepService{Name: "orphan"}); err == nil {
 		t.Fatal("ValidateDepService without proxies or extensions returned nil error")
