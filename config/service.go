@@ -206,6 +206,13 @@ func (s Service) IsInproc() bool {
 		if handler.Category == ServiceManagerCategory {
 			continue
 		}
+
+		if s.Type == ProxyType || s.Type == ExtensionType {
+			if serviceParameterHasInprocHandler(s, handler.Category) {
+				return true
+			}
+		}
+
 		if handler.Endpoint.IsInproc() {
 			return true
 		}
