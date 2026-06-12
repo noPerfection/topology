@@ -189,7 +189,7 @@ func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
 
 // IsServiceRunningByManager checks a dependency service manager before the
 // topology handler is started.
-func (h *Handler) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+func (h *Handler) IsServiceRunningByManager(serviceName string, handler config.IndependentHandler) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -218,7 +218,7 @@ func (h *Handler) StopService(serviceName string) error {
 
 // StopServiceByManager stops a dependency service manager before the topology
 // handler is started.
-func (h *Handler) StopServiceByManager(serviceName string, handler config.Handler) error {
+func (h *Handler) StopServiceByManager(serviceName string, handler config.IndependentHandler) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -282,7 +282,7 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 
 // onIsServiceRunningByManager checks whether the dependency is running by its
 // manager handler.
-// Requires 'service' string parameter and 'handler' as a config.Handler object.
+// Requires 'service' string parameter and 'handler' as a config.IndependentHandler object.
 func (h *Handler) onIsServiceRunningByManager(req message.RequestInterface) message.ReplyInterface {
 	serviceName, err := req.RouteParameters().StringValue("service")
 	if err != nil {
@@ -294,9 +294,9 @@ func (h *Handler) onIsServiceRunningByManager(req message.RequestInterface) mess
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
 	}
 
-	var handler config.Handler
+	var handler config.IndependentHandler
 	if err := kv.Interface(&handler); err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface('config.Handler'): %v", err))
+		return req.Fail(fmt.Sprintf("kv.Interface('config.IndependentHandler'): %v", err))
 	}
 
 	running, err := h.topology.IsServiceRunningByManager(serviceName, handler)
@@ -426,7 +426,7 @@ func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInter
 }
 
 // onStopServiceByManager stops the dependency by its manager handler.
-// Requires 'service' string parameter and 'handler' as a config.Handler object.
+// Requires 'service' string parameter and 'handler' as a config.IndependentHandler object.
 func (h *Handler) onStopServiceByManager(req message.RequestInterface) message.ReplyInterface {
 	serviceName, err := req.RouteParameters().StringValue("service")
 	if err != nil {
@@ -438,9 +438,9 @@ func (h *Handler) onStopServiceByManager(req message.RequestInterface) message.R
 		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
 	}
 
-	var handler config.Handler
+	var handler config.IndependentHandler
 	if err := kv.Interface(&handler); err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface('config.Handler'): %v", err))
+		return req.Fail(fmt.Sprintf("kv.Interface('config.IndependentHandler'): %v", err))
 	}
 
 	if err := h.topology.StopServiceByManager(serviceName, handler); err != nil {

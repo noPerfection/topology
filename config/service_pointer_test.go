@@ -160,7 +160,8 @@ func TestServicePointerJSONInlineProxy(t *testing.T) {
 	if target.Service.Name != "inline_audit" {
 		t.Fatalf("Service = %#v, want inline_audit", target.Service)
 	}
-	if len(target.Handlers) != 1 || len(target.Handlers[0].AsProxyHandler().Outbounds) != 1 {
+	proxyHandler, ok := target.Handlers[0].AsProxyHandler()
+	if len(target.Handlers) != 1 || !ok || len(proxyHandler.Outbounds) != 1 {
 		t.Fatalf("Proxy handlers = %#v, want one handler with one outbound", target.Handlers)
 	}
 
@@ -197,7 +198,7 @@ func TestServicePointerInlineIpcRequiresCompleteService(t *testing.T) {
 	inline := ServiceTarget(Service{
 		Type: ProxyType,
 		Name: "inline_proxy",
-		Handlers: NewHandlerVariants(Handler{
+		Handlers: NewHandlerVariants(IndependentHandler{
 			Type:     SyncReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("tmp/inline_proxy", 0),
@@ -217,7 +218,7 @@ func TestOutboundServicePointerAllowsMinimalInlineService(t *testing.T) {
 	inline := ServiceTarget(Service{
 		Type: ProxyType,
 		Name: "default-name-proxy",
-		Handlers: NewHandlerVariants(Handler{
+		Handlers: NewHandlerVariants(IndependentHandler{
 			Type:     SyncReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),

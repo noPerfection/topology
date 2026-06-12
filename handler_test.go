@@ -102,7 +102,7 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 		Type: config.ProxyType,
 		Name: "pre-start-service",
 		Handlers: config.NewHandlerVariants(
-			config.Handler{
+			config.IndependentHandler{
 				Type:     config.ReplierType,
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("pre-start-manager", 6100),
@@ -219,7 +219,7 @@ func testHandlerService(name string) config.Service {
 	return config.Service{
 		Type: config.IndependentType,
 		Name: name,
-		Handlers: config.NewHandlerVariants(config.Handler{
+		Handlers: config.NewHandlerVariants(config.IndependentHandler{
 			Type:     config.ReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("localhost", 9000),

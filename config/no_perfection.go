@@ -85,12 +85,12 @@ func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[st
 	}
 
 	for hi := range service.Handlers {
-		handler := service.Handlers[hi].Handler
-		if service.Handlers[hi].ProxyHandler != nil {
-			handler = &service.Handlers[hi].ProxyHandler.Handler
-		}
-		if handler == nil {
+		if service.Handlers[hi] == nil {
 			return fmt.Errorf("handler %d is empty", hi)
+		}
+		handler, ok := service.Handlers[hi].AsIndependentHandler()
+		if !ok {
+			return fmt.Errorf("handler %d is not an independent handler", hi)
 		}
 
 		for di := range handler.CommandDeps {
@@ -99,8 +99,11 @@ func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[st
 				return fmt.Errorf("command %q: %w", dep.Name, err)
 			}
 		}
-		if service.Type == ProxyType && service.Handlers[hi].ProxyHandler != nil {
-			proxyHandler := service.Handlers[hi].ProxyHandler
+		if service.Type == ProxyType {
+			proxyHandler, ok := service.Handlers[hi].AsProxyHandler()
+			if !ok {
+				continue
+			}
 			for oi := range proxyHandler.Outbounds {
 				target := &proxyHandler.Outbounds[oi]
 				if err := ValidateOutboundServicePointer(*target); err != nil {
@@ -162,14 +165,24 @@ func (a *NoPerfection) validateServiceRefs(service Service) error {
 		}
 	}
 	for hi, handler := range service.Handlers {
-		baseHandler := handler.AsHandler()
+		if handler == nil {
+			return fmt.Errorf("handler %d is empty", hi)
+		}
+		baseHandler, ok := handler.AsIndependentHandler()
+		if !ok {
+			return fmt.Errorf("handler %d is not an independent handler", hi)
+		}
 		for _, dep := range baseHandler.CommandDeps {
 			if err := a.validateDepServiceRefs(dep); err != nil {
 				return fmt.Errorf("command %q: %w", dep.Name, err)
 			}
 		}
-		if service.Type == ProxyType && handler.ProxyHandler != nil {
-			for oi, target := range handler.ProxyHandler.Outbounds {
+		if service.Type == ProxyType {
+			proxyHandler, ok := handler.AsProxyHandler()
+			if !ok {
+				continue
+			}
+			for oi, target := range proxyHandler.Outbounds {
 				if err := a.validateOutboundServicePointer(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
 				}

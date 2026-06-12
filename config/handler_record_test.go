@@ -11,9 +11,9 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 	service := Service{
 		Type: ProxyType,
 		Name: "auth_proxy",
-		Handlers: []HandlerVariant{
+		Handlers: []Handler{
 			NewProxyHandlerVariant(ProxyHandler{
-				Handler: Handler{
+				IndependentHandler: IndependentHandler{
 					Type:     ReplierType,
 					Category: "auth",
 					Endpoint: message.NewEndpoint("auth_1", 4301),
@@ -38,7 +38,10 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 	if len(roundTrip.Handlers) != 1 {
 		t.Fatalf("Proxy handlers = %#v, want one outbound", roundTrip.Handlers)
 	}
-	proxyHandler := roundTrip.Handlers[0].AsProxyHandler()
+	proxyHandler, ok := roundTrip.Handlers[0].AsProxyHandler()
+	if !ok {
+		t.Fatal("handler is not a ProxyHandler")
+	}
 	if len(proxyHandler.Outbounds) != 1 {
 		t.Fatalf("Proxy handler outbounds = %#v, want one outbound", proxyHandler.Outbounds)
 	}

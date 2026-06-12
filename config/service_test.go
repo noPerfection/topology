@@ -8,18 +8,18 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
-func testService() (*Service, Handler, Handler, Handler) {
-	handlerOfType := Handler{
+func testService() (*Service, IndependentHandler, IndependentHandler, IndependentHandler) {
+	handlerOfType := IndependentHandler{
 		Type:     ReplierType,
 		Category: "public",
 		Endpoint: message.NewEndpoint("handler_1", 4101),
 	}
-	handler2OfType := Handler{
+	handler2OfType := IndependentHandler{
 		Type:     ReplierType,
 		Category: "internal",
 		Endpoint: message.NewEndpoint("handler_2", 4102),
 	}
-	handlerOfType2 := Handler{
+	handlerOfType2 := IndependentHandler{
 		Type:     SyncReplierType,
 		Category: "sync",
 		Endpoint: message.NewEndpoint("handler_3", 4103),
@@ -28,14 +28,14 @@ func testService() (*Service, Handler, Handler, Handler) {
 	return &Service{
 		Type:     IndependentType,
 		Name:     "service_id",
-		Handlers: make([]HandlerVariant, 0),
+		Handlers: make([]Handler, 0),
 	}, handlerOfType, handler2OfType, handlerOfType2
 }
 
 func TestValidateService(t *testing.T) {
 	_, handlerOfType, _, _ := testService()
 
-	invalidHandler := Handler{Type: HandlerType("invalid_handler_type")}
+	invalidHandler := IndependentHandler{Type: HandlerType("invalid_handler_type")}
 
 	generatedService := &Service{
 		Name:     "generated",
@@ -52,7 +52,7 @@ func TestValidateService(t *testing.T) {
 		t.Fatalf("ValidateService valid service: %v", err)
 	}
 
-	generatedService.Handlers = NewHandlerVariants(Handler{Type: ReplierType})
+	generatedService.Handlers = NewHandlerVariants(IndependentHandler{Type: ReplierType})
 	if err := ValidateService(*generatedService); err == nil {
 		t.Fatal("ValidateService with empty handler category returned nil error")
 	}
@@ -68,7 +68,7 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 		Type: ProxyType,
 		Name: "inproc-service",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Type:     ReplierType,
 				Category: "inproc",
 				Endpoint: message.NewEndpoint("inproc-handler", 0),
@@ -88,7 +88,7 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 		Type: ProxyType,
 		Name: "tmp-service",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Type:     ReplierType,
 				Category: "tmp",
 				Endpoint: message.NewEndpoint("tmp/service.sock", 0),
@@ -108,7 +108,7 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 		Type: ProxyType,
 		Name: "tcp-service",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Type:     ReplierType,
 				Category: "tcp",
 				Endpoint: message.NewEndpoint("tcp-service", 4101),
@@ -125,11 +125,11 @@ func TestServiceIsIpc(t *testing.T) {
 		Name: "proxy",
 		Type: ProxyType,
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("tmp/proxy", 0),
 			},
-			Handler{
+			IndependentHandler{
 				Category: "manager",
 				Endpoint: message.NewEndpoint("tmp/proxy_manager", 0),
 			},
@@ -144,11 +144,11 @@ func TestServiceIsIpcSkipsManager(t *testing.T) {
 	service := Service{
 		Name: "proxy",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("localhost", 8000),
 			},
-			Handler{
+			IndependentHandler{
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("tmp/manager", 0),
 			},
@@ -163,11 +163,11 @@ func TestServiceIsIpcMainIpcManagerInproc(t *testing.T) {
 	service := Service{
 		Name: "proxy",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("tmp/proxy", 0),
 			},
-			Handler{
+			IndependentHandler{
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("inproc/proxy_manager", 0),
 			},
@@ -183,7 +183,7 @@ func TestServiceIsIpcMainIpcManagerInproc(t *testing.T) {
 
 func TestServiceIsIpcRemoteHandler(t *testing.T) {
 	service := Service{
-		Handlers: NewHandlerVariants(Handler{
+		Handlers: NewHandlerVariants(IndependentHandler{
 			Category: "main",
 			Endpoint: message.NewEndpoint("localhost", 8000),
 		}),
@@ -197,7 +197,7 @@ func TestServiceIsInproc(t *testing.T) {
 	service := Service{
 		Name: "extension",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("inproc/extension", 0),
 			},
@@ -212,11 +212,11 @@ func TestServiceIsInprocSkipsManager(t *testing.T) {
 	service := Service{
 		Name: "extension",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("localhost", 8000),
 			},
-			Handler{
+			IndependentHandler{
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("inproc/extension_manager", 0),
 			},
@@ -231,11 +231,11 @@ func TestServiceIsIpcFalseWhenMainInproc(t *testing.T) {
 	service := Service{
 		Name: "extension",
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("inproc/extension", 0),
 			},
-			Handler{
+			IndependentHandler{
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("tmp/manager", 0),
 			},
@@ -251,7 +251,7 @@ func TestServiceIsIpcFalseWhenMainInproc(t *testing.T) {
 
 func TestServiceIsInprocRemoteHandler(t *testing.T) {
 	service := Service{
-		Handlers: NewHandlerVariants(Handler{
+		Handlers: NewHandlerVariants(IndependentHandler{
 			Category: "main",
 			Endpoint: message.NewEndpoint("localhost", 8000),
 		}),
@@ -285,7 +285,7 @@ func TestValidateOutboundServiceAllowsMinimalProxyOutbound(t *testing.T) {
 	outbound := Service{
 		Type: ProxyType,
 		Name: "default-name-proxy",
-		Handlers: NewHandlerVariants(Handler{
+		Handlers: NewHandlerVariants(IndependentHandler{
 			Type:     SyncReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
@@ -298,7 +298,7 @@ func TestValidateOutboundServiceAllowsMinimalProxyOutbound(t *testing.T) {
 
 func TestValidateProxyForwards(t *testing.T) {
 	proxyHandler := ProxyHandler{
-		Handler: Handler{
+		IndependentHandler: IndependentHandler{
 			Type:     SyncReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("proxy", 4101),
@@ -310,7 +310,7 @@ func TestValidateProxyForwards(t *testing.T) {
 				Type:      IndependentType,
 				Name:      "hello-world",
 				ModuleUrl: "github.com/noPerfection/hello-world",
-				Handlers: NewHandlerVariants(Handler{
+				Handlers: NewHandlerVariants(IndependentHandler{
 					Type:     ReplierType,
 					Category: "main",
 					Endpoint: message.NewEndpoint("hello-world", 4102),
@@ -326,20 +326,20 @@ func TestValidateProxyForwards(t *testing.T) {
 		Type:      ProxyType,
 		Name:      "proxy",
 		ModuleUrl: "github.com/noPerfection/proxy",
-		Handlers:  []HandlerVariant{NewProxyHandlerVariant(proxyHandler)},
+		Handlers:  []Handler{NewProxyHandlerVariant(proxyHandler)},
 	}
 	if err := ValidateService(service); err != nil {
 		t.Fatalf("ValidateService with forward mappings: %v", err)
 	}
 
 	proxyHandler.Forward = map[string]string{"missing-route": "hello-world"}
-	service.Handlers = []HandlerVariant{NewProxyHandlerVariant(proxyHandler)}
+	service.Handlers = []Handler{NewProxyHandlerVariant(proxyHandler)}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward route missing from routes returned nil error")
 	}
 
 	proxyHandler.Forward = map[string]string{"hello": "missing-service"}
-	service.Handlers = []HandlerVariant{NewProxyHandlerVariant(proxyHandler)}
+	service.Handlers = []Handler{NewProxyHandlerVariant(proxyHandler)}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward outbound missing from outbounds returned nil error")
 	}
@@ -354,15 +354,16 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 		"outbounds": ["hello-world"]
 	}`)
 
-	var variant HandlerVariant
-	if err := json.Unmarshal(data, &variant); err != nil {
+	handler, err := unmarshalHandler(data)
+	if err != nil {
 		t.Fatalf("json.Unmarshal proxy handler with forward: %v", err)
 	}
-	if variant.ProxyHandler == nil {
-		t.Fatal("variant.ProxyHandler is nil")
+	proxyHandler, ok := handler.AsProxyHandler()
+	if !ok {
+		t.Fatal("handler is not a ProxyHandler")
 	}
-	if len(variant.ProxyHandler.Forward) != 1 || variant.ProxyHandler.Forward["hello"] != "hello-world" {
-		t.Fatalf("Forward = %#v, want hello mapping", variant.ProxyHandler.Forward)
+	if len(proxyHandler.Forward) != 1 || proxyHandler.Forward["hello"] != "hello-world" {
+		t.Fatalf("Forward = %#v, want hello mapping", proxyHandler.Forward)
 	}
 }
 
@@ -466,7 +467,10 @@ func TestServiceHandlerByCategory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HandlerByCategory public: %v", err)
 	}
-	handler := foundHandler.AsHandler()
+	handler, ok := foundHandler.AsIndependentHandler()
+	if !ok {
+		t.Fatal("found handler is not an independent handler")
+	}
 	if handler.Endpoint.Id != handlerOfType.Endpoint.Id {
 		t.Fatalf("handler id = %q, want %q", handler.Endpoint.Id, handlerOfType.Endpoint.Id)
 	}
@@ -479,7 +483,7 @@ func TestServiceGetHandler(t *testing.T) {
 	serviceConfig, handlerOfType, _, handlerOfType2 := testService()
 	serviceConfig.Handlers = NewHandlerVariants(
 		handlerOfType,
-		Handler{
+		IndependentHandler{
 			Type:     PairType,
 			Category: "pair",
 			Endpoint: message.NewEndpoint(handlerOfType.Endpoint.Id, 9999),
@@ -498,7 +502,10 @@ func TestServiceGetHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetHandler: %v", err)
 	}
-	handler := foundHandler.AsHandler()
+	handler, ok := foundHandler.AsIndependentHandler()
+	if !ok {
+		t.Fatal("found handler is not an independent handler")
+	}
 	if handler.Type != handlerOfType.Type {
 		t.Fatalf("handler type = %q, want %q", handler.Type, handlerOfType.Type)
 	}
@@ -518,22 +525,25 @@ func TestServiceSetHandler(t *testing.T) {
 	if len(serviceConfig.Handlers) != 1 {
 		t.Fatalf("len(Handlers) = %d, want 1", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].AsHandler().Type != ReplierType {
-		t.Fatalf("handler type = %q, want %q", serviceConfig.Handlers[0].AsHandler().Type, ReplierType)
+	firstHandler, ok := serviceConfig.Handlers[0].AsIndependentHandler()
+	if !ok || firstHandler.Type != ReplierType {
+		t.Fatalf("handler type = %q, want %q", firstHandler.Type, ReplierType)
 	}
 
 	serviceConfig.SetHandler(NewHandlerVariant(handlerOfType2))
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) = %d, want 2", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].AsHandler().Type != ReplierType {
-		t.Fatalf("first handler type = %q, want %q", serviceConfig.Handlers[0].AsHandler().Type, ReplierType)
+	firstHandler, ok = serviceConfig.Handlers[0].AsIndependentHandler()
+	if !ok || firstHandler.Type != ReplierType {
+		t.Fatalf("first handler type = %q, want %q", firstHandler.Type, ReplierType)
 	}
-	if serviceConfig.Handlers[1].AsHandler().Type != SyncReplierType {
-		t.Fatalf("second handler type = %q, want %q", serviceConfig.Handlers[1].AsHandler().Type, SyncReplierType)
+	secondHandler, ok := serviceConfig.Handlers[1].AsIndependentHandler()
+	if !ok || secondHandler.Type != SyncReplierType {
+		t.Fatalf("second handler type = %q, want %q", secondHandler.Type, SyncReplierType)
 	}
 
-	updatedHandler := Handler{
+	updatedHandler := IndependentHandler{
 		Type:     PairType,
 		Category: "pair",
 		Endpoint: handlerOfType.Endpoint,
@@ -542,11 +552,13 @@ func TestServiceSetHandler(t *testing.T) {
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) after update = %d, want 2", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].AsHandler().Type != PairType {
-		t.Fatalf("first handler type = %q, want %q", serviceConfig.Handlers[0].AsHandler().Type, PairType)
+	firstHandler, ok = serviceConfig.Handlers[0].AsIndependentHandler()
+	if !ok || firstHandler.Type != PairType {
+		t.Fatalf("first handler type = %q, want %q", firstHandler.Type, PairType)
 	}
-	if serviceConfig.Handlers[1].AsHandler().Type != SyncReplierType {
-		t.Fatalf("second handler type = %q, want %q", serviceConfig.Handlers[1].AsHandler().Type, SyncReplierType)
+	secondHandler, ok = serviceConfig.Handlers[1].AsIndependentHandler()
+	if !ok || secondHandler.Type != SyncReplierType {
+		t.Fatalf("second handler type = %q, want %q", secondHandler.Type, SyncReplierType)
 	}
 }
 
@@ -567,10 +579,12 @@ func TestServiceRemoveHandler(t *testing.T) {
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) = %d, want 2", len(serviceConfig.Handlers))
 	}
-	if serviceConfig.Handlers[0].AsHandler().Endpoint.Id != handlerOfType.Endpoint.Id {
-		t.Fatalf("first handler id = %q, want %q", serviceConfig.Handlers[0].AsHandler().Endpoint.Id, handlerOfType.Endpoint.Id)
+	firstHandler, ok := serviceConfig.Handlers[0].AsIndependentHandler()
+	if !ok || firstHandler.Endpoint.Id != handlerOfType.Endpoint.Id {
+		t.Fatalf("first handler id = %q, want %q", firstHandler.Endpoint.Id, handlerOfType.Endpoint.Id)
 	}
-	if serviceConfig.Handlers[1].AsHandler().Endpoint.Id != handlerOfType2.Endpoint.Id {
-		t.Fatalf("second handler id = %q, want %q", serviceConfig.Handlers[1].AsHandler().Endpoint.Id, handlerOfType2.Endpoint.Id)
+	secondHandler, ok := serviceConfig.Handlers[1].AsIndependentHandler()
+	if !ok || secondHandler.Endpoint.Id != handlerOfType2.Endpoint.Id {
+		t.Fatalf("second handler id = %q, want %q", secondHandler.Endpoint.Id, handlerOfType2.Endpoint.Id)
 	}
 }

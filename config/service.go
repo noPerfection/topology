@@ -19,7 +19,7 @@ type DepService struct {
 	Extensions []ServicePointer `json:"extensions,omitempty"`
 }
 
-type Handler struct {
+type IndependentHandler struct {
 	Type        HandlerType      `json:"type"`
 	Category    string           `json:"category"`
 	Endpoint    message.Endpoint `json:"endpoint"`
@@ -27,103 +27,90 @@ type Handler struct {
 }
 
 type ProxyHandler struct {
-	Handler
+	IndependentHandler
 	Routes    []string          `json:"routes,omitempty"` // whitelist routes
 	Outbounds []ServicePointer  `json:"outbounds"`
 	Forward   map[string]string `json:"forward,omitempty"` // command route => outbound ref
 }
 
-type HandlerVariant struct {
-	Handler      *Handler      `json:"-"`
-	ProxyHandler *ProxyHandler `json:"-"`
+type Handler interface {
+	isHandler()
+	AsIndependentHandler() (IndependentHandler, bool)
+	AsProxyHandler() (ProxyHandler, bool)
 }
 
-func NewHandlerVariant(handler Handler) HandlerVariant {
-	h := handler
-	return HandlerVariant{Handler: &h}
+func (h IndependentHandler) isHandler() {}
+
+func (h IndependentHandler) AsIndependentHandler() (IndependentHandler, bool) {
+	return h, true
 }
 
-func NewHandlerVariants(handlers ...Handler) []HandlerVariant {
-	variants := make([]HandlerVariant, len(handlers))
+func (h IndependentHandler) AsProxyHandler() (ProxyHandler, bool) {
+	return ProxyHandler{}, false
+}
+
+func (h ProxyHandler) isHandler() {}
+
+func (h ProxyHandler) AsIndependentHandler() (IndependentHandler, bool) {
+	return h.IndependentHandler, true
+}
+
+func (h ProxyHandler) AsProxyHandler() (ProxyHandler, bool) {
+	return h, true
+}
+
+func NewHandlerVariant(handler IndependentHandler) Handler {
+	return handler
+}
+
+func NewHandlerVariants(handlers ...IndependentHandler) []Handler {
+	variants := make([]Handler, len(handlers))
 	for i, handler := range handlers {
 		variants[i] = NewHandlerVariant(handler)
 	}
 	return variants
 }
 
-func NewProxyHandlerVariant(handler ProxyHandler) HandlerVariant {
-	h := handler
-	return HandlerVariant{ProxyHandler: &h}
+func NewProxyHandlerVariant(handler ProxyHandler) Handler {
+	return handler
 }
 
-func (h HandlerVariant) AsHandler() Handler {
-	if h.ProxyHandler != nil {
-		return h.ProxyHandler.Handler
-	}
-	if h.Handler != nil {
-		return *h.Handler
-	}
-	return Handler{}
-}
-
-func (h HandlerVariant) AsProxyHandler() ProxyHandler {
-	if h.ProxyHandler != nil {
-		return *h.ProxyHandler
-	}
-	return ProxyHandler{Handler: h.AsHandler()}
-}
-
-func (h HandlerVariant) MarshalJSON() ([]byte, error) {
-	if h.ProxyHandler != nil {
-		return json.Marshal(h.ProxyHandler)
-	}
-	if h.Handler != nil {
-		return json.Marshal(h.Handler)
-	}
-	return nil, fmt.Errorf("handler variant is empty")
-}
-
-func (h *HandlerVariant) UnmarshalJSON(data []byte) error {
+func unmarshalHandler(data []byte) (Handler, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
-		return fmt.Errorf("handler variant is empty")
+		return nil, fmt.Errorf("handler is empty")
 	}
-
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(trimmed, &raw); err != nil {
-		return fmt.Errorf("handler variant object: %w", err)
+		return nil, fmt.Errorf("handler object: %w", err)
 	}
 	if _, ok := raw["outbounds"]; ok {
 		var handler ProxyHandler
 		if err := json.Unmarshal(trimmed, &handler); err != nil {
-			return fmt.Errorf("proxy handler: %w", err)
+			return nil, fmt.Errorf("proxy handler: %w", err)
 		}
-		*h = NewProxyHandlerVariant(handler)
-		return nil
+		return handler, nil
 	}
 	if _, ok := raw["routes"]; ok {
 		var handler ProxyHandler
 		if err := json.Unmarshal(trimmed, &handler); err != nil {
-			return fmt.Errorf("proxy handler: %w", err)
+			return nil, fmt.Errorf("proxy handler: %w", err)
 		}
-		*h = NewProxyHandlerVariant(handler)
-		return nil
+		return handler, nil
 	}
 	if _, ok := raw["forward"]; ok {
 		var handler ProxyHandler
 		if err := json.Unmarshal(trimmed, &handler); err != nil {
-			return fmt.Errorf("proxy handler: %w", err)
+			return nil, fmt.Errorf("proxy handler: %w", err)
 		}
-		*h = NewProxyHandlerVariant(handler)
-		return nil
+		return handler, nil
 	}
 
-	var handler Handler
+	var handler IndependentHandler
 	if err := json.Unmarshal(trimmed, &handler); err != nil {
-		return fmt.Errorf("handler: %w", err)
+		return nil, fmt.Errorf("handler: %w", err)
 	}
-	*h = NewHandlerVariant(handler)
-	return nil
+	return handler, nil
 }
 
 // Service type defined in the config.
@@ -139,8 +126,43 @@ type Service struct {
 	ModuleUrl    string            `json:"module-url,omitempty"`
 	StartCommand string            `json:"start-command,omitempty"`
 	HandlerDeps  []DepService      `json:"handler-deps,omitempty"`
-	Handlers     []HandlerVariant  `json:"handlers"`
+	Handlers     []Handler         `json:"handlers"`
 	Parameters   datatype.KeyValue `json:"parameters,omitempty"`
+}
+
+func (s *Service) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Type         Type              `json:"type"`
+		Name         string            `json:"name"`
+		ModuleUrl    string            `json:"module-url,omitempty"`
+		StartCommand string            `json:"start-command,omitempty"`
+		HandlerDeps  []DepService      `json:"handler-deps,omitempty"`
+		Handlers     []json.RawMessage `json:"handlers"`
+		Parameters   datatype.KeyValue `json:"parameters,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	handlers := make([]Handler, len(raw.Handlers))
+	for i, rawHandler := range raw.Handlers {
+		handler, err := unmarshalHandler(rawHandler)
+		if err != nil {
+			return fmt.Errorf("handlers[%d]: %w", i, err)
+		}
+		handlers[i] = handler
+	}
+
+	*s = Service{
+		Type:         raw.Type,
+		Name:         raw.Name,
+		ModuleUrl:    raw.ModuleUrl,
+		StartCommand: raw.StartCommand,
+		HandlerDeps:  raw.HandlerDeps,
+		Handlers:     handlers,
+		Parameters:   raw.Parameters,
+	}
+	return nil
 }
 
 func (s Service) IsZero() bool {
@@ -152,7 +174,13 @@ func (s Service) IsIpc() bool {
 		return false
 	}
 	for _, variant := range s.Handlers {
-		handler := variant.AsHandler()
+		if variant == nil {
+			continue
+		}
+		handler, ok := variant.AsIndependentHandler()
+		if !ok {
+			continue
+		}
 		if handler.Category == ServiceManagerCategory {
 			continue
 		}
@@ -165,7 +193,13 @@ func (s Service) IsIpc() bool {
 
 func (s Service) IsInproc() bool {
 	for _, variant := range s.Handlers {
-		handler := variant.AsHandler()
+		if variant == nil {
+			continue
+		}
+		handler, ok := variant.AsIndependentHandler()
+		if !ok {
+			continue
+		}
 		if handler.Category == ServiceManagerCategory {
 			continue
 		}
@@ -190,7 +224,13 @@ func ValidateOutboundService(service Service) error {
 	}
 
 	for i, h := range service.Handlers {
-		handler := h.AsHandler()
+		if h == nil {
+			return fmt.Errorf("handler[%d] is empty", i)
+		}
+		handler, ok := h.AsIndependentHandler()
+		if !ok {
+			return fmt.Errorf("handler[%d] is not an independent handler", i)
+		}
 		if err := ValidateHandlerType(handler.Type); err != nil {
 			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
 		}
@@ -223,7 +263,13 @@ func ValidateService(service Service) error {
 	}
 
 	for i, h := range service.Handlers {
-		handler := h.AsHandler()
+		if h == nil {
+			return fmt.Errorf("handler[%d] is empty", i)
+		}
+		handler, ok := h.AsIndependentHandler()
+		if !ok {
+			return fmt.Errorf("handler[%d] is not an independent handler", i)
+		}
 		if err := ValidateHandlerType(handler.Type); err != nil {
 			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
 		}
@@ -247,7 +293,10 @@ func ValidateService(service Service) error {
 			}
 		}
 		if service.Type == ProxyType {
-			proxyHandler := h.AsProxyHandler()
+			proxyHandler, ok := h.AsProxyHandler()
+			if !ok {
+				return fmt.Errorf("handler[%d] must be a proxy handler", i)
+			}
 			for j, target := range proxyHandler.Outbounds {
 				if err := ValidateOutboundServicePointer(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
@@ -313,36 +362,43 @@ func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
 
 // HandlerByCategory returns the handler config by the handler category.
 // If the handler doesn't exist, then it returns an error.
-func (s *Service) HandlerByCategory(category string) (HandlerVariant, error) {
+func (s *Service) HandlerByCategory(category string) (Handler, error) {
 	if len(category) == 0 {
-		return HandlerVariant{}, fmt.Errorf("category argument is empty")
+		return nil, fmt.Errorf("category argument is empty")
 	}
 
-	i := slices.IndexFunc(s.Handlers, func(e HandlerVariant) bool {
-		return e.AsHandler().Category == category
+	i := slices.IndexFunc(s.Handlers, func(e Handler) bool {
+		if e == nil {
+			return false
+		}
+		handler, ok := e.AsIndependentHandler()
+		return ok && handler.Category == category
 	})
 	if i == -1 {
-		return HandlerVariant{}, fmt.Errorf("handler of '%s' category not found", category)
+		return nil, fmt.Errorf("handler of '%s' category not found", category)
 	}
 
 	return s.Handlers[i], nil
 }
 
 // GetHandler returns a handler by its endpoint.
-func (s *Service) GetHandler(endpoint message.Endpoint) (HandlerVariant, error) {
+func (s *Service) GetHandler(endpoint message.Endpoint) (Handler, error) {
 	if s == nil {
-		return HandlerVariant{}, fmt.Errorf("service struct is nil")
+		return nil, fmt.Errorf("service struct is nil")
 	}
 	if len(endpoint.Id) == 0 && !endpoint.IsRemote() {
-		return HandlerVariant{}, fmt.Errorf("endpoint id argument is empty")
+		return nil, fmt.Errorf("endpoint id argument is empty")
 	}
 
-	i := slices.IndexFunc(s.Handlers, func(h HandlerVariant) bool {
-		handler := h.AsHandler()
-		return handler.Endpoint.Id == endpoint.Id && handler.Endpoint.Port == endpoint.Port
+	i := slices.IndexFunc(s.Handlers, func(h Handler) bool {
+		if h == nil {
+			return false
+		}
+		handler, ok := h.AsIndependentHandler()
+		return ok && handler.Endpoint.Id == endpoint.Id && handler.Endpoint.Port == endpoint.Port
 	})
 	if i == -1 {
-		return HandlerVariant{}, fmt.Errorf("handler with endpoint '%s:%d' not found", endpoint.Id, endpoint.Port)
+		return nil, fmt.Errorf("handler with endpoint '%s:%d' not found", endpoint.Id, endpoint.Port)
 	}
 
 	return s.Handlers[i], nil
@@ -351,25 +407,39 @@ func (s *Service) GetHandler(endpoint message.Endpoint) (HandlerVariant, error) 
 // SetHandler adds a new handler.
 // If the handler with the same endpoint is identical, it will over-write that handler.
 // Otherwise, it will add a new handler.
-func (s *Service) SetHandler(handler HandlerVariant, overwriteByCategory ...bool) {
+func (s *Service) SetHandler(handler Handler, overwriteByCategory ...bool) {
 	if s == nil {
 		return
 	}
-	baseHandler := handler.AsHandler()
+	if handler == nil {
+		return
+	}
+	baseHandler, ok := handler.AsIndependentHandler()
+	if !ok {
+		return
+	}
 
 	if len(s.Handlers) == 0 {
-		s.Handlers = []HandlerVariant{handler}
+		s.Handlers = []Handler{handler}
 		return
 	}
 
 	var i int
 	if len(overwriteByCategory) > 0 && overwriteByCategory[0] {
-		i = slices.IndexFunc(s.Handlers, func(h HandlerVariant) bool {
-			return h.AsHandler().Category == baseHandler.Category
+		i = slices.IndexFunc(s.Handlers, func(h Handler) bool {
+			if h == nil {
+				return false
+			}
+			handler, ok := h.AsIndependentHandler()
+			return ok && handler.Category == baseHandler.Category
 		})
 	} else {
-		i = slices.IndexFunc(s.Handlers, func(h HandlerVariant) bool {
-			return h.AsHandler().Endpoint == baseHandler.Endpoint
+		i = slices.IndexFunc(s.Handlers, func(h Handler) bool {
+			if h == nil {
+				return false
+			}
+			handler, ok := h.AsIndependentHandler()
+			return ok && handler.Endpoint == baseHandler.Endpoint
 		})
 	}
 
@@ -390,9 +460,12 @@ func (s *Service) RemoveHandler(endpoint message.Endpoint) error {
 		return fmt.Errorf("endpoint id argument is empty")
 	}
 
-	i := slices.IndexFunc(s.Handlers, func(h HandlerVariant) bool {
-		handler := h.AsHandler()
-		return handler.Endpoint.Id == endpoint.Id && handler.Endpoint.Port == endpoint.Port
+	i := slices.IndexFunc(s.Handlers, func(h Handler) bool {
+		if h == nil {
+			return false
+		}
+		handler, ok := h.AsIndependentHandler()
+		return ok && handler.Endpoint.Id == endpoint.Id && handler.Endpoint.Port == endpoint.Port
 	})
 	if i == -1 {
 		return fmt.Errorf("handler with endpoint '%s:%d' not found", endpoint.Id, endpoint.Port)

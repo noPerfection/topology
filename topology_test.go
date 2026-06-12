@@ -72,7 +72,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 					Name:         "test-manager",
 					StartCommand: "test",
 					Handlers: config.NewHandlerVariants(
-						config.Handler{
+						config.IndependentHandler{
 							Type:     config.ReplierType,
 							Category: ServiceManagerCategory,
 							Endpoint: message.NewEndpoint("test-manager", 6000),
@@ -146,7 +146,7 @@ func (test *TestDepManagerSuite) Test_12_AddRemoveService() {
 		Name:         "extra-service",
 		StartCommand: "echo extra",
 		Handlers: config.NewHandlerVariants(
-			config.Handler{
+			config.IndependentHandler{
 				Type:     config.ReplierType,
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("extra-service-manager", 6001),
@@ -195,7 +195,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		Type: config.ProxyType,
 		Name: "duplicate-socket",
 		Handlers: config.NewHandlerVariants(
-			config.Handler{
+			config.IndependentHandler{
 				Type:     config.ReplierType,
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("test-manager", 6000),
@@ -208,7 +208,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		Type: config.ProxyType,
 		Name: "nested-parent",
 		Handlers: config.NewHandlerVariants(
-			config.Handler{
+			config.IndependentHandler{
 				Type:     config.ReplierType,
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
@@ -220,7 +220,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 								Type: config.ProxyType,
 								Name: "nested-child",
 								Handlers: config.NewHandlerVariants(
-									config.Handler{
+									config.IndependentHandler{
 										Type:     config.ReplierType,
 										Category: ServiceManagerCategory,
 										Endpoint: message.NewEndpoint("nested-child-manager", 6101),
@@ -251,7 +251,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 						Type: config.ProxyType,
 						Name: "service-level-child",
 						Handlers: config.NewHandlerVariants(
-							config.Handler{
+							config.IndependentHandler{
 								Type:     config.ReplierType,
 								Category: ServiceManagerCategory,
 								Endpoint: message.NewEndpoint("service-level-child-manager", 6201),
@@ -262,7 +262,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 			},
 		},
 		Handlers: config.NewHandlerVariants(
-			config.Handler{
+			config.IndependentHandler{
 				Type:     config.ReplierType,
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("service-level-parent-manager", 6200),
@@ -279,9 +279,9 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "proxy-parent",
-		Handlers: []config.HandlerVariant{
+		Handlers: []config.Handler{
 			config.NewProxyHandlerVariant(config.ProxyHandler{
-				Handler: config.Handler{
+				IndependentHandler: config.IndependentHandler{
 					Type:     config.ReplierType,
 					Category: ServiceManagerCategory,
 					Endpoint: message.NewEndpoint("proxy-parent-manager", 6300),
@@ -291,7 +291,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 						Type: config.ProxyType,
 						Name: "proxy-outbound-child",
 						Handlers: config.NewHandlerVariants(
-							config.Handler{
+							config.IndependentHandler{
 								Type:     config.ReplierType,
 								Category: ServiceManagerCategory,
 								Endpoint: message.NewEndpoint("proxy-outbound-child-manager", 6301),
@@ -428,12 +428,12 @@ func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
 					Name:         "ipc-proxy",
 					StartCommand: "true",
 					Handlers: config.NewHandlerVariants(
-						config.Handler{
+						config.IndependentHandler{
 							Type:     config.SyncReplierType,
 							Category: "main",
 							Endpoint: message.NewEndpoint("tmp/unreachable_proxy", 0),
 						},
-						config.Handler{
+						config.IndependentHandler{
 							Type:     config.SyncReplierType,
 							Category: ServiceManagerCategory,
 							Endpoint: message.NewEndpoint("tmp/unreachable_proxy_manager", 0),

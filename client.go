@@ -289,7 +289,7 @@ func (c *Client) IsServiceRunning(serviceName string) (bool, error) {
 
 // IsServiceRunningByManager checks whether a service is running by directly
 // contacting its manager handler.
-func (c *Client) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+func (c *Client) IsServiceRunningByManager(serviceName string, handler config.IndependentHandler) (bool, error) {
 	req := message.Request{
 		Command: IsServiceRunningByManager,
 		Parameters: datatype.New().
@@ -344,7 +344,7 @@ func (c *Client) StopService(serviceName string) error {
 
 // StopServiceByManager stops the running dependency service by directly
 // contacting its manager handler.
-func (c *Client) StopServiceByManager(serviceName string, handler config.Handler) error {
+func (c *Client) StopServiceByManager(serviceName string, handler config.IndependentHandler) error {
 	req := message.Request{
 		Command: StopServiceByManager,
 		Parameters: datatype.New().

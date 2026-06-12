@@ -49,10 +49,10 @@ type TopologyInterface interface {
 	StartServiceByConfig(record config.Service) (string, error)
 
 	// IsServiceRunningByManager checks whether a service manager is running.
-	IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error)
+	IsServiceRunningByManager(serviceName string, handler config.IndependentHandler) (bool, error)
 
 	// StopServiceByManager stops the service behind the given service manager.
-	StopServiceByManager(serviceName string, handler config.Handler) error
+	StopServiceByManager(serviceName string, handler config.IndependentHandler) error
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
@@ -295,10 +295,14 @@ func (tp *Topology) managerProbeTimeout(service config.Service) time.Duration {
 	if err != nil {
 		return tp.timeout
 	}
-	return tp.managerProbeTimeoutForHandler(managerHandler.AsHandler())
+	handler, ok := managerHandler.AsIndependentHandler()
+	if !ok {
+		return tp.timeout
+	}
+	return tp.managerProbeTimeoutForHandler(handler)
 }
 
-func (tp *Topology) managerProbeTimeoutForHandler(handler config.Handler) time.Duration {
+func (tp *Topology) managerProbeTimeoutForHandler(handler config.IndependentHandler) time.Duration {
 	if handler.Endpoint.IsIpc() {
 		return ipcManagerProbeTimeout
 	}
@@ -307,7 +311,7 @@ func (tp *Topology) managerProbeTimeoutForHandler(handler config.Handler) time.D
 
 // IsServiceRunningByManager checks whether a service is running by directly
 // contacting its manager handler.
-func (tp *Topology) IsServiceRunningByManager(serviceName string, handler config.Handler) (bool, error) {
+func (tp *Topology) IsServiceRunningByManager(serviceName string, handler config.IndependentHandler) (bool, error) {
 	if tp == nil {
 		return false, fmt.Errorf("nil topology")
 	}
@@ -337,7 +341,7 @@ func (tp *Topology) IsServiceRunningByManager(serviceName string, handler config
 
 // StopServiceByManager stops a service by directly contacting its manager
 // handler.
-func (tp *Topology) StopServiceByManager(serviceName string, handler config.Handler) error {
+func (tp *Topology) StopServiceByManager(serviceName string, handler config.IndependentHandler) error {
 	if tp == nil {
 		return fmt.Errorf("nil topology")
 	}
@@ -459,7 +463,11 @@ func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClien
 		return nil, fmt.Errorf("no manager found in the '%s' service, please set its config", service.Name)
 	}
 
-	node, err := newNodeClient(handler.AsHandler().Endpoint)
+	independentHandler, ok := handler.AsIndependentHandler()
+	if !ok {
+		return nil, fmt.Errorf("manager handler in '%s' is invalid", service.Name)
+	}
+	node, err := newNodeClient(independentHandler.Endpoint)
 	if err != nil {
 		return nil, fmt.Errorf("NewNode: %w", err)
 	}
@@ -586,7 +594,11 @@ func (tp *Topology) StartServiceByConfig(record config.Service) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("service %q manager handler: %w", record.Name, err)
 	}
-	running, err := tp.IsServiceRunningByManager(record.Name, managerHandler.AsHandler())
+	independentHandler, ok := managerHandler.AsIndependentHandler()
+	if !ok {
+		return "", fmt.Errorf("service %q manager handler is invalid", record.Name)
+	}
+	running, err := tp.IsServiceRunningByManager(record.Name, independentHandler)
 	if err != nil {
 		return "", fmt.Errorf("tp.IsServiceRunningByManager('%s'): %w", record.Name, err)
 	}

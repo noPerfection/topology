@@ -206,7 +206,7 @@ func TestLoadSave(t *testing.T) {
 		Name: "api",
 		Type: IndependentType,
 		Handlers: NewHandlerVariants(
-			Handler{
+			IndependentHandler{
 				Type:     ReplierType,
 				Category: "api",
 				Endpoint: message.NewEndpoint("api_1", 4101),
@@ -239,8 +239,9 @@ func TestLoadSave(t *testing.T) {
 	if loaded.Services[0].Name != "api" {
 		t.Fatalf("Name = %q, want api", loaded.Services[0].Name)
 	}
-	if loaded.Services[0].Handlers[0].AsHandler().Endpoint.Port != 4101 {
-		t.Fatalf("Port = %d, want 4101", loaded.Services[0].Handlers[0].AsHandler().Endpoint.Port)
+	handler, ok := loaded.Services[0].Handlers[0].AsIndependentHandler()
+	if !ok || handler.Endpoint.Port != 4101 {
+		t.Fatalf("Port = %d, want 4101", handler.Endpoint.Port)
 	}
 }
 
@@ -257,7 +258,7 @@ func TestValidateTopologyInlineService(t *testing.T) {
 				Type: IndependentType,
 				Name: "public_api",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "public-api",
 						Endpoint: message.NewEndpoint("public_1", 4101),
@@ -274,13 +275,18 @@ func TestValidateTopologyInlineService(t *testing.T) {
 			},
 		},
 	}
-	app.Services[0].Handlers[0].Handler.CommandDeps[0].Proxies[0].Service.Handlers = NewHandlerVariants(
-		Handler{
+	handler, ok := app.Services[0].Handlers[0].AsIndependentHandler()
+	if !ok {
+		t.Fatal("handler is not an independent handler")
+	}
+	handler.CommandDeps[0].Proxies[0].Service.Handlers = NewHandlerVariants(
+		IndependentHandler{
 			Type:     ReplierType,
 			Category: "nested",
 			Endpoint: message.NewEndpoint("nested_1", 4201),
 		},
 	)
+	app.Services[0].Handlers[0] = NewHandlerVariant(handler)
 
 	if err := app.ValidateTopology(); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
@@ -301,7 +307,7 @@ func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
 				Type: IndependentType,
 				Name: "api",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -315,7 +321,7 @@ func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
 								Type: ProxyType,
 								Name: "inline_proxy",
 								Handlers: NewHandlerVariants(
-									Handler{
+									IndependentHandler{
 										Type:     ReplierType,
 										Category: "inline",
 										Endpoint: message.NewEndpoint("inline_1", 4201),
@@ -344,7 +350,7 @@ func TestValidateTopologyMissingRef(t *testing.T) {
 				Type: IndependentType,
 				Name: "api",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -372,7 +378,7 @@ func TestValidateTopologyMissingHandlerDepRef(t *testing.T) {
 				Type: IndependentType,
 				Name: "api",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -400,7 +406,7 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 				Type: IndependentType,
 				Name: "api",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -417,7 +423,7 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 				Type: ProxyType,
 				Name: "auth_proxy",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "main",
 						Endpoint: message.NewEndpoint("auth_1", 4301),
@@ -431,7 +437,11 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 		t.Fatalf("ValidateTopology with ref path: %v", err)
 	}
 
-	target := app.Services[0].Handlers[0].AsHandler().CommandDeps[0].Proxies[0]
+	handler, ok := app.Services[0].Handlers[0].AsIndependentHandler()
+	if !ok {
+		t.Fatal("handler is not an independent handler")
+	}
+	target := handler.CommandDeps[0].Proxies[0]
 	if target.Ref != "auth_proxy/main" {
 		t.Fatalf("ref path = %q, want auth_proxy/main", target.Ref)
 	}
@@ -448,7 +458,7 @@ func TestValidateTopologyRefPathMissingHandlerCategory(t *testing.T) {
 				Type: IndependentType,
 				Name: "api",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "api",
 						Endpoint: message.NewEndpoint("api_1", 4101),
@@ -465,7 +475,7 @@ func TestValidateTopologyRefPathMissingHandlerCategory(t *testing.T) {
 				Type: ProxyType,
 				Name: "auth_proxy",
 				Handlers: NewHandlerVariants(
-					Handler{
+					IndependentHandler{
 						Type:     ReplierType,
 						Category: "main",
 						Endpoint: message.NewEndpoint("auth_1", 4301),
@@ -550,7 +560,11 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 		t.Fatalf("GetService auth_proxy: %v", err)
 	}
 
-	dep := app.Services[0].Handlers[0].AsHandler().CommandDeps[0]
+	handler, ok := app.Services[0].Handlers[0].AsIndependentHandler()
+	if !ok {
+		t.Fatal("handler is not an independent handler")
+	}
+	dep := handler.CommandDeps[0]
 	if len(dep.Proxies) != 2 {
 		t.Fatalf("len(Proxies) = %d, want 2", len(dep.Proxies))
 	}
