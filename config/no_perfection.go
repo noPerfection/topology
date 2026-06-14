@@ -102,11 +102,11 @@ func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[st
 		if service.Type == ProxyType {
 			proxyHandler, ok := service.Handlers[hi].AsProxyHandler()
 			if !ok {
-				continue
+				return fmt.Errorf("handler[%d] must be a proxy handler", hi)
 			}
 			for oi := range proxyHandler.Outbounds {
 				target := &proxyHandler.Outbounds[oi]
-				if err := ValidateOutboundServicePointer(*target); err != nil {
+				if err := ValidateOutboundService(*target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
 				}
 			}
@@ -180,10 +180,10 @@ func (a *NoPerfection) validateServiceRefs(service Service) error {
 		if service.Type == ProxyType {
 			proxyHandler, ok := handler.AsProxyHandler()
 			if !ok {
-				continue
+				return fmt.Errorf("handler[%d] must be a proxy handler", hi)
 			}
 			for oi, target := range proxyHandler.Outbounds {
-				if err := a.validateOutboundServicePointer(target); err != nil {
+				if err := ValidateOutboundService(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
 				}
 			}
@@ -202,28 +202,6 @@ func (a *NoPerfection) validateDepServiceRefs(dep DepService) error {
 		if err := a.validateServicePointer(target); err != nil {
 			return fmt.Errorf("extension: %w", err)
 		}
-	}
-	return nil
-}
-
-func (a *NoPerfection) validateOutboundServicePointer(target ServicePointer) error {
-	if err := ValidateOutboundServicePointer(target); err != nil {
-		return err
-	}
-	if target.Ref == "" {
-		return nil
-	}
-
-	serviceName, handlerCategory := target.RefPath()
-	record, err := a.GetService(serviceName)
-	if err != nil {
-		return fmt.Errorf("service %q not found: %w", serviceName, err)
-	}
-	if handlerCategory == "" {
-		return nil
-	}
-	if _, err := record.HandlerByCategory(handlerCategory); err != nil {
-		return fmt.Errorf("service %q handler category %q: %w", serviceName, handlerCategory, err)
 	}
 	return nil
 }

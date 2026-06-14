@@ -119,32 +119,6 @@ func parseRefPath(ref string) (service string, handlerCategory string, err error
 	return service, handlerCategory, nil
 }
 
-// ValidateOutboundServicePointer checks proxy outbound targets.
-// Inline services are validated with ValidateOutboundService.
-func ValidateOutboundServicePointer(t ServicePointer) error {
-	hasRef := t.Ref != ""
-	hasRecord := !t.Service.IsZero()
-	count := 0
-	for _, ok := range []bool{hasRef, hasRecord} {
-		if ok {
-			count++
-		}
-	}
-	if count != 1 {
-		return fmt.Errorf("dep target must set exactly one of ref or inline service")
-	}
-	if hasRef {
-		if _, _, err := parseRefPath(t.Ref); err != nil {
-			return err
-		}
-		return nil
-	}
-	if err := ValidateOutboundService(t.Service); err != nil {
-		return fmt.Errorf("service: %w", err)
-	}
-	return nil
-}
-
 // ValidateServicePointer checks that the target is exactly one of ref or inline service.
 func ValidateServicePointer(t ServicePointer) error {
 	hasRef := t.Ref != ""

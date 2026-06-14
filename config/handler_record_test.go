@@ -12,14 +12,24 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 		Type: ProxyType,
 		Name: "auth_proxy",
 		Handlers: []Handler{
-			NewProxyHandlerVariant(ProxyHandler{
+			ProxyHandler{
 				IndependentHandler: IndependentHandler{
 					Type:     ReplierType,
 					Category: "auth",
 					Endpoint: message.NewEndpoint("auth_1", 4301),
 				},
-				Outbounds: []ServicePointer{RefTarget("user_service")},
-			}),
+				Outbounds: []Service{
+					{
+						Type: IndependentType,
+						Name: "user_service",
+						Handlers: []Handler{IndependentHandler{
+							Type:     ReplierType,
+							Category: "main",
+							Endpoint: message.NewEndpoint("user_1", 4302),
+						}},
+					},
+				},
+			},
 		},
 	}
 
@@ -45,7 +55,7 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 	if len(proxyHandler.Outbounds) != 1 {
 		t.Fatalf("Proxy handler outbounds = %#v, want one outbound", proxyHandler.Outbounds)
 	}
-	if proxyHandler.Outbounds[0].Ref != "user_service" {
-		t.Fatalf("Outbound ref = %q, want user_service", proxyHandler.Outbounds[0].Ref)
+	if proxyHandler.Outbounds[0].Name != "user_service" {
+		t.Fatalf("Outbound service = %q, want user_service", proxyHandler.Outbounds[0].Name)
 	}
 }

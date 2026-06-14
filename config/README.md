@@ -79,11 +79,13 @@ In JSON, each `handlers[]` entry is either an `IndependentHandler` or a `ProxyHa
 
 `ProxyHandler` embeds the same base shape and adds outbound routing:
 
-- `outbounds` — where proxied traffic may be sent.
+- `outbounds` — inline `Service` definitions where proxied traffic may be sent.
 - `routes` — optional whitelist of command routes this handler accepts.
 - `forward` — optional map from a route to a specific outbound.
 
-A `Proxy` service is allowed to contain plain independent handlers. This is useful for manager endpoints or other service-local handlers that should not participate in proxy routing.
+Notice: `outbounds` are inline services, not refs. Referenced services may have their own proxies, so following a ref from an outbound would require traversing another topology path to find the final endpoint.
+
+A `Proxy` service must use `ProxyHandler` for every handler in `handlers`.
 
 ## Dependencies
 

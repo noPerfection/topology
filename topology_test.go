@@ -71,13 +71,15 @@ func (test *TestDepManagerSuite) SetupTest() {
 					Type:         config.ProxyType,
 					Name:         "test-manager",
 					StartCommand: "test",
-					Handlers: config.NewHandlerVariants(
-						config.IndependentHandler{
-							Type:     config.ReplierType,
-							Category: ServiceManagerCategory,
-							Endpoint: message.NewEndpoint("test-manager", 6000),
+					Handlers: []config.Handler{
+						config.ProxyHandler{
+							IndependentHandler: config.IndependentHandler{
+								Type:     config.ReplierType,
+								Category: ServiceManagerCategory,
+								Endpoint: message.NewEndpoint("test-manager", 6000),
+							},
 						},
-					),
+					},
 				},
 			},
 		},
@@ -145,13 +147,15 @@ func (test *TestDepManagerSuite) Test_12_AddRemoveService() {
 		Type:         config.ProxyType,
 		Name:         "extra-service",
 		StartCommand: "echo extra",
-		Handlers: config.NewHandlerVariants(
-			config.IndependentHandler{
-				Type:     config.ReplierType,
-				Category: ServiceManagerCategory,
-				Endpoint: message.NewEndpoint("extra-service-manager", 6001),
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("extra-service-manager", 6001),
+				},
 			},
-		),
+		},
 	}
 	err = test.topology.AddService(service)
 	s().NoError(err)
@@ -194,44 +198,50 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "duplicate-socket",
-		Handlers: config.NewHandlerVariants(
-			config.IndependentHandler{
-				Type:     config.ReplierType,
-				Category: ServiceManagerCategory,
-				Endpoint: message.NewEndpoint("test-manager", 6000),
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("test-manager", 6000),
+				},
 			},
-		),
+		},
 	})
 	s().NoError(err)
 
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "nested-parent",
-		Handlers: config.NewHandlerVariants(
-			config.IndependentHandler{
-				Type:     config.ReplierType,
-				Category: ServiceManagerCategory,
-				Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
-				CommandDeps: []config.DepService{
-					{
-						Name: "proxy",
-						Proxies: []config.ServicePointer{
-							config.ServiceTarget(config.Service{
-								Type: config.ProxyType,
-								Name: "nested-child",
-								Handlers: config.NewHandlerVariants(
-									config.IndependentHandler{
-										Type:     config.ReplierType,
-										Category: ServiceManagerCategory,
-										Endpoint: message.NewEndpoint("nested-child-manager", 6101),
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
+					CommandDeps: []config.DepService{
+						{
+							Name: "proxy",
+							Proxies: []config.ServicePointer{
+								config.ServiceTarget(config.Service{
+									Type: config.ProxyType,
+									Name: "nested-child",
+									Handlers: []config.Handler{
+										config.ProxyHandler{
+											IndependentHandler: config.IndependentHandler{
+												Type:     config.ReplierType,
+												Category: ServiceManagerCategory,
+												Endpoint: message.NewEndpoint("nested-child-manager", 6101),
+											},
+										},
 									},
-								),
-							}),
+								}),
+							},
 						},
 					},
 				},
 			},
-		),
+		},
 	})
 	s().NoError(err)
 
@@ -250,24 +260,28 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 					config.ServiceTarget(config.Service{
 						Type: config.ProxyType,
 						Name: "service-level-child",
-						Handlers: config.NewHandlerVariants(
-							config.IndependentHandler{
-								Type:     config.ReplierType,
-								Category: ServiceManagerCategory,
-								Endpoint: message.NewEndpoint("service-level-child-manager", 6201),
+						Handlers: []config.Handler{
+							config.ProxyHandler{
+								IndependentHandler: config.IndependentHandler{
+									Type:     config.ReplierType,
+									Category: ServiceManagerCategory,
+									Endpoint: message.NewEndpoint("service-level-child-manager", 6201),
+								},
 							},
-						),
+						},
 					}),
 				},
 			},
 		},
-		Handlers: config.NewHandlerVariants(
-			config.IndependentHandler{
-				Type:     config.ReplierType,
-				Category: ServiceManagerCategory,
-				Endpoint: message.NewEndpoint("service-level-parent-manager", 6200),
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("service-level-parent-manager", 6200),
+				},
 			},
-		),
+		},
 	})
 	s().NoError(err)
 
@@ -280,26 +294,28 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		Type: config.ProxyType,
 		Name: "proxy-parent",
 		Handlers: []config.Handler{
-			config.NewProxyHandlerVariant(config.ProxyHandler{
+			config.ProxyHandler{
 				IndependentHandler: config.IndependentHandler{
 					Type:     config.ReplierType,
 					Category: ServiceManagerCategory,
 					Endpoint: message.NewEndpoint("proxy-parent-manager", 6300),
 				},
-				Outbounds: []config.ServicePointer{
-					config.ServiceTarget(config.Service{
+				Outbounds: []config.Service{
+					{
 						Type: config.ProxyType,
 						Name: "proxy-outbound-child",
-						Handlers: config.NewHandlerVariants(
-							config.IndependentHandler{
-								Type:     config.ReplierType,
-								Category: ServiceManagerCategory,
-								Endpoint: message.NewEndpoint("proxy-outbound-child-manager", 6301),
+						Handlers: []config.Handler{
+							config.ProxyHandler{
+								IndependentHandler: config.IndependentHandler{
+									Type:     config.ReplierType,
+									Category: ServiceManagerCategory,
+									Endpoint: message.NewEndpoint("proxy-outbound-child-manager", 6301),
+								},
 							},
-						),
-					}),
+						},
+					},
 				},
-			}),
+			},
 		},
 	})
 	s().NoError(err)
@@ -427,7 +443,7 @@ func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
 					Type:         config.ProxyType,
 					Name:         "ipc-proxy",
 					StartCommand: "true",
-					Handlers: config.NewHandlerVariants(
+					Handlers: []config.Handler{
 						config.IndependentHandler{
 							Type:     config.SyncReplierType,
 							Category: "main",
@@ -438,7 +454,7 @@ func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
 							Category: ServiceManagerCategory,
 							Endpoint: message.NewEndpoint("tmp/unreachable_proxy_manager", 0),
 						},
-					),
+					},
 				},
 			},
 		},

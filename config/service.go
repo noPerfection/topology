@@ -11,10 +11,15 @@ import (
 )
 
 const (
-	ServiceManagerCategory  = "manager"
+	// All services must have a manager handler. Identified by this category.
+	ServiceManagerCategory = "manager"
+	// For proxy or extension services, use "inproc-handlers" to list handler categories that should be treated as inproc.
+	// Its in the service parameters: parameters.inproc-handlers: [list of handler categories]
 	InprocHandlersParameter = "inproc-handlers"
 )
 
+// Command Deps or Service deps per handler of service.
+// Use it to pipe other services
 type DepService struct {
 	// For command deps its command, for handler deps its handler catego
 	Name       string           `json:"name"`
@@ -32,7 +37,7 @@ type IndependentHandler struct {
 type ProxyHandler struct {
 	IndependentHandler
 	Routes    []string          `json:"routes,omitempty"` // whitelist routes
-	Outbounds []ServicePointer  `json:"outbounds"`
+	Outbounds []Service         `json:"outbounds"`
 	Forward   map[string]string `json:"forward,omitempty"` // command route => outbound ref
 }
 
@@ -60,22 +65,6 @@ func (h ProxyHandler) AsIndependentHandler() (IndependentHandler, bool) {
 
 func (h ProxyHandler) AsProxyHandler() (ProxyHandler, bool) {
 	return h, true
-}
-
-func NewHandlerVariant(handler IndependentHandler) Handler {
-	return handler
-}
-
-func NewHandlerVariants(handlers ...IndependentHandler) []Handler {
-	variants := make([]Handler, len(handlers))
-	for i, handler := range handlers {
-		variants[i] = NewHandlerVariant(handler)
-	}
-	return variants
-}
-
-func NewProxyHandlerVariant(handler ProxyHandler) Handler {
-	return handler
 }
 
 func unmarshalHandler(data []byte) (Handler, error) {
@@ -172,6 +161,8 @@ func (s Service) IsZero() bool {
 	return s.Name == ""
 }
 
+// If service is not Inproc, and any handler is IPC except the ServiceManagerCategory,
+// then the service is IPC.
 func (s Service) IsIpc() bool {
 	if s.IsInproc() {
 		return false
@@ -194,6 +185,8 @@ func (s Service) IsIpc() bool {
 	return false
 }
 
+// If any handler except ServiceManagerCategory is inproc, then the service is inproc.
+// For proxy or extension type, the service is inproc if the handler category is listed in parameters.inproc-handlers.
 func (s Service) IsInproc() bool {
 	for _, variant := range s.Handlers {
 		if variant == nil {
@@ -350,7 +343,7 @@ func ValidateService(service Service) error {
 				return fmt.Errorf("handler[%d] must be a proxy handler", i)
 			}
 			for j, target := range proxyHandler.Outbounds {
-				if err := ValidateOutboundServicePointer(target); err != nil {
+				if err := ValidateOutboundService(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
 				}
 			}
@@ -391,20 +384,10 @@ func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
 	}
 
 	for _, outbound := range proxyHandler.Outbounds {
-		if outbound.Ref != "" {
-			outboundService, outboundCategory := outbound.RefPath()
-			if outboundCategory == "" {
-				outboundCategory = "main"
-			}
-			if outboundService == serviceName && outboundCategory == handlerCategory {
-				return true
-			}
+		if outbound.Name != serviceName {
 			continue
 		}
-		if outbound.Service.Name != serviceName {
-			continue
-		}
-		if _, err := outbound.Service.HandlerByCategory(handlerCategory); err == nil {
+		if _, err := outbound.HandlerByCategory(handlerCategory); err == nil {
 			return true
 		}
 	}

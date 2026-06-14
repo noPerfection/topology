@@ -101,13 +101,15 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 	err = handler.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "pre-start-service",
-		Handlers: config.NewHandlerVariants(
-			config.IndependentHandler{
-				Type:     config.ReplierType,
-				Category: ServiceManagerCategory,
-				Endpoint: message.NewEndpoint("pre-start-manager", 6100),
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("pre-start-manager", 6100),
+				},
 			},
-		),
+		},
 	})
 	if err != nil {
 		t.Fatalf("handler.AddService before start: %v", err)
@@ -219,11 +221,11 @@ func testHandlerService(name string) config.Service {
 	return config.Service{
 		Type: config.IndependentType,
 		Name: name,
-		Handlers: config.NewHandlerVariants(config.IndependentHandler{
+		Handlers: []config.Handler{config.IndependentHandler{
 			Type:     config.ReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("localhost", 9000),
-		}),
+		}},
 	}
 }
 

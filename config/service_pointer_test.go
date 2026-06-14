@@ -143,7 +143,15 @@ func TestServicePointerJSONInlineProxy(t *testing.T) {
 			"category": "audit",
 			"endpoint": {"id": "audit_1", "port": 4301},
 			"routes": ["audit"],
-			"outbounds": ["audit_sink"]
+			"outbounds": [{
+				"type": "Independent",
+				"name": "audit_sink",
+				"handlers": [{
+					"type": "Replier",
+					"category": "main",
+					"endpoint": {"id": "audit_sink_1", "port": 4302}
+				}]
+			}]
 		}]
 	}`)
 
@@ -198,11 +206,13 @@ func TestServicePointerInlineIpcRequiresCompleteService(t *testing.T) {
 	inline := ServiceTarget(Service{
 		Type: ProxyType,
 		Name: "inline_proxy",
-		Handlers: NewHandlerVariants(IndependentHandler{
-			Type:     SyncReplierType,
-			Category: "main",
-			Endpoint: message.NewEndpoint("tmp/inline_proxy", 0),
-		}),
+		Handlers: []Handler{ProxyHandler{
+			IndependentHandler: IndependentHandler{
+				Type:     SyncReplierType,
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/inline_proxy", 0),
+			},
+		}},
 	})
 	if err := ValidateServicePointer(inline); err == nil {
 		t.Fatal("ValidateServicePointer inline IPC without start-command returned nil error")
@@ -214,17 +224,19 @@ func TestServicePointerInlineIpcRequiresCompleteService(t *testing.T) {
 	}
 }
 
-func TestOutboundServicePointerAllowsMinimalInlineService(t *testing.T) {
-	inline := ServiceTarget(Service{
+func TestOutboundServiceAllowsMinimalInlineService(t *testing.T) {
+	inline := Service{
 		Type: ProxyType,
 		Name: "default-name-proxy",
-		Handlers: NewHandlerVariants(IndependentHandler{
-			Type:     SyncReplierType,
-			Category: "main",
-			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
-		}),
-	})
-	if err := ValidateOutboundServicePointer(inline); err != nil {
-		t.Fatalf("ValidateOutboundServicePointer minimal inline IPC service: %v", err)
+		Handlers: []Handler{ProxyHandler{
+			IndependentHandler: IndependentHandler{
+				Type:     SyncReplierType,
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
+			},
+		}},
+	}
+	if err := ValidateOutboundService(inline); err != nil {
+		t.Fatalf("ValidateOutboundService minimal inline IPC service: %v", err)
 	}
 }

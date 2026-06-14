@@ -40,7 +40,7 @@ func TestValidateService(t *testing.T) {
 	generatedService := &Service{
 		Name:     "generated",
 		Type:     "the_invalid_type",
-		Handlers: NewHandlerVariants(handlerOfType),
+		Handlers: []Handler{handlerOfType},
 	}
 
 	if err := ValidateService(*generatedService); err == nil {
@@ -52,12 +52,12 @@ func TestValidateService(t *testing.T) {
 		t.Fatalf("ValidateService valid service: %v", err)
 	}
 
-	generatedService.Handlers = NewHandlerVariants(IndependentHandler{Type: ReplierType})
+	generatedService.Handlers = []Handler{IndependentHandler{Type: ReplierType}}
 	if err := ValidateService(*generatedService); err == nil {
 		t.Fatal("ValidateService with empty handler category returned nil error")
 	}
 
-	generatedService.Handlers = NewHandlerVariants(invalidHandler)
+	generatedService.Handlers = []Handler{invalidHandler}
 	if err := ValidateService(*generatedService); err == nil {
 		t.Fatal("ValidateService with invalid handler type returned nil error")
 	}
@@ -67,13 +67,15 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	service := Service{
 		Type: ProxyType,
 		Name: "inproc-service",
-		Handlers: NewHandlerVariants(
-			IndependentHandler{
-				Type:     ReplierType,
-				Category: "inproc",
-				Endpoint: message.NewEndpoint("inproc-handler", 0),
+		Handlers: []Handler{
+			ProxyHandler{
+				IndependentHandler: IndependentHandler{
+					Type:     ReplierType,
+					Category: "inproc",
+					Endpoint: message.NewEndpoint("inproc-handler", 0),
+				},
 			},
-		),
+		},
 	}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with inproc endpoint and no module-url returned nil error")
@@ -87,13 +89,15 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	service = Service{
 		Type: ProxyType,
 		Name: "tmp-service",
-		Handlers: NewHandlerVariants(
-			IndependentHandler{
-				Type:     ReplierType,
-				Category: "tmp",
-				Endpoint: message.NewEndpoint("tmp/service.sock", 0),
+		Handlers: []Handler{
+			ProxyHandler{
+				IndependentHandler: IndependentHandler{
+					Type:     ReplierType,
+					Category: "tmp",
+					Endpoint: message.NewEndpoint("tmp/service.sock", 0),
+				},
 			},
-		),
+		},
 	}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with ipc endpoint and no start-command returned nil error")
@@ -107,13 +111,15 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 	service = Service{
 		Type: ProxyType,
 		Name: "tcp-service",
-		Handlers: NewHandlerVariants(
-			IndependentHandler{
-				Type:     ReplierType,
-				Category: "tcp",
-				Endpoint: message.NewEndpoint("tcp-service", 4101),
+		Handlers: []Handler{
+			ProxyHandler{
+				IndependentHandler: IndependentHandler{
+					Type:     ReplierType,
+					Category: "tcp",
+					Endpoint: message.NewEndpoint("tcp-service", 4101),
+				},
 			},
-		),
+		},
 	}
 	if err := ValidateService(service); err != nil {
 		t.Fatalf("ValidateService with tcp endpoint and no bootstrap fields: %v", err)
@@ -124,7 +130,7 @@ func TestServiceIsIpc(t *testing.T) {
 	service := Service{
 		Name: "proxy",
 		Type: ProxyType,
-		Handlers: NewHandlerVariants(
+		Handlers: []Handler{
 			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("tmp/proxy", 0),
@@ -133,7 +139,7 @@ func TestServiceIsIpc(t *testing.T) {
 				Category: "manager",
 				Endpoint: message.NewEndpoint("tmp/proxy_manager", 0),
 			},
-		),
+		},
 	}
 	if !service.IsIpc() {
 		t.Fatal("Service.IsIpc with IPC handler returned false")
@@ -143,7 +149,7 @@ func TestServiceIsIpc(t *testing.T) {
 func TestServiceIsIpcSkipsManager(t *testing.T) {
 	service := Service{
 		Name: "proxy",
-		Handlers: NewHandlerVariants(
+		Handlers: []Handler{
 			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("localhost", 8000),
@@ -152,7 +158,7 @@ func TestServiceIsIpcSkipsManager(t *testing.T) {
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("tmp/manager", 0),
 			},
-		),
+		},
 	}
 	if service.IsIpc() {
 		t.Fatal("Service.IsIpc returned true when only manager handler is IPC")
@@ -162,7 +168,7 @@ func TestServiceIsIpcSkipsManager(t *testing.T) {
 func TestServiceIsIpcMainIpcManagerInproc(t *testing.T) {
 	service := Service{
 		Name: "proxy",
-		Handlers: NewHandlerVariants(
+		Handlers: []Handler{
 			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("tmp/proxy", 0),
@@ -171,7 +177,7 @@ func TestServiceIsIpcMainIpcManagerInproc(t *testing.T) {
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("inproc/proxy_manager", 0),
 			},
-		),
+		},
 	}
 	if service.IsInproc() {
 		t.Fatal("Service.IsInproc returned true when only manager handler is inproc")
@@ -183,10 +189,10 @@ func TestServiceIsIpcMainIpcManagerInproc(t *testing.T) {
 
 func TestServiceIsIpcRemoteHandler(t *testing.T) {
 	service := Service{
-		Handlers: NewHandlerVariants(IndependentHandler{
+		Handlers: []Handler{IndependentHandler{
 			Category: "main",
 			Endpoint: message.NewEndpoint("localhost", 8000),
-		}),
+		}},
 	}
 	if service.IsIpc() {
 		t.Fatal("Service.IsIpc returned true for remote handler")
@@ -196,12 +202,12 @@ func TestServiceIsIpcRemoteHandler(t *testing.T) {
 func TestServiceIsInproc(t *testing.T) {
 	service := Service{
 		Name: "extension",
-		Handlers: NewHandlerVariants(
+		Handlers: []Handler{
 			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("inproc/extension", 0),
 			},
-		),
+		},
 	}
 	if !service.IsInproc() {
 		t.Fatal("Service.IsInproc with inproc handler returned false")
@@ -211,7 +217,7 @@ func TestServiceIsInproc(t *testing.T) {
 func TestServiceIsInprocSkipsManager(t *testing.T) {
 	service := Service{
 		Name: "extension",
-		Handlers: NewHandlerVariants(
+		Handlers: []Handler{
 			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("localhost", 8000),
@@ -220,7 +226,7 @@ func TestServiceIsInprocSkipsManager(t *testing.T) {
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("inproc/extension_manager", 0),
 			},
-		),
+		},
 	}
 	if service.IsInproc() {
 		t.Fatal("Service.IsInproc returned true when only manager handler is inproc")
@@ -230,7 +236,7 @@ func TestServiceIsInprocSkipsManager(t *testing.T) {
 func TestServiceIsIpcFalseWhenMainInproc(t *testing.T) {
 	service := Service{
 		Name: "extension",
-		Handlers: NewHandlerVariants(
+		Handlers: []Handler{
 			IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("inproc/extension", 0),
@@ -239,7 +245,7 @@ func TestServiceIsIpcFalseWhenMainInproc(t *testing.T) {
 				Category: ServiceManagerCategory,
 				Endpoint: message.NewEndpoint("tmp/manager", 0),
 			},
-		),
+		},
 	}
 	if !service.IsInproc() {
 		t.Fatal("Service.IsInproc returned false for main inproc handler")
@@ -251,10 +257,10 @@ func TestServiceIsIpcFalseWhenMainInproc(t *testing.T) {
 
 func TestServiceIsInprocRemoteHandler(t *testing.T) {
 	service := Service{
-		Handlers: NewHandlerVariants(IndependentHandler{
+		Handlers: []Handler{IndependentHandler{
 			Category: "main",
 			Endpoint: message.NewEndpoint("localhost", 8000),
-		}),
+		}},
 	}
 	if service.IsInproc() {
 		t.Fatal("Service.IsInproc returned true for remote handler")
@@ -273,10 +279,10 @@ func TestServiceIsInprocHandler(t *testing.T) {
 		service := Service{
 			Name: "extension",
 			Type: ExtensionType,
-			Handlers: NewHandlerVariants(IndependentHandler{
+			Handlers: []Handler{IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("inproc/extension", 0),
-			}),
+			}},
 		}
 		inproc, err := service.IsInprocHandler("main")
 		if err != nil {
@@ -289,13 +295,13 @@ func TestServiceIsInprocHandler(t *testing.T) {
 
 	t.Run("proxy parameter override", func(t *testing.T) {
 		service := Service{
-			Name: "proxy",
-			Type: ProxyType,
+			Name:       "proxy",
+			Type:       ProxyType,
 			Parameters: datatype.New().Set(InprocHandlersParameter, []string{"main"}),
-			Handlers: NewHandlerVariants(IndependentHandler{
+			Handlers: []Handler{IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("tmp/proxy", 0),
-			}),
+			}},
 		}
 		inproc, err := service.IsInprocHandler("main")
 		if err != nil {
@@ -308,13 +314,13 @@ func TestServiceIsInprocHandler(t *testing.T) {
 
 	t.Run("independent ignores parameter", func(t *testing.T) {
 		service := Service{
-			Name: "service",
-			Type: IndependentType,
+			Name:       "service",
+			Type:       IndependentType,
 			Parameters: datatype.New().Set(InprocHandlersParameter, []string{"main"}),
-			Handlers: NewHandlerVariants(IndependentHandler{
+			Handlers: []Handler{IndependentHandler{
 				Category: "main",
 				Endpoint: message.NewEndpoint("tmp/service", 0),
-			}),
+			}},
 		}
 		inproc, err := service.IsInprocHandler("main")
 		if err != nil {
@@ -350,11 +356,11 @@ func TestValidateOutboundServiceAllowsMinimalProxyOutbound(t *testing.T) {
 	outbound := Service{
 		Type: ProxyType,
 		Name: "default-name-proxy",
-		Handlers: NewHandlerVariants(IndependentHandler{
+		Handlers: []Handler{IndependentHandler{
 			Type:     SyncReplierType,
 			Category: "main",
 			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
-		}),
+		}},
 	}
 	if err := ValidateOutboundService(outbound); err != nil {
 		t.Fatalf("ValidateOutboundService minimal proxy outbound: %v", err)
@@ -369,18 +375,28 @@ func TestValidateProxyForwards(t *testing.T) {
 			Endpoint: message.NewEndpoint("proxy", 4101),
 		},
 		Routes: []string{"hello", "age-verification"},
-		Outbounds: []ServicePointer{
-			RefTarget("default-name-proxy", "main"),
-			ServiceTarget(Service{
+		Outbounds: []Service{
+			{
+				Type: ProxyType,
+				Name: "default-name-proxy",
+				Handlers: []Handler{ProxyHandler{
+					IndependentHandler: IndependentHandler{
+						Type:     SyncReplierType,
+						Category: "main",
+						Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
+					},
+				}},
+			},
+			{
 				Type:      IndependentType,
 				Name:      "hello-world",
 				ModuleUrl: "github.com/noPerfection/hello-world",
-				Handlers: NewHandlerVariants(IndependentHandler{
+				Handlers: []Handler{IndependentHandler{
 					Type:     ReplierType,
 					Category: "main",
 					Endpoint: message.NewEndpoint("hello-world", 4102),
-				}),
-			}),
+				}},
+			},
 		},
 		Forward: map[string]string{
 			"hello":            "default-name-proxy/main",
@@ -391,20 +407,20 @@ func TestValidateProxyForwards(t *testing.T) {
 		Type:      ProxyType,
 		Name:      "proxy",
 		ModuleUrl: "github.com/noPerfection/proxy",
-		Handlers:  []Handler{NewProxyHandlerVariant(proxyHandler)},
+		Handlers:  []Handler{proxyHandler},
 	}
 	if err := ValidateService(service); err != nil {
 		t.Fatalf("ValidateService with forward mappings: %v", err)
 	}
 
 	proxyHandler.Forward = map[string]string{"missing-route": "hello-world"}
-	service.Handlers = []Handler{NewProxyHandlerVariant(proxyHandler)}
+	service.Handlers = []Handler{proxyHandler}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward route missing from routes returned nil error")
 	}
 
 	proxyHandler.Forward = map[string]string{"hello": "missing-service"}
-	service.Handlers = []Handler{NewProxyHandlerVariant(proxyHandler)}
+	service.Handlers = []Handler{proxyHandler}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward outbound missing from outbounds returned nil error")
 	}
@@ -416,7 +432,16 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 		"category": "main",
 		"endpoint": {"id": "proxy", "port": 4101},
 		"forward": {"hello": "hello-world"},
-		"outbounds": ["hello-world"]
+		"outbounds": [{
+			"type": "Independent",
+			"name": "hello-world",
+			"module-url": "github.com/noPerfection/hello-world",
+			"handlers": [{
+				"type": "Replier",
+				"category": "main",
+				"endpoint": {"id": "hello-world", "port": 4102}
+			}]
+		}]
 	}`)
 
 	handler, err := unmarshalHandler(data)
@@ -434,7 +459,7 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 
 func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
-	serviceConfig.Handlers = NewHandlerVariants(handlerOfType)
+	serviceConfig.Handlers = []Handler{handlerOfType}
 	serviceConfig.Parameters = datatype.New().Set("region", "eu-west")
 
 	if err := ValidateService(*serviceConfig); err != nil {
@@ -497,7 +522,7 @@ func TestServiceParametersJSONRoundTrip(t *testing.T) {
 
 func TestServiceValidateHandlerDeps(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
-	serviceConfig.Handlers = NewHandlerVariants(handlerOfType)
+	serviceConfig.Handlers = []Handler{handlerOfType}
 	serviceConfig.HandlerDeps = []DepService{{Name: "orphan"}}
 
 	if err := ValidateService(*serviceConfig); err == nil {
@@ -519,7 +544,7 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 
 func TestServiceHandlerByCategory(t *testing.T) {
 	serviceConfig, handlerOfType, handler2OfType, handlerOfType2 := testService()
-	serviceConfig.Handlers = NewHandlerVariants(handlerOfType, handler2OfType, handlerOfType2)
+	serviceConfig.Handlers = []Handler{handlerOfType, handler2OfType, handlerOfType2}
 
 	if _, err := serviceConfig.HandlerByCategory(""); err == nil {
 		t.Fatal("HandlerByCategory with empty category returned nil error")
@@ -546,7 +571,7 @@ func TestServiceHandlerByCategory(t *testing.T) {
 
 func TestServiceGetHandler(t *testing.T) {
 	serviceConfig, handlerOfType, _, handlerOfType2 := testService()
-	serviceConfig.Handlers = NewHandlerVariants(
+	serviceConfig.Handlers = []Handler{
 		handlerOfType,
 		IndependentHandler{
 			Type:     PairType,
@@ -554,7 +579,7 @@ func TestServiceGetHandler(t *testing.T) {
 			Endpoint: message.NewEndpoint(handlerOfType.Endpoint.Id, 9999),
 		},
 		handlerOfType2,
-	)
+	}
 
 	if _, err := serviceConfig.GetHandler(message.Endpoint{}); err == nil {
 		t.Fatal("GetHandler with empty id returned nil error")
@@ -584,9 +609,9 @@ func TestServiceSetHandler(t *testing.T) {
 	}
 
 	var nilService *Service
-	nilService.SetHandler(NewHandlerVariant(handlerOfType))
+	nilService.SetHandler(handlerOfType)
 
-	serviceConfig.SetHandler(NewHandlerVariant(handlerOfType))
+	serviceConfig.SetHandler(handlerOfType)
 	if len(serviceConfig.Handlers) != 1 {
 		t.Fatalf("len(Handlers) = %d, want 1", len(serviceConfig.Handlers))
 	}
@@ -595,7 +620,7 @@ func TestServiceSetHandler(t *testing.T) {
 		t.Fatalf("handler type = %q, want %q", firstHandler.Type, ReplierType)
 	}
 
-	serviceConfig.SetHandler(NewHandlerVariant(handlerOfType2))
+	serviceConfig.SetHandler(handlerOfType2)
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) = %d, want 2", len(serviceConfig.Handlers))
 	}
@@ -613,7 +638,7 @@ func TestServiceSetHandler(t *testing.T) {
 		Category: "pair",
 		Endpoint: handlerOfType.Endpoint,
 	}
-	serviceConfig.SetHandler(NewHandlerVariant(updatedHandler))
+	serviceConfig.SetHandler(updatedHandler)
 	if len(serviceConfig.Handlers) != 2 {
 		t.Fatalf("len(Handlers) after update = %d, want 2", len(serviceConfig.Handlers))
 	}
@@ -629,7 +654,7 @@ func TestServiceSetHandler(t *testing.T) {
 
 func TestServiceRemoveHandler(t *testing.T) {
 	serviceConfig, handlerOfType, handler2OfType, handlerOfType2 := testService()
-	serviceConfig.Handlers = NewHandlerVariants(handlerOfType, handler2OfType, handlerOfType2)
+	serviceConfig.Handlers = []Handler{handlerOfType, handler2OfType, handlerOfType2}
 
 	if err := serviceConfig.RemoveHandler(message.Endpoint{}); err == nil {
 		t.Fatal("RemoveHandler with empty endpoint returned nil error")

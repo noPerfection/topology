@@ -46,7 +46,20 @@
                         "catalog"
                       ],
                       "outbounds": [
-                        "user_service"
+                        {
+                          "type": "Independent",
+                          "name": "user_service",
+                          "handlers": [
+                            {
+                              "type": "Replier",
+                              "category": "user-service",
+                              "endpoint": {
+                                "id": "user_api_1",
+                                "port": 4401
+                              }
+                            }
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -84,7 +97,21 @@
                         "catalog"
                       ],
                       "outbounds": [
-                        "audit_proxy/audit-proxy"
+                        {
+                          "type": "Proxy",
+                          "name": "audit_proxy",
+                          "handlers": [
+                            {
+                              "type": "Replier",
+                              "category": "audit-proxy",
+                              "endpoint": {
+                                "id": "audit_1",
+                                "port": 4301
+                              },
+                              "outbounds": []
+                            }
+                          ]
+                        }
                       ]
                     }
                   ]
@@ -136,6 +163,7 @@
             "id": "localhost",
             "port": 4201
           },
+          "outbounds": [],
           "command-deps": [
             {
               "name": "authorize",
@@ -158,6 +186,7 @@
             "id": "audit_1",
             "port": 4301
           },
+          "outbounds": [],
           "command-deps": [
             {
               "name": "record-audit",
