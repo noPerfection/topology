@@ -27,7 +27,8 @@
                       "endpoint": {
                         "id": "inline_service_1",
                         "port": 4991
-                      }
+                      },
+                      "inbounds": []
                     }
                   ]
                 },
@@ -78,7 +79,8 @@
                       "endpoint": {
                         "id": "inline_extension_1",
                         "port": 4993
-                      }
+                      },
+                      "inbounds": []
                     }
                   ]
                 },

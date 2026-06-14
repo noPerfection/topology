@@ -41,10 +41,16 @@ type ProxyHandler struct {
 	Forward   map[string]string `json:"forward,omitempty"` // command route => outbound ref
 }
 
+type ExtensionHandler struct {
+	IndependentHandler
+	Inbounds []Service `json:"inbounds"`
+}
+
 type Handler interface {
 	isHandler()
 	AsIndependentHandler() (IndependentHandler, bool)
 	AsProxyHandler() (ProxyHandler, bool)
+	AsExtensionHandler() (ExtensionHandler, bool)
 }
 
 func (h IndependentHandler) isHandler() {}
@@ -57,6 +63,10 @@ func (h IndependentHandler) AsProxyHandler() (ProxyHandler, bool) {
 	return ProxyHandler{}, false
 }
 
+func (h IndependentHandler) AsExtensionHandler() (ExtensionHandler, bool) {
+	return ExtensionHandler{}, false
+}
+
 func (h ProxyHandler) isHandler() {}
 
 func (h ProxyHandler) AsIndependentHandler() (IndependentHandler, bool) {
@@ -64,6 +74,24 @@ func (h ProxyHandler) AsIndependentHandler() (IndependentHandler, bool) {
 }
 
 func (h ProxyHandler) AsProxyHandler() (ProxyHandler, bool) {
+	return h, true
+}
+
+func (h ProxyHandler) AsExtensionHandler() (ExtensionHandler, bool) {
+	return ExtensionHandler{}, false
+}
+
+func (h ExtensionHandler) isHandler() {}
+
+func (h ExtensionHandler) AsIndependentHandler() (IndependentHandler, bool) {
+	return h.IndependentHandler, true
+}
+
+func (h ExtensionHandler) AsProxyHandler() (ProxyHandler, bool) {
+	return ProxyHandler{}, false
+}
+
+func (h ExtensionHandler) AsExtensionHandler() (ExtensionHandler, bool) {
 	return h, true
 }
 
@@ -75,6 +103,13 @@ func unmarshalHandler(data []byte) (Handler, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(trimmed, &raw); err != nil {
 		return nil, fmt.Errorf("handler object: %w", err)
+	}
+	if _, ok := raw["inbounds"]; ok {
+		var handler ExtensionHandler
+		if err := json.Unmarshal(trimmed, &handler); err != nil {
+			return nil, fmt.Errorf("extension handler: %w", err)
+		}
+		return handler, nil
 	}
 	if _, ok := raw["outbounds"]; ok {
 		var handler ProxyHandler
@@ -290,6 +325,12 @@ func ValidateOutboundService(service Service) error {
 	return nil
 }
 
+// ValidateInboundService validates a minimal inline service used as an extension inbound.
+// It follows the same rules as proxy outbound services.
+func ValidateInboundService(service Service) error {
+	return ValidateOutboundService(service)
+}
+
 // ValidateService validates the service metadata and endpoint bootstrap settings.
 func ValidateService(service Service) error {
 	if len(service.Name) == 0 {
@@ -349,6 +390,17 @@ func ValidateService(service Service) error {
 			}
 			if err := ValidateProxyForwards(proxyHandler); err != nil {
 				return fmt.Errorf("handler[%d] forward: %w", i, err)
+			}
+		}
+		if service.Type == ExtensionType {
+			extensionHandler, ok := h.AsExtensionHandler()
+			if !ok {
+				return fmt.Errorf("handler[%d] must be an extension handler", i)
+			}
+			for j, target := range extensionHandler.Inbounds {
+				if err := ValidateInboundService(target); err != nil {
+					return fmt.Errorf("handler[%d] inbounds[%d]: %w", i, j, err)
+				}
 			}
 		}
 	}

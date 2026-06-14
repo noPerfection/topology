@@ -24,7 +24,8 @@ NoPerfection
     ├── handler-deps[]: DepService          (service-wide routing by handler category)
     └── handlers[]: Handler
         ├── IndependentHandler              (single endpoint)
-        └── ProxyHandler                    (endpoint + outbound routing)
+        ├── ProxyHandler                    (endpoint + outbound routing)
+        └── ExtensionHandler                (endpoint + inbound services)
             └── command-deps[]: DepService  (per-command routing)
                 ├── proxies[]: ServicePointer
                 └── extensions[]: ServicePointer
@@ -59,7 +60,7 @@ The `type` describes the role the service plays in routing:
 | `type` | Role |
 |--------|------|
 | `Independent` | A normal service that handles its own traffic. |
-| `Proxy` | A service that can forward commands to other services. May contain both plain handlers and proxy handlers. |
+| `Proxy` | A service that forwards commands to inline outbound services. |
 | `Extension` | A service used as an extension target in dependency routing. |
 
 Bootstrap fields live on the service, not on each handler, because starting or loading code is a property of the service process/module:
@@ -73,7 +74,7 @@ Bootstrap fields live on the service, not on each handler, because starting or l
 
 A service may expose multiple handlers because one service can have several entry points: public API, internal API, manager endpoint, publisher, pair socket, and so on. The `category` is the stable label used to choose between those entry points.
 
-In JSON, each `handlers[]` entry is either an `IndependentHandler` or a `ProxyHandler`. The unmarshaller chooses `ProxyHandler` when proxy routing fields such as `outbounds`, `routes`, or `forward` are present.
+In JSON, each `handlers[]` entry is an `IndependentHandler`, `ProxyHandler`, or `ExtensionHandler`. The unmarshaller chooses `ProxyHandler` when proxy routing fields such as `outbounds`, `routes`, or `forward` are present. It chooses `ExtensionHandler` when `inbounds` is present.
 
 `IndependentHandler` is the base shape: protocol type, category, endpoint, and optional command-level dependencies. It represents an endpoint that receives or serves traffic.
 
@@ -86,6 +87,12 @@ In JSON, each `handlers[]` entry is either an `IndependentHandler` or a `ProxyHa
 Notice: `outbounds` are inline services, not refs. Referenced services may have their own proxies, so following a ref from an outbound would require traversing another topology path to find the final endpoint.
 
 A `Proxy` service must use `ProxyHandler` for every handler in `handlers`.
+
+`ExtensionHandler` embeds the same base shape and adds inbound services:
+
+- `inbounds` — inline `Service` definitions that may call into this extension.
+
+`Extension` services must use `ExtensionHandler` for every handler in `handlers`. `inbounds` follow the same validation rules as proxy `outbounds`.
 
 ## Dependencies
 

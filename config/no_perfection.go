@@ -111,6 +111,18 @@ func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[st
 				}
 			}
 		}
+		if service.Type == ExtensionType {
+			extensionHandler, ok := service.Handlers[hi].AsExtensionHandler()
+			if !ok {
+				return fmt.Errorf("handler[%d] must be an extension handler", hi)
+			}
+			for ii := range extensionHandler.Inbounds {
+				target := &extensionHandler.Inbounds[ii]
+				if err := ValidateInboundService(*target); err != nil {
+					return fmt.Errorf("handler[%d] inbounds[%d]: %w", hi, ii, err)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -185,6 +197,17 @@ func (a *NoPerfection) validateServiceRefs(service Service) error {
 			for oi, target := range proxyHandler.Outbounds {
 				if err := ValidateOutboundService(target); err != nil {
 					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
+				}
+			}
+		}
+		if service.Type == ExtensionType {
+			extensionHandler, ok := handler.AsExtensionHandler()
+			if !ok {
+				return fmt.Errorf("handler[%d] must be an extension handler", hi)
+			}
+			for ii, target := range extensionHandler.Inbounds {
+				if err := ValidateInboundService(target); err != nil {
+					return fmt.Errorf("handler[%d] inbounds[%d]: %w", hi, ii, err)
 				}
 			}
 		}
