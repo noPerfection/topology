@@ -18,15 +18,12 @@ import (
 )
 
 const (
-	TopologyHandlerCategory   = "service_topology" // handler category
+	TopologyHandlerCategory = "service_topology" // handler category
 	TopologySocketType        = handlerConfig.ReplierType
 	IsRunning                 = "is-running"
 	IsServiceRunning          = "is-service-running"
-	IsServiceRunningByManager = "is-service-running-by-manager"
 	StartService              = "start-service"
-	StartServiceByConfig      = "start-service-by-config"
 	StopService               = "stop-service"
-	StopServiceByManager      = "stop-service-by-manager"
 	Service                   = "service"
 	Services                  = "services"
 	AddService                = "add-service"
@@ -97,9 +94,17 @@ func (h *Handler) requireNotStarted() error {
 	return nil
 }
 
+func optionalParent(params datatype.KeyValue) []string {
+	parent, err := params.StringValue("parent")
+	if err != nil || parent == "" {
+		return nil
+	}
+	return []string{parent}
+}
+
 // AddService registers a service in the topology configuration before the
 // topology handler is started.
-func (h *Handler) AddService(record config.Service) error {
+func (h *Handler) AddService(record config.Service, parent ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -109,12 +114,12 @@ func (h *Handler) AddService(record config.Service) error {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.AddService(record)
+	return h.topology.AddService(record, parent...)
 }
 
 // SetService updates a service in the topology configuration before the topology
 // handler is started.
-func (h *Handler) SetService(record config.Service) error {
+func (h *Handler) SetService(record config.Service, parent ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -124,12 +129,12 @@ func (h *Handler) SetService(record config.Service) error {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.SetService(record)
+	return h.topology.SetService(record, parent...)
 }
 
 // RemoveService removes a service from the topology configuration before the
 // topology handler is started.
-func (h *Handler) RemoveService(serviceName string) error {
+func (h *Handler) RemoveService(name string, parent ...string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -139,12 +144,12 @@ func (h *Handler) RemoveService(serviceName string) error {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.RemoveService(serviceName)
+	return h.topology.RemoveService(name, parent...)
 }
 
 // StartService starts a dependency service before the topology handler is
 // started.
-func (h *Handler) StartService(serviceName string) (string, error) {
+func (h *Handler) StartService(mushroomURL string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -154,27 +159,12 @@ func (h *Handler) StartService(serviceName string) (string, error) {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.StartService(serviceName)
-}
-
-// StartServiceByConfig registers and starts a dependency service before the
-// topology handler is started.
-func (h *Handler) StartServiceByConfig(record config.Service) (string, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if err := h.requireNotStarted(); err != nil {
-		return "", err
-	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
-	return h.topology.StartServiceByConfig(record)
+	return h.topology.StartService(mushroomURL)
 }
 
 // IsServiceRunning checks a dependency service before the topology handler is
 // started.
-func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
+func (h *Handler) IsServiceRunning(mushroomURL string) (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -184,26 +174,11 @@ func (h *Handler) IsServiceRunning(serviceName string) (bool, error) {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.IsServiceRunning(serviceName)
-}
-
-// IsServiceRunningByManager checks a dependency service manager before the
-// topology handler is started.
-func (h *Handler) IsServiceRunningByManager(serviceName string, handler config.IndependentHandler) (bool, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if err := h.requireNotStarted(); err != nil {
-		return false, err
-	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
-	return h.topology.IsServiceRunningByManager(serviceName, handler)
+	return h.topology.IsServiceRunning(mushroomURL)
 }
 
 // StopService stops a dependency service before the topology handler is started.
-func (h *Handler) StopService(serviceName string) error {
+func (h *Handler) StopService(mushroomURL string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -213,26 +188,11 @@ func (h *Handler) StopService(serviceName string) error {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.StopService(serviceName)
-}
-
-// StopServiceByManager stops a dependency service manager before the topology
-// handler is started.
-func (h *Handler) StopServiceByManager(serviceName string, handler config.IndependentHandler) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if err := h.requireNotStarted(); err != nil {
-		return err
-	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
-	return h.topology.StopServiceByManager(serviceName, handler)
+	return h.topology.StopService(mushroomURL)
 }
 
 // Service returns a service configuration before the topology handler is started.
-func (h *Handler) Service(serviceName string) (config.Service, error) {
+func (h *Handler) Service(mushroomURL string) (config.Service, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -242,7 +202,7 @@ func (h *Handler) Service(serviceName string) (config.Service, error) {
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.Service(serviceName)
+	return h.topology.Service(mushroomURL)
 }
 
 // Services returns service configurations before the topology handler is started.
@@ -264,14 +224,14 @@ func (h *Handler) onIsRunning(req message.RequestInterface) message.ReplyInterfa
 }
 
 // onIsServiceRunning checks whether the dependency is running or not.
-// Requires 'service' string parameter with the service name.
+// Requires 'service' — a service name or dereference Mushroom URL.
 func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.ReplyInterface {
-	serviceName, err := req.RouteParameters().StringValue("service")
+	mushroomURL, err := req.RouteParameters().StringValue(Service)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	running, err := h.topology.IsServiceRunning(serviceName)
+	running, err := h.topology.IsServiceRunning(mushroomURL)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.IsServiceRunning: %v", err))
 	}
@@ -280,72 +240,17 @@ func (h *Handler) onIsServiceRunning(req message.RequestInterface) message.Reply
 	return req.Ok(params)
 }
 
-// onIsServiceRunningByManager checks whether the dependency is running by its
-// manager handler.
-// Requires 'service' string parameter and 'handler' as a config.IndependentHandler object.
-func (h *Handler) onIsServiceRunningByManager(req message.RequestInterface) message.ReplyInterface {
-	serviceName, err := req.RouteParameters().StringValue("service")
+// onStartService starts the dependency service.
+// Requires 'service' — a service name or dereference Mushroom URL.
+func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInterface {
+	mushroomURL, err := req.RouteParameters().StringValue(Service)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	kv, err := req.RouteParameters().NestedValue("handler")
+	id, err := h.topology.StartService(mushroomURL)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
-	}
-
-	var handler config.IndependentHandler
-	if err := kv.Interface(&handler); err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface('config.IndependentHandler'): %v", err))
-	}
-
-	running, err := h.topology.IsServiceRunningByManager(serviceName, handler)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.IsServiceRunningByManager: %v", err))
-	}
-
-	return req.Ok(datatype.New().Set("running", running))
-}
-
-// onStartService starts the dependency service.
-// Requires:
-//   - 'service' string parameter.
-//
-// Returns nothing.
-// todo make it publish the result through publisher, so user won't wait for the result.
-func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInterface {
-	serviceName, err := req.RouteParameters().StringValue("service")
-	if err != nil {
-		serviceName, err = req.RouteParameters().StringValue("url")
-		if err != nil {
-			return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
-		}
-	}
-
-	id, err := h.topology.StartService(serviceName)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.StartService(service: '%s'): %v", serviceName, err))
-	}
-
-	return req.Ok(datatype.New().Set("id", id))
-}
-
-// onStartServiceByConfig registers and starts the dependency service.
-// Requires 'service' as a service object.
-func (h *Handler) onStartServiceByConfig(req message.RequestInterface) message.ReplyInterface {
-	kv, err := req.RouteParameters().NestedValue("service")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('service'): %v", err))
-	}
-
-	var record config.Service
-	if err := kv.Interface(&record); err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface('config.Service'): %v", err))
-	}
-
-	id, err := h.topology.StartServiceByConfig(record)
-	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.StartServiceByConfig('%s'): %v", record.Name, err))
+		return req.Fail(fmt.Sprintf("h.topology.StartService(%q): %v", mushroomURL, err))
 	}
 
 	return req.Ok(datatype.New().Set("id", id))
@@ -364,7 +269,7 @@ func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterf
 		return req.Fail(fmt.Sprintf("kv.Interface('config.Service'): %v", err))
 	}
 
-	if err := h.topology.AddService(record); err != nil {
+	if err := h.topology.AddService(record, optionalParent(req.RouteParameters())...); err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.AddService('%s'): %v", record.Name, err))
 	}
 
@@ -385,7 +290,7 @@ func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterf
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
 
-	err = h.topology.SetService(record)
+	err = h.topology.SetService(record, optionalParent(req.RouteParameters())...)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.SetService('%s'): %v", record.Name, err))
 	}
@@ -401,7 +306,7 @@ func (h *Handler) onRemoveService(req message.RequestInterface) message.ReplyInt
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	err = h.topology.RemoveService(serviceName)
+	err = h.topology.RemoveService(serviceName, optionalParent(req.RouteParameters())...)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.RemoveService('%s'): %v", serviceName, err))
 	}
@@ -410,14 +315,14 @@ func (h *Handler) onRemoveService(req message.RequestInterface) message.ReplyInt
 }
 
 // onStopService stops the dependency.
-// Requires 'service' string parameter with the service name.
+// Requires 'service' — a service name or dereference Mushroom URL.
 func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInterface {
-	serviceName, err := req.RouteParameters().StringValue("service")
+	mushroomURL, err := req.RouteParameters().StringValue(Service)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	err = h.topology.StopService(serviceName)
+	err = h.topology.StopService(mushroomURL)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.topology.StopService: %v", err))
 	}
@@ -425,41 +330,17 @@ func (h *Handler) onStopService(req message.RequestInterface) message.ReplyInter
 	return req.Ok(datatype.New())
 }
 
-// onStopServiceByManager stops the dependency by its manager handler.
-// Requires 'service' string parameter and 'handler' as a config.IndependentHandler object.
-func (h *Handler) onStopServiceByManager(req message.RequestInterface) message.ReplyInterface {
-	serviceName, err := req.RouteParameters().StringValue("service")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
-	}
-
-	kv, err := req.RouteParameters().NestedValue("handler")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
-	}
-
-	var handler config.IndependentHandler
-	if err := kv.Interface(&handler); err != nil {
-		return req.Fail(fmt.Sprintf("kv.Interface('config.IndependentHandler'): %v", err))
-	}
-
-	if err := h.topology.StopServiceByManager(serviceName, handler); err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.StopServiceByManager: %v", err))
-	}
-
-	return req.Ok(datatype.New())
-}
-
 // onService returns the configuration for a service.
+// Requires 'service' — a service name or dereference Mushroom URL.
 func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface {
-	serviceName, err := req.RouteParameters().StringValue("service")
+	mushroomURL, err := req.RouteParameters().StringValue(Service)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	record, err := h.topology.Service(serviceName)
+	record, err := h.topology.Service(mushroomURL)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.Service('%s'): %v", serviceName, err))
+		return req.Fail(fmt.Sprintf("h.topology.Service(%q): %v", mushroomURL, err))
 	}
 
 	return req.Ok(datatype.New().Set("service", record))
@@ -501,20 +382,11 @@ func (h *Handler) Start() error {
 	if err := h.handler.Route(IsServiceRunning, h.onIsServiceRunning); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", IsServiceRunning, err)
 	}
-	if err := h.handler.Route(IsServiceRunningByManager, h.onIsServiceRunningByManager); err != nil {
-		return fmt.Errorf("h.handler.Route('%s'): %v", IsServiceRunningByManager, err)
-	}
 	if err := h.handler.Route(StartService, h.onStartService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", StartService, err)
 	}
-	if err := h.handler.Route(StartServiceByConfig, h.onStartServiceByConfig); err != nil {
-		return fmt.Errorf("h.handler.Route('%s'): %v", StartServiceByConfig, err)
-	}
 	if err := h.handler.Route(StopService, h.onStopService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", StopService, err)
-	}
-	if err := h.handler.Route(StopServiceByManager, h.onStopServiceByManager); err != nil {
-		return fmt.Errorf("h.handler.Route('%s'): %v", StopServiceByManager, err)
 	}
 	if err := h.handler.Route(Service, h.onService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Service, err)

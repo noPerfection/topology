@@ -53,21 +53,15 @@ See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a complet
 
 ## Mycelium Storage
 
-Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` digests the file through `json_substrate`; reads go through dereference Mushroom URLs (`Spore`, `Fruit`) and writes use link paths (`Graft`, `Inoculate`, `Prune`).
-
-Query paths use a resource dereference (`*var`):
+Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` digests the file through `json_substrate`. All config access — reads and writes — goes through **dereference** Mushroom URLs (`?*var=`) via `Spore`/`Fruit` for queries and `Graft`/`Inoculate`/`Prune` for mutations.
 
 ```text
 pkg:$?*var=services
 ```
 
-Mutation paths use a link (`var` without `*`):
-
-```text
-pkg:$?var=services
-```
-
 `$` is a wildcard that fills in type, package, and module from the loaded file URL. For a file loaded as `pkg:json/tmp#app.json`, `pkg:$?*var=services` resolves against that mycelium.
+
+Link URLs (`?var=` without `*`) are not used by this package. Mushroom's `Link()` API resolves symbolic paths to absolute link strings; topology config does not call it for service queries or mutations.
 
 Plain service names passed to `GetService` are shorthand for a dereference name filter on that array:
 
@@ -119,64 +113,68 @@ Calls `GetServices` and returns the length of the result.
 count, err := app.CountByType("pkg:$?*var=services[type:Proxy]")
 ```
 
-### `Services()`
+### `Services()` (topology layer)
 
-Returns all services in the root `services` array. Equivalent to `GetServices("pkg:$?*var=services")`.
+The topology handler exposes `Services()` as a convenience wrapper around `GetServices("pkg:$?*var=services")`.
 
 ## Mutating Services
 
-`AddService`, `SetService`, and `RemoveService` accept an optional parent Mushroom URL. When omitted, the parent defaults to `pkg:$?var=services`.
+`AddService`, `SetService`, and `RemoveService` take a **parent dereference URL** — the same `?*var=` form used for reads. The parent identifies the array to read and mutate.
 
-Each method first loads the parent array with `GetServices`, checks name uniqueness or existence, then mutates the mycelium in memory. Call `Save` to persist changes.
+```go
+err := app.AddService(newService, "pkg:$?*var=services")
+```
 
-### `AddService(record, parent...)`
+Each method first loads the parent array with `GetServices(parent)`, checks name uniqueness or existence, then mutates the mycelium in memory. Call `Save` to persist changes.
+
+### `AddService(record, parent)`
 
 Appends a service with `Graft`. The name must not already exist in the parent array.
 
 ```go
-err := app.AddService(newService)
+err := app.AddService(newService, "pkg:$?*var=services")
 
 // Append to a nested array
 err := app.AddService(
     outbound,
-    "pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
-### `SetService(record, parent...)`
+### `SetService(record, parent)`
 
 Replaces an existing service by name with `Inoculate`.
 
 ```go
-err := app.SetService(updatedService)
+err := app.SetService(updatedService, "pkg:$?*var=services")
 
 // Update a service inside a nested parent
 err := app.SetService(
     updatedOutbound,
-    "pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
-### `RemoveService(name, parent...)`
+### `RemoveService(name, parent)`
 
 Removes a service by name with `Prune`.
 
 ```go
-err := app.RemoveService("auth_proxy")
+err := app.RemoveService("auth_proxy", "pkg:$?*var=services")
 
 // Remove from a nested parent
 err := app.RemoveService(
     "old_outbound",
-    "pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
-Underlying mycelium operations:
+Underlying mycelium operations use the same dereference paths:
 
 ```go
-mycelium.Graft("pkg:$?var=services", newServiceMap)
-mycelium.Inoculate("pkg:$?var=services[name:foo]", newServiceMap)
-mycelium.Prune("pkg:$?var=services[name:foo]")
+mycelium.Graft("pkg:$?*var=services", newServiceMap)
+mycelium.Inoculate("pkg:$?*var=services[name:foo]", newServiceMap)
+mycelium.Prune("pkg:$?*var=services[name:foo]")
 ```
 
 ## Services

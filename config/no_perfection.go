@@ -21,23 +21,16 @@ type NoPerfection struct {
 	filePath string
 }
 
-const (
-	defaultServicesURL      = "pkg:$?var=services"
-	defaultServicesQueryURL = "pkg:$?*var=services"
-)
-
-func resolveParentURL(parent ...string) string {
-	if len(parent) > 0 && parent[0] != "" {
-		return parent[0]
-	}
-	return defaultServicesURL
-}
-
+// normalizeServiceURL maps a service lookup argument to a dereference Mushroom URL.
+// Mushroom URLs are returned unchanged; a plain symbol is expanded to a root name filter.
+//
+//	symbol:      "auth_proxy"  →  "pkg:$?*var=services[name:auth_proxy]"
+//	mushroomURL: "pkg:$?*var=services[name:auth_proxy]"  →  unchanged
 func normalizeServiceURL(mushroomURL string) string {
 	if strings.HasPrefix(mushroomURL, "pkg:") || strings.HasPrefix(mushroomURL, "*pkg:") {
 		return mushroomURL
 	}
-	return fmt.Sprintf("%s[name:%s]", defaultServicesQueryURL, mushroomURL)
+	return fmt.Sprintf("pkg:$?*var=services[name:%s]", mushroomURL)
 }
 
 func (a *NoPerfection) queryMycelium(mushroomURL string) (any, error) {
@@ -162,7 +155,7 @@ func Load(filePath string) (NoPerfection, error) {
 	}
 	appConfig.mycelium = mycelium
 
-	if err := appConfig.ValidateTopology(); err != nil {
+	if err := appConfig.ValidateTopology("pkg:$?*var=services"); err != nil {
 		return NoPerfection{}, fmt.Errorf("ValidateTopology: %w", err)
 	}
 
@@ -171,12 +164,12 @@ func Load(filePath string) (NoPerfection, error) {
 
 // ValidateTopology validates services, including inline service definitions, and
 // checks that every referenced dependency target resolves.
-func (a *NoPerfection) ValidateTopology() error {
+func (a *NoPerfection) ValidateTopology(servicesURL string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
 
-	services, err := a.Services()
+	services, err := a.GetServices(servicesURL)
 	if err != nil {
 		return err
 	}
@@ -414,11 +407,6 @@ func (a NoPerfection) Save() error {
 	return nil
 }
 
-// Services returns all configured services from the root services array.
-func (a *NoPerfection) Services() ([]Service, error) {
-	return a.GetServices(defaultServicesQueryURL)
-}
-
 // GetService resolves a Mushroom URL and returns a single service.
 // Plain service names are resolved as pkg:$?*var=services[name:<name>].
 func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
@@ -465,19 +453,21 @@ func (a *NoPerfection) CountByType(mushroomURL string) (int, error) {
 }
 
 // AddService adds a new service into the services array at parent.
-// parent defaults to pkg:$?var=services.
-func (a *NoPerfection) AddService(record Service, parent ...string) error {
+// parent is a dereference Mushroom URL, e.g. pkg:$?*var=services.
+func (a *NoPerfection) AddService(record Service, parent string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
 	if len(record.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
+	if parent == "" {
+		return fmt.Errorf("parent URL is empty")
+	}
 
-	parentURL := resolveParentURL(parent...)
-	services, err := a.GetServices(parentURL)
+	services, err := a.GetServices(parent)
 	if err != nil {
-		return fmt.Errorf("GetServices(%q): %w", parentURL, err)
+		return fmt.Errorf("GetServices(%q): %w", parent, err)
 	}
 	if serviceExists(services, record.Name) {
 		return fmt.Errorf("service('%s') already exists", record.Name)
@@ -487,27 +477,29 @@ func (a *NoPerfection) AddService(record Service, parent ...string) error {
 	if err != nil {
 		return err
 	}
-	if err := a.mycelium.Graft(parentURL, serviceMap); err != nil {
-		return fmt.Errorf("mycelium.Graft(%q): %w", parentURL, err)
+	if err := a.mycelium.Graft(parent, serviceMap); err != nil {
+		return fmt.Errorf("mycelium.Graft(%q): %w", parent, err)
 	}
 
 	return nil
 }
 
 // SetService updates an existing service in the services array at parent.
-// parent defaults to pkg:$?var=services.
-func (a *NoPerfection) SetService(record Service, parent ...string) error {
+// parent is a dereference Mushroom URL, e.g. pkg:$?*var=services.
+func (a *NoPerfection) SetService(record Service, parent string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
 	if len(record.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
+	if parent == "" {
+		return fmt.Errorf("parent URL is empty")
+	}
 
-	parentURL := resolveParentURL(parent...)
-	services, err := a.GetServices(parentURL)
+	services, err := a.GetServices(parent)
 	if err != nil {
-		return fmt.Errorf("GetServices(%q): %w", parentURL, err)
+		return fmt.Errorf("GetServices(%q): %w", parent, err)
 	}
 	if !serviceExists(services, record.Name) {
 		return fmt.Errorf("service('%s') not found", record.Name)
@@ -518,7 +510,7 @@ func (a *NoPerfection) SetService(record Service, parent ...string) error {
 		return err
 	}
 
-	targetURL := fmt.Sprintf("%s[name:%s]", parentURL, record.Name)
+	targetURL := fmt.Sprintf("%s[name:%s]", parent, record.Name)
 	if err := a.mycelium.Inoculate(targetURL, serviceMap); err != nil {
 		return fmt.Errorf("mycelium.Inoculate(%q): %w", targetURL, err)
 	}
@@ -527,25 +519,27 @@ func (a *NoPerfection) SetService(record Service, parent ...string) error {
 }
 
 // RemoveService removes a service by name from the services array at parent.
-// parent defaults to pkg:$?var=services.
-func (a *NoPerfection) RemoveService(name string, parent ...string) error {
+// parent is a dereference Mushroom URL, e.g. pkg:$?*var=services.
+func (a *NoPerfection) RemoveService(name, parent string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
 	if len(name) == 0 {
 		return fmt.Errorf("service name argument is empty")
 	}
+	if parent == "" {
+		return fmt.Errorf("parent URL is empty")
+	}
 
-	parentURL := resolveParentURL(parent...)
-	services, err := a.GetServices(parentURL)
+	services, err := a.GetServices(parent)
 	if err != nil {
-		return fmt.Errorf("GetServices(%q): %w", parentURL, err)
+		return fmt.Errorf("GetServices(%q): %w", parent, err)
 	}
 	if !serviceExists(services, name) {
 		return fmt.Errorf("service('%s') not found", name)
 	}
 
-	targetURL := fmt.Sprintf("%s[name:%s]", parentURL, name)
+	targetURL := fmt.Sprintf("%s[name:%s]", parent, name)
 	if err := a.mycelium.Prune(targetURL); err != nil {
 		return fmt.Errorf("mycelium.Prune(%q): %w", targetURL, err)
 	}

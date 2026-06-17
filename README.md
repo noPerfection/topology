@@ -94,20 +94,22 @@ Available client methods:
 
 ```go
 type NodeInterface interface {
-	StopService(serviceName string) error
-	StartService(serviceName string) (string, error)
-	IsServiceRunning(serviceName string) (bool, error)
+	StopService(mushroomURL string) error
+	StartService(mushroomURL string) (string, error)
+	IsServiceRunning(mushroomURL string) (bool, error)
 }
 
 type TopologyInterface interface {
 	NodeInterface
 
-	Service(serviceName string) (config.Service, error)
-	AddService(service config.Service) error
-	SetService(service config.Service) error
-	RemoveService(serviceName string) error
+	Service(mushroomURL string) (config.Service, error)
+	AddService(service config.Service, parent ...string) error
+	SetService(service config.Service, parent ...string) error
+	RemoveService(name string, parent ...string) error
 }
 ```
+
+Plain service names still work as shorthand for `pkg:$?*var=services[name:<name>]`. See [config/README.md](config/README.md) for Mushroom URL syntax.
 
 ### Add or Update Services
 
@@ -129,6 +131,11 @@ if err := topologyClient.AddService(service); err != nil {
 	panic(err)
 }
 
+// Optional parent dereference URL (defaults to pkg:$?*var=services when omitted)
+if err := topologyClient.AddService(outbound, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds"); err != nil {
+	panic(err)
+}
+
 service.StartCommand = "./worker --debug"
 if err := topologyClient.SetService(service); err != nil {
 	panic(err)
@@ -142,6 +149,9 @@ id, err := topologyClient.StartService("worker")
 if err != nil {
 	panic(err)
 }
+
+// Or with an explicit dereference Mushroom URL
+id, err = topologyClient.StartService("pkg:$?*var=services[name:worker]")
 
 if running, err := topologyClient.IsServiceRunning("worker"); err != nil {
 	panic(err)

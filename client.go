@@ -87,12 +87,20 @@ func (c *Client) IsRunning() (bool, error) {
 	return res, nil
 }
 
-// Service returns a service configuration by name.
-func (c *Client) Service(serviceName string) (config.Service, error) {
+// Service returns a service configuration by name or dereference Mushroom URL.
+//
+// Symbol:
+//
+//	svc, err := client.Service("auth_proxy")
+//
+// Dereference Mushroom URL:
+//
+//	svc, err := client.Service("pkg:$?*var=services[name:auth_proxy]")
+func (c *Client) Service(mushroomURL string) (config.Service, error) {
 	req := message.Request{
 		Command: Service,
 		Parameters: datatype.New().
-			Set("service", serviceName),
+			Set("service", mushroomURL),
 	}
 
 	reply, err := c.socket.Request(&req)
@@ -151,11 +159,21 @@ func (c *Client) Services() ([]config.Service, error) {
 }
 
 // AddService registers a service in the topology configuration.
-func (c *Client) AddService(record config.Service) error {
+//
+// parent is the dereference Mushroom URL of the array to append to. When omitted,
+// the parent defaults to pkg:$?*var=services (the root services array).
+//
+//	err := client.AddService(record)
+//
+//	err := client.AddService(outbound, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+func (c *Client) AddService(record config.Service, parent ...string) error {
+	params := datatype.New().Set("service", record)
+	if len(parent) > 0 && parent[0] != "" {
+		params.Set("parent", parent[0])
+	}
 	req := message.Request{
-		Command: AddService,
-		Parameters: datatype.New().
-			Set("service", record),
+		Command:    AddService,
+		Parameters: params,
 	}
 
 	reply, err := c.socket.Request(&req)
@@ -171,11 +189,21 @@ func (c *Client) AddService(record config.Service) error {
 }
 
 // SetService updates an existing service in the topology configuration.
-func (c *Client) SetService(record config.Service) error {
+//
+// parent is the dereference Mushroom URL of the array that contains the service.
+// When omitted, the parent defaults to pkg:$?*var=services.
+//
+//	err := client.SetService(record)
+//
+//	err := client.SetService(updated, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+func (c *Client) SetService(record config.Service, parent ...string) error {
+	params := datatype.New().Set("service", record)
+	if len(parent) > 0 && parent[0] != "" {
+		params.Set("parent", parent[0])
+	}
 	req := message.Request{
-		Command: SetService,
-		Parameters: datatype.New().
-			Set("service", record),
+		Command:    SetService,
+		Parameters: params,
 	}
 
 	reply, err := c.socket.Request(&req)
@@ -191,11 +219,21 @@ func (c *Client) SetService(record config.Service) error {
 }
 
 // RemoveService removes a service from the topology configuration.
-func (c *Client) RemoveService(serviceName string) error {
+//
+// parent is the dereference Mushroom URL of the array to remove from. When omitted,
+// the parent defaults to pkg:$?*var=services.
+//
+//	err := client.RemoveService("worker")
+//
+//	err := client.RemoveService("old_outbound", "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+func (c *Client) RemoveService(name string, parent ...string) error {
+	params := datatype.New().Set("service", name)
+	if len(parent) > 0 && parent[0] != "" {
+		params.Set("parent", parent[0])
+	}
 	req := message.Request{
-		Command: RemoveService,
-		Parameters: datatype.New().
-			Set("service", serviceName),
+		Command:    RemoveService,
+		Parameters: params,
 	}
 
 	reply, err := c.socket.Request(&req)
@@ -211,8 +249,16 @@ func (c *Client) RemoveService(serviceName string) error {
 }
 
 // StartService starts the dependency service and returns the generated topology id.
-func (c *Client) StartService(serviceName string) (string, error) {
-	parameters := datatype.New().Set("service", serviceName)
+//
+// Symbol:
+//
+//	id, err := client.StartService("worker")
+//
+// Dereference Mushroom URL:
+//
+//	id, err := client.StartService("pkg:$?*var=services[name:worker]")
+func (c *Client) StartService(mushroomURL string) (string, error) {
+	parameters := datatype.New().Set("service", mushroomURL)
 
 	req := message.Request{
 		Command:    StartService,
@@ -236,38 +282,12 @@ func (c *Client) StartService(serviceName string) (string, error) {
 	return id, nil
 }
 
-// StartServiceByConfig registers a service configuration, starts it, and returns
-// the generated topology id.
-func (c *Client) StartServiceByConfig(record config.Service) (string, error) {
-	req := message.Request{
-		Command: StartServiceByConfig,
-		Parameters: datatype.New().
-			Set("service", record),
-	}
-
-	reply, err := c.socket.Request(&req)
-	if err != nil {
-		return "", fmt.Errorf("socket.Submit('%s'): %w", StartServiceByConfig, err)
-	}
-
-	if !reply.IsOK() {
-		return "", fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
-	}
-
-	id, err := reply.ReplyParameters().StringValue("id")
-	if err != nil {
-		return "", fmt.Errorf("reply.Parameters.GetString('id'): %w", err)
-	}
-
-	return id, nil
-}
-
 // IsServiceRunning checks is the service running or not.
-func (c *Client) IsServiceRunning(serviceName string) (bool, error) {
+func (c *Client) IsServiceRunning(mushroomURL string) (bool, error) {
 	req := message.Request{
 		Command: IsServiceRunning,
 		Parameters: datatype.New().
-			Set("service", serviceName),
+			Set("service", mushroomURL),
 	}
 
 	reply, err := c.socket.Request(&req)
@@ -287,39 +307,20 @@ func (c *Client) IsServiceRunning(serviceName string) (bool, error) {
 	return res, nil
 }
 
-// IsServiceRunningByManager checks whether a service is running by directly
-// contacting its manager handler.
-func (c *Client) IsServiceRunningByManager(serviceName string, handler config.IndependentHandler) (bool, error) {
-	req := message.Request{
-		Command: IsServiceRunningByManager,
-		Parameters: datatype.New().
-			Set("service", serviceName).
-			Set("handler", handler),
-	}
-
-	reply, err := c.socket.Request(&req)
-	if err != nil {
-		return false, fmt.Errorf("socket.Request('%s'): %w", IsServiceRunningByManager, err)
-	}
-
-	if !reply.IsOK() {
-		return false, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
-	}
-
-	res, err := reply.ReplyParameters().BoolValue("running")
-	if err != nil {
-		return false, fmt.Errorf("reply.Parameters.GetBoolean('running'): %w", err)
-	}
-
-	return res, nil
-}
-
 // StopService stops the running dependency service.
-func (c *Client) StopService(serviceName string) error {
+//
+// Symbol:
+//
+//	err := client.StopService("worker")
+//
+// Dereference Mushroom URL:
+//
+//	err := client.StopService("pkg:$?*var=services[name:worker]")
+func (c *Client) StopService(mushroomURL string) error {
 	req := message.Request{
 		Command: StopService,
 		Parameters: datatype.New().
-			Set("service", serviceName),
+			Set("service", mushroomURL),
 	}
 
 	if c == nil {
@@ -333,36 +334,6 @@ func (c *Client) StopService(serviceName string) error {
 	reply, err := c.socket.Request(&req)
 	if err != nil {
 		return fmt.Errorf("socket.Submit('%s'): %w", StopService, err)
-	}
-
-	if !reply.IsOK() {
-		return fmt.Errorf("c.socket.Requeset(request='%v'): reply failed with: %s", req, reply.ErrorMessage())
-	}
-
-	return nil
-}
-
-// StopServiceByManager stops the running dependency service by directly
-// contacting its manager handler.
-func (c *Client) StopServiceByManager(serviceName string, handler config.IndependentHandler) error {
-	req := message.Request{
-		Command: StopServiceByManager,
-		Parameters: datatype.New().
-			Set("service", serviceName).
-			Set("handler", handler),
-	}
-
-	if c == nil {
-		return fmt.Errorf("dep manager not initialized")
-	}
-
-	if c.socket == nil {
-		return fmt.Errorf("dep manager socket was closed")
-	}
-
-	reply, err := c.socket.Request(&req)
-	if err != nil {
-		return fmt.Errorf("socket.Submit('%s'): %w", StopServiceByManager, err)
 	}
 
 	if !reply.IsOK() {

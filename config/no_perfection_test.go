@@ -9,6 +9,24 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
+const testServicesParent = "pkg:$?*var=services"
+
+func addTestService(t *testing.T, a *NoPerfection, record Service) {
+	t.Helper()
+	if err := a.AddService(record, testServicesParent); err != nil {
+		t.Fatalf("AddService: %v", err)
+	}
+}
+
+func listTestServices(t *testing.T, a *NoPerfection) []Service {
+	t.Helper()
+	services, err := a.GetServices(testServicesParent)
+	if err != nil {
+		t.Fatalf("GetServices: %v", err)
+	}
+	return services
+}
+
 func loadServices(t *testing.T, services []Service) (NoPerfection, error) {
 	t.Helper()
 
@@ -51,10 +69,7 @@ func TestLoadMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load missing file: %v", err)
 	}
-	services, err := a.Services()
-	if err != nil {
-		t.Fatalf("Services: %v", err)
-	}
+	services := listTestServices(t, &a)
 	if len(services) != 0 {
 		t.Fatalf("len(Services) = %d, want 0", len(services))
 	}
@@ -63,9 +78,7 @@ func TestLoadMissingFile(t *testing.T) {
 func TestGetService(t *testing.T) {
 	a := mustLoadEmpty(t)
 	sample := Service{Name: "api", Type: IndependentType}
-	if err := a.AddService(sample); err != nil {
-		t.Fatalf("AddService: %v", err)
-	}
+	addTestService(t, &a, sample)
 
 	found, err := a.GetService("api")
 	if err != nil {
@@ -83,9 +96,7 @@ func TestGetService(t *testing.T) {
 func TestGetServiceByMushroomURL(t *testing.T) {
 	a := mustLoadEmpty(t)
 	sample := Service{Name: "api", Type: IndependentType}
-	if err := a.AddService(sample); err != nil {
-		t.Fatalf("AddService: %v", err)
-	}
+	addTestService(t, &a, sample)
 
 	found, err := a.GetService("pkg:$?*var=services[name:api]")
 	if err != nil {
@@ -104,7 +115,7 @@ func TestGetServices(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.AddService(s); err != nil {
+		if err := a.AddService(s, testServicesParent); err != nil {
 			t.Fatalf("AddService: %v", err)
 		}
 	}
@@ -136,7 +147,7 @@ func TestCountByType(t *testing.T) {
 		{Name: "proxy", Type: ProxyType},
 	}
 	for _, s := range services {
-		if err := a.AddService(s); err != nil {
+		if err := a.AddService(s, testServicesParent); err != nil {
 			t.Fatalf("AddService: %v", err)
 		}
 	}
@@ -165,32 +176,22 @@ func TestSetService(t *testing.T) {
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
 
-	if err := a.SetService(first); err == nil {
+	if err := a.SetService(first, testServicesParent); err == nil {
 		t.Fatal("SetService missing service returned nil error")
 	}
-	if err := a.AddService(first); err != nil {
-		t.Fatalf("AddService first: %v", err)
-	}
-	if err := a.AddService(second); err != nil {
-		t.Fatalf("AddService second: %v", err)
-	}
-	services, err := a.Services()
-	if err != nil {
-		t.Fatalf("Services: %v", err)
-	}
+	addTestService(t, &a, first)
+	addTestService(t, &a, second)
+	services := listTestServices(t, &a)
 	if len(services) != 2 {
 		t.Fatalf("len(Services) = %d, want 2", len(services))
 	}
 
 	updated := first
 	updated.StartCommand = "go run ./cmd/api"
-	if err := a.SetService(updated); err != nil {
+	if err := a.SetService(updated, testServicesParent); err != nil {
 		t.Fatalf("SetService update: %v", err)
 	}
-	services, err = a.Services()
-	if err != nil {
-		t.Fatalf("Services after update: %v", err)
-	}
+	services = listTestServices(t, &a)
 	if len(services) != 2 {
 		t.Fatalf("len(Services) after update = %d, want 2", len(services))
 	}
@@ -208,27 +209,20 @@ func TestRemoveService(t *testing.T) {
 	a := mustLoadEmpty(t)
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
-	if err := a.AddService(first); err != nil {
-		t.Fatalf("AddService first: %v", err)
-	}
-	if err := a.AddService(second); err != nil {
-		t.Fatalf("AddService second: %v", err)
-	}
+	addTestService(t, &a, first)
+	addTestService(t, &a, second)
 
-	if err := a.RemoveService(""); err == nil {
+	if err := a.RemoveService("", testServicesParent); err == nil {
 		t.Fatal("RemoveService with empty name returned nil error")
 	}
-	if err := a.RemoveService("missing"); err == nil {
+	if err := a.RemoveService("missing", testServicesParent); err == nil {
 		t.Fatal("RemoveService with missing service returned nil error")
 	}
 
-	if err := a.RemoveService("api"); err != nil {
+	if err := a.RemoveService("api", testServicesParent); err != nil {
 		t.Fatalf("RemoveService: %v", err)
 	}
-	services, err := a.Services()
-	if err != nil {
-		t.Fatalf("Services: %v", err)
-	}
+	services := listTestServices(t, &a)
 	if len(services) != 1 {
 		t.Fatalf("len(Services) = %d, want 1", len(services))
 	}
@@ -254,9 +248,7 @@ func TestLoadSave(t *testing.T) {
 			},
 		},
 	}
-	if err := original.AddService(sample); err != nil {
-		t.Fatalf("AddService: %v", err)
-	}
+	addTestService(t, &original, sample)
 
 	if err := original.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -274,10 +266,7 @@ func TestLoadSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	services, err := loaded.Services()
-	if err != nil {
-		t.Fatalf("Services: %v", err)
-	}
+	services := listTestServices(t, &loaded)
 	if len(services) != 1 {
 		t.Fatalf("len(Services) = %d, want 1", len(services))
 	}
@@ -302,7 +291,7 @@ func TestOperationsRequireLoad(t *testing.T) {
 	if _, err := a.GetService("api"); err == nil {
 		t.Fatal("GetService without Load returned nil error")
 	}
-	if err := a.AddService(Service{Name: "api", Type: IndependentType}); err == nil {
+	if err := a.AddService(Service{Name: "api", Type: IndependentType}, testServicesParent); err == nil {
 		t.Fatal("AddService without Load returned nil error")
 	}
 }
@@ -347,11 +336,11 @@ func TestValidateTopologyInlineService(t *testing.T) {
 		},
 	}
 	publicAPI.Handlers[0] = handler
-	if err := app.SetService(publicAPI); err != nil {
+	if err := app.SetService(publicAPI, testServicesParent); err != nil {
 		t.Fatalf("SetService public_api: %v", err)
 	}
 
-	if err := app.ValidateTopology(); err != nil {
+	if err := app.ValidateTopology(testServicesParent); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
 	}
 
@@ -398,7 +387,7 @@ func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
 		},
 	})
 
-	if err := app.ValidateTopology(); err != nil {
+	if err := app.ValidateTopology(testServicesParent); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
 	}
 	if _, err := app.GetService("inline_proxy"); err == nil {
@@ -490,14 +479,11 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 		},
 	})
 
-	if err := app.ValidateTopology(); err != nil {
+	if err := app.ValidateTopology(testServicesParent); err != nil {
 		t.Fatalf("ValidateTopology with ref path: %v", err)
 	}
 
-	services, err := app.Services()
-	if err != nil {
-		t.Fatalf("Services: %v", err)
-	}
+	services := listTestServices(t, &app)
 	handler, ok := services[0].Handlers[0].AsIndependentHandler()
 	if !ok {
 		t.Fatal("handler is not an independent handler")
@@ -622,10 +608,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 		t.Fatalf("GetService auth_proxy: %v", err)
 	}
 
-	services, err := app.Services()
-	if err != nil {
-		t.Fatalf("Services: %v", err)
-	}
+	services := listTestServices(t, &app)
 	handler, ok := services[0].Handlers[0].AsIndependentHandler()
 	if !ok {
 		t.Fatal("handler is not an independent handler")

@@ -31,12 +31,12 @@ type TestDepManagerSuite struct {
 }
 
 func (test *TestDepManagerSuite) setServiceStartCommand(name string, startCommand string) {
-	services, err := test.topology.config.Services()
+	services, err := test.topology.config.GetServices(rootServicesParent)
 	test.Require().NoError(err)
 	for i := range services {
 		if services[i].Name == name {
 			services[i].StartCommand = startCommand
-			test.Require().NoError(test.topology.config.SetService(services[i]))
+			test.Require().NoError(test.topology.config.SetService(services[i], rootServicesParent))
 			return
 		}
 	}
@@ -44,7 +44,7 @@ func (test *TestDepManagerSuite) setServiceStartCommand(name string, startComman
 	test.Require().NoError(test.topology.config.AddService(config.Service{
 		Name:         name,
 		StartCommand: startCommand,
-	}))
+	}, rootServicesParent))
 }
 
 func (test *TestDepManagerSuite) requireTestBinary(binary string) {
@@ -83,7 +83,7 @@ func (test *TestDepManagerSuite) SetupTest() {
 				},
 			},
 		},
-	}))
+	}, rootServicesParent))
 
 	test.topology = &Topology{
 		config:           &cfg,
@@ -199,7 +199,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	s().NoError(err)
 	service, err := test.topology.config.GetService("test-manager")
 	s().NoError(err)
-	s().NoError(cfg.AddService(service))
+	s().NoError(cfg.AddService(service, rootServicesParent))
 	test.topology = New(&cfg)
 
 	err = test.topology.AddService(config.Service{})
@@ -471,7 +471,7 @@ func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
 				},
 			},
 		},
-	}); err != nil {
+	}, rootServicesParent); err != nil {
 		t.Fatalf("AddService: %v", err)
 	}
 
