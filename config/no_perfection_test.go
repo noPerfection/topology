@@ -1,12 +1,48 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/noPerfection/protocol/message"
 )
+
+func loadServices(t *testing.T, services []Service) (NoPerfection, error) {
+	t.Helper()
+
+	filePath := filepath.Join(t.TempDir(), "test.json")
+	payload, err := json.Marshal(map[string][]Service{"services": services})
+	if err != nil {
+		return NoPerfection{}, err
+	}
+	if err := os.WriteFile(filePath, payload, 0600); err != nil {
+		return NoPerfection{}, err
+	}
+
+	return Load(filePath)
+}
+
+func mustLoadServices(t *testing.T, services []Service) NoPerfection {
+	t.Helper()
+
+	app, err := loadServices(t, services)
+	if err != nil {
+		t.Fatalf("loadServices: %v", err)
+	}
+	return app
+}
+
+func mustLoadEmpty(t *testing.T) NoPerfection {
+	t.Helper()
+
+	app, err := Load(filepath.Join(t.TempDir(), "test.json"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	return app
+}
 
 func TestLoadMissingFile(t *testing.T) {
 	dir := t.TempDir()
@@ -15,16 +51,17 @@ func TestLoadMissingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load missing file: %v", err)
 	}
-	if a.Services == nil {
-		t.Fatal("Services is nil")
+	services, err := a.Services()
+	if err != nil {
+		t.Fatalf("Services: %v", err)
 	}
-	if len(a.Services) != 0 {
-		t.Fatalf("len(Services) = %d, want 0", len(a.Services))
+	if len(services) != 0 {
+		t.Fatalf("len(Services) = %d, want 0", len(services))
 	}
 }
 
 func TestGetService(t *testing.T) {
-	a := NoPerfection{}
+	a := mustLoadEmpty(t)
 	sample := Service{Name: "api", Type: IndependentType}
 	if err := a.AddService(sample); err != nil {
 		t.Fatalf("AddService: %v", err)
@@ -43,37 +80,24 @@ func TestGetService(t *testing.T) {
 	}
 }
 
-func TestGetByType(t *testing.T) {
-	a := NoPerfection{}
-	services := []Service{
-		{Name: "api", Type: IndependentType},
-		{Name: "worker", Type: IndependentType},
-		{Name: "proxy", Type: ProxyType},
-	}
-	for _, s := range services {
-		if err := a.AddService(s); err != nil {
-			t.Fatalf("AddService: %v", err)
-		}
+func TestGetServiceByMushroomURL(t *testing.T) {
+	a := mustLoadEmpty(t)
+	sample := Service{Name: "api", Type: IndependentType}
+	if err := a.AddService(sample); err != nil {
+		t.Fatalf("AddService: %v", err)
 	}
 
-	if _, err := a.GetByType(Type("invalid")); err == nil {
-		t.Fatal("GetByType with invalid type returned nil error")
-	}
-	if _, err := a.GetByType(ExtensionType); err == nil {
-		t.Fatal("GetByType with missing type returned nil error")
-	}
-
-	found, err := a.GetByType(IndependentType)
+	found, err := a.GetService("pkg:$?*var=services[name:api]")
 	if err != nil {
-		t.Fatalf("GetByType independent: %v", err)
+		t.Fatalf("GetService by mushroom url: %v", err)
 	}
 	if found.Name != "api" {
 		t.Fatalf("Name = %q, want api", found.Name)
 	}
 }
 
-func TestFilterByType(t *testing.T) {
-	a := NoPerfection{}
+func TestGetServices(t *testing.T) {
+	a := mustLoadEmpty(t)
 	services := []Service{
 		{Name: "api", Type: IndependentType},
 		{Name: "worker", Type: IndependentType},
@@ -85,16 +109,13 @@ func TestFilterByType(t *testing.T) {
 		}
 	}
 
-	if _, err := a.FilterByType(Type("invalid")); err == nil {
-		t.Fatal("FilterByType with invalid type returned nil error")
-	}
-	if _, err := a.FilterByType(ExtensionType); err == nil {
-		t.Fatal("FilterByType with missing type returned nil error")
+	if _, err := a.GetServices("pkg:$?*var=services[type:Extension]"); err == nil {
+		t.Fatal("GetServices with missing type returned nil error")
 	}
 
-	found, err := a.FilterByType(IndependentType)
+	found, err := a.GetServices("pkg:$?*var=services[type:Independent]")
 	if err != nil {
-		t.Fatalf("FilterByType independent: %v", err)
+		t.Fatalf("GetServices independent: %v", err)
 	}
 	if len(found) != 2 {
 		t.Fatalf("len(found) = %d, want 2", len(found))
@@ -108,7 +129,7 @@ func TestFilterByType(t *testing.T) {
 }
 
 func TestCountByType(t *testing.T) {
-	a := NoPerfection{}
+	a := mustLoadEmpty(t)
 	services := []Service{
 		{Name: "api", Type: IndependentType},
 		{Name: "worker", Type: IndependentType},
@@ -120,19 +141,27 @@ func TestCountByType(t *testing.T) {
 		}
 	}
 
-	if count := a.CountByType(IndependentType); count != 2 {
+	count, err := a.CountByType("pkg:$?*var=services[type:Independent]")
+	if err != nil {
+		t.Fatalf("CountByType independent: %v", err)
+	}
+	if count != 2 {
 		t.Fatalf("CountByType independent = %d, want 2", count)
 	}
-	if count := a.CountByType(ExtensionType); count != 0 {
-		t.Fatalf("CountByType extension = %d, want 0", count)
+
+	count, err = a.CountByType("pkg:$?*var=services[type:Extension]")
+	if err == nil {
+		t.Fatalf("CountByType extension = %d, want error", count)
 	}
-	if count := a.CountByType(Type("invalid")); count != 0 {
-		t.Fatalf("CountByType invalid = %d, want 0", count)
+
+	count, err = a.CountByType("pkg:$?*var=services[type:invalid]")
+	if err == nil {
+		t.Fatalf("CountByType invalid = %d, want error", count)
 	}
 }
 
 func TestSetService(t *testing.T) {
-	a := NoPerfection{}
+	a := mustLoadEmpty(t)
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
 
@@ -145,8 +174,12 @@ func TestSetService(t *testing.T) {
 	if err := a.AddService(second); err != nil {
 		t.Fatalf("AddService second: %v", err)
 	}
-	if len(a.Services) != 2 {
-		t.Fatalf("len(Services) = %d, want 2", len(a.Services))
+	services, err := a.Services()
+	if err != nil {
+		t.Fatalf("Services: %v", err)
+	}
+	if len(services) != 2 {
+		t.Fatalf("len(Services) = %d, want 2", len(services))
 	}
 
 	updated := first
@@ -154,8 +187,12 @@ func TestSetService(t *testing.T) {
 	if err := a.SetService(updated); err != nil {
 		t.Fatalf("SetService update: %v", err)
 	}
-	if len(a.Services) != 2 {
-		t.Fatalf("len(Services) after update = %d, want 2", len(a.Services))
+	services, err = a.Services()
+	if err != nil {
+		t.Fatalf("Services after update: %v", err)
+	}
+	if len(services) != 2 {
+		t.Fatalf("len(Services) after update = %d, want 2", len(services))
 	}
 
 	found, err := a.GetService("api")
@@ -168,7 +205,7 @@ func TestSetService(t *testing.T) {
 }
 
 func TestRemoveService(t *testing.T) {
-	a := NoPerfection{}
+	a := mustLoadEmpty(t)
 	first := Service{Name: "api", Type: IndependentType}
 	second := Service{Name: "proxy", Type: ProxyType}
 	if err := a.AddService(first); err != nil {
@@ -188,11 +225,15 @@ func TestRemoveService(t *testing.T) {
 	if err := a.RemoveService("api"); err != nil {
 		t.Fatalf("RemoveService: %v", err)
 	}
-	if len(a.Services) != 1 {
-		t.Fatalf("len(Services) = %d, want 1", len(a.Services))
+	services, err := a.Services()
+	if err != nil {
+		t.Fatalf("Services: %v", err)
 	}
-	if a.Services[0].Name != "proxy" {
-		t.Fatalf("remaining service = %q, want proxy", a.Services[0].Name)
+	if len(services) != 1 {
+		t.Fatalf("len(Services) = %d, want 1", len(services))
+	}
+	if services[0].Name != "proxy" {
+		t.Fatalf("remaining service = %q, want proxy", services[0].Name)
 	}
 }
 
@@ -233,13 +274,17 @@ func TestLoadSave(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(loaded.Services) != 1 {
-		t.Fatalf("len(Services) = %d, want 1", len(loaded.Services))
+	services, err := loaded.Services()
+	if err != nil {
+		t.Fatalf("Services: %v", err)
 	}
-	if loaded.Services[0].Name != "api" {
-		t.Fatalf("Name = %q, want api", loaded.Services[0].Name)
+	if len(services) != 1 {
+		t.Fatalf("len(Services) = %d, want 1", len(services))
 	}
-	handler, ok := loaded.Services[0].Handlers[0].AsIndependentHandler()
+	if services[0].Name != "api" {
+		t.Fatalf("Name = %q, want api", services[0].Name)
+	}
+	handler, ok := services[0].Handlers[0].AsIndependentHandler()
 	if !ok || handler.Endpoint.Port != 4101 {
 		t.Fatalf("Port = %d, want 4101", handler.Endpoint.Port)
 	}
@@ -251,31 +296,44 @@ func TestSaveWithoutFilePath(t *testing.T) {
 	}
 }
 
+func TestOperationsRequireLoad(t *testing.T) {
+	a := NoPerfection{}
+
+	if _, err := a.GetService("api"); err == nil {
+		t.Fatal("GetService without Load returned nil error")
+	}
+	if err := a.AddService(Service{Name: "api", Type: IndependentType}); err == nil {
+		t.Fatal("AddService without Load returned nil error")
+	}
+}
+
 func TestValidateTopologyInlineService(t *testing.T) {
-	app := NoPerfection{
-		Services: []Service{
-			{
-				Type: IndependentType,
-				Name: "public_api",
-				Handlers: []Handler{
-					IndependentHandler{
-						Type:     ReplierType,
-						Category: "public-api",
-						Endpoint: message.NewEndpoint("public_1", 4101),
-						CommandDeps: []DepService{
-							{
-								Name: "call-user-api",
-								Proxies: []ServicePointer{
-									ServiceTarget(Service{Name: "nested_proxy", Type: ProxyType}),
-								},
+	app := mustLoadServices(t, []Service{
+		{
+			Type: IndependentType,
+			Name: "public_api",
+			Handlers: []Handler{
+				IndependentHandler{
+					Type:     ReplierType,
+					Category: "public-api",
+					Endpoint: message.NewEndpoint("public_1", 4101),
+					CommandDeps: []DepService{
+						{
+							Name: "call-user-api",
+							Proxies: []ServicePointer{
+								ServiceTarget(Service{Name: "nested_proxy", Type: ProxyType}),
 							},
 						},
 					},
 				},
 			},
 		},
+	})
+	publicAPI, err := app.GetService("public_api")
+	if err != nil {
+		t.Fatalf("GetService public_api: %v", err)
 	}
-	handler, ok := app.Services[0].Handlers[0].AsIndependentHandler()
+	handler, ok := publicAPI.Handlers[0].AsIndependentHandler()
 	if !ok {
 		t.Fatal("handler is not an independent handler")
 	}
@@ -288,7 +346,10 @@ func TestValidateTopologyInlineService(t *testing.T) {
 			},
 		},
 	}
-	app.Services[0].Handlers[0] = handler
+	publicAPI.Handlers[0] = handler
+	if err := app.SetService(publicAPI); err != nil {
+		t.Fatalf("SetService public_api: %v", err)
+	}
 
 	if err := app.ValidateTopology(); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
@@ -303,41 +364,39 @@ func TestValidateTopologyInlineService(t *testing.T) {
 }
 
 func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
-	app := NoPerfection{
-		Services: []Service{
-			{
-				Type: IndependentType,
-				Name: "api",
-				Handlers: []Handler{
-					IndependentHandler{
-						Type:     ReplierType,
-						Category: "api",
-						Endpoint: message.NewEndpoint("api_1", 4101),
-					},
+	app := mustLoadServices(t, []Service{
+		{
+			Type: IndependentType,
+			Name: "api",
+			Handlers: []Handler{
+				IndependentHandler{
+					Type:     ReplierType,
+					Category: "api",
+					Endpoint: message.NewEndpoint("api_1", 4101),
 				},
-				HandlerDeps: []DepService{
-					{
-						Name: "api",
-						Proxies: []ServicePointer{
-							ServiceTarget(Service{
-								Type: ProxyType,
-								Name: "inline_proxy",
-								Handlers: []Handler{
-									ProxyHandler{
-										IndependentHandler: IndependentHandler{
-											Type:     ReplierType,
-											Category: "inline",
-											Endpoint: message.NewEndpoint("inline_1", 4201),
-										},
+			},
+			HandlerDeps: []DepService{
+				{
+					Name: "api",
+					Proxies: []ServicePointer{
+						ServiceTarget(Service{
+							Type: ProxyType,
+							Name: "inline_proxy",
+							Handlers: []Handler{
+								ProxyHandler{
+									IndependentHandler: IndependentHandler{
+										Type:     ReplierType,
+										Category: "inline",
+										Endpoint: message.NewEndpoint("inline_1", 4201),
 									},
 								},
-							}),
-						},
+							},
+						}),
 					},
 				},
 			},
 		},
-	}
+	})
 
 	if err := app.ValidateTopology(); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
@@ -348,102 +407,98 @@ func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
 }
 
 func TestValidateTopologyMissingRef(t *testing.T) {
-	app := NoPerfection{
-		Services: []Service{
-			{
-				Type: IndependentType,
-				Name: "api",
-				Handlers: []Handler{
-					IndependentHandler{
-						Type:     ReplierType,
-						Category: "api",
-						Endpoint: message.NewEndpoint("api_1", 4101),
-						CommandDeps: []DepService{
-							{
-								Name:    "route",
-								Proxies: []ServicePointer{RefTarget("missing_proxy")},
-							},
+	_, err := loadServices(t, []Service{
+		{
+			Type: IndependentType,
+			Name: "api",
+			Handlers: []Handler{
+				IndependentHandler{
+					Type:     ReplierType,
+					Category: "api",
+					Endpoint: message.NewEndpoint("api_1", 4101),
+					CommandDeps: []DepService{
+						{
+							Name:    "route",
+							Proxies: []ServicePointer{RefTarget("missing_proxy")},
 						},
 					},
 				},
 			},
 		},
-	}
-
-	if err := app.ValidateTopology(); err == nil {
-		t.Fatal("ValidateTopology with missing ref returned nil error")
+	})
+	if err == nil {
+		t.Fatal("Load with missing ref returned nil error")
 	}
 }
 
 func TestValidateTopologyMissingHandlerDepRef(t *testing.T) {
-	app := NoPerfection{
-		Services: []Service{
-			{
-				Type: IndependentType,
-				Name: "api",
-				Handlers: []Handler{
-					IndependentHandler{
-						Type:     ReplierType,
-						Category: "api",
-						Endpoint: message.NewEndpoint("api_1", 4101),
-					},
+	_, err := loadServices(t, []Service{
+		{
+			Type: IndependentType,
+			Name: "api",
+			Handlers: []Handler{
+				IndependentHandler{
+					Type:     ReplierType,
+					Category: "api",
+					Endpoint: message.NewEndpoint("api_1", 4101),
 				},
-				HandlerDeps: []DepService{
-					{
-						Name:    "api",
-						Proxies: []ServicePointer{RefTarget("missing_proxy")},
-					},
+			},
+			HandlerDeps: []DepService{
+				{
+					Name:    "api",
+					Proxies: []ServicePointer{RefTarget("missing_proxy")},
 				},
 			},
 		},
-	}
-
-	if err := app.ValidateTopology(); err == nil {
-		t.Fatal("ValidateTopology with missing handler-deps ref returned nil error")
+	})
+	if err == nil {
+		t.Fatal("Load with missing handler-deps ref returned nil error")
 	}
 }
 
 func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
-	app := NoPerfection{
-		Services: []Service{
-			{
-				Type: IndependentType,
-				Name: "api",
-				Handlers: []Handler{
-					IndependentHandler{
-						Type:     ReplierType,
-						Category: "api",
-						Endpoint: message.NewEndpoint("api_1", 4101),
-						CommandDeps: []DepService{
-							{
-								Name:    "route",
-								Proxies: []ServicePointer{RefTarget("auth_proxy", "main")},
-							},
-						},
-					},
-				},
-			},
-			{
-				Type: ProxyType,
-				Name: "auth_proxy",
-				Handlers: []Handler{
-					ProxyHandler{
-						IndependentHandler: IndependentHandler{
-							Type:     ReplierType,
-							Category: "main",
-							Endpoint: message.NewEndpoint("auth_1", 4301),
+	app := mustLoadServices(t, []Service{
+		{
+			Type: IndependentType,
+			Name: "api",
+			Handlers: []Handler{
+				IndependentHandler{
+					Type:     ReplierType,
+					Category: "api",
+					Endpoint: message.NewEndpoint("api_1", 4101),
+					CommandDeps: []DepService{
+						{
+							Name:    "route",
+							Proxies: []ServicePointer{RefTarget("auth_proxy", "main")},
 						},
 					},
 				},
 			},
 		},
-	}
+		{
+			Type: ProxyType,
+			Name: "auth_proxy",
+			Handlers: []Handler{
+				ProxyHandler{
+					IndependentHandler: IndependentHandler{
+						Type:     ReplierType,
+						Category: "main",
+						Endpoint: message.NewEndpoint("auth_1", 4301),
+					},
+				},
+			},
+		},
+	})
 
 	if err := app.ValidateTopology(); err != nil {
 		t.Fatalf("ValidateTopology with ref path: %v", err)
 	}
 
-	handler, ok := app.Services[0].Handlers[0].AsIndependentHandler()
+	services, err := app.Services()
+	if err != nil {
+		t.Fatalf("Services: %v", err)
+	}
+	handler, ok := services[0].Handlers[0].AsIndependentHandler()
 	if !ok {
 		t.Fatal("handler is not an independent handler")
 	}
@@ -458,43 +513,40 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 }
 
 func TestValidateTopologyRefPathMissingHandlerCategory(t *testing.T) {
-	app := NoPerfection{
-		Services: []Service{
-			{
-				Type: IndependentType,
-				Name: "api",
-				Handlers: []Handler{
-					IndependentHandler{
-						Type:     ReplierType,
-						Category: "api",
-						Endpoint: message.NewEndpoint("api_1", 4101),
-						CommandDeps: []DepService{
-							{
-								Name:    "route",
-								Proxies: []ServicePointer{RefTarget("auth_proxy", "missing")},
-							},
-						},
-					},
-				},
-			},
-			{
-				Type: ProxyType,
-				Name: "auth_proxy",
-				Handlers: []Handler{
-					ProxyHandler{
-						IndependentHandler: IndependentHandler{
-							Type:     ReplierType,
-							Category: "main",
-							Endpoint: message.NewEndpoint("auth_1", 4301),
+	_, err := loadServices(t, []Service{
+		{
+			Type: IndependentType,
+			Name: "api",
+			Handlers: []Handler{
+				IndependentHandler{
+					Type:     ReplierType,
+					Category: "api",
+					Endpoint: message.NewEndpoint("api_1", 4101),
+					CommandDeps: []DepService{
+						{
+							Name:    "route",
+							Proxies: []ServicePointer{RefTarget("auth_proxy", "missing")},
 						},
 					},
 				},
 			},
 		},
-	}
-
-	if err := app.ValidateTopology(); err == nil {
-		t.Fatal("ValidateTopology with missing ref path handler category returned nil error")
+		{
+			Type: ProxyType,
+			Name: "auth_proxy",
+			Handlers: []Handler{
+				ProxyHandler{
+					IndependentHandler: IndependentHandler{
+						Type:     ReplierType,
+						Category: "main",
+						Endpoint: message.NewEndpoint("auth_1", 4301),
+					},
+				},
+			},
+		},
+	})
+	if err == nil {
+		t.Fatal("Load with missing ref path handler category returned nil error")
 	}
 }
 
@@ -570,7 +622,11 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 		t.Fatalf("GetService auth_proxy: %v", err)
 	}
 
-	handler, ok := app.Services[0].Handlers[0].AsIndependentHandler()
+	services, err := app.Services()
+	if err != nil {
+		t.Fatalf("Services: %v", err)
+	}
+	handler, ok := services[0].Handlers[0].AsIndependentHandler()
 	if !ok {
 		t.Fatal("handler is not an independent handler")
 	}
@@ -584,7 +640,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 	if dep.Proxies[1].Service.Name != "inline_proxy" {
 		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Service)
 	}
-	handlerDep := app.Services[0].HandlerDeps[0]
+	handlerDep := services[0].HandlerDeps[0]
 	if handlerDep.Proxies[0].Ref != "auth_proxy" {
 		t.Fatalf("handler-deps first proxy path = %q, want auth_proxy", handlerDep.Proxies[0].Ref)
 	}

@@ -1,25 +1,25 @@
 module github.com/noPerfection/topology
 
-go 1.19
+go 1.22
 
 require (
-	github.com/noPerfection/topology/config v0.0.0
 	github.com/noPerfection/datatype v0.0.0
 	github.com/noPerfection/log v0.0.0
 	github.com/noPerfection/os v0.0.0
 	github.com/noPerfection/protocol/client v0.0.0
 	github.com/noPerfection/protocol/handler v0.0.0
 	github.com/noPerfection/protocol/message v0.0.0
+	github.com/noPerfection/topology/config v0.0.0
 	github.com/stretchr/testify v1.8.4
 )
 
 require (
+	github.com/ahmetson/mushroom v0.0.0 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/lipgloss v0.8.0 // indirect
 	github.com/charmbracelet/log v0.2.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-logfmt/logfmt v0.6.0 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
@@ -37,11 +37,12 @@ require (
 )
 
 replace (
-	github.com/noPerfection/topology/config => ./config
+	github.com/ahmetson/mushroom => /home/medet/ahmetson/mushroom
 	github.com/noPerfection/datatype => ../datatype
 	github.com/noPerfection/log => ../log
 	github.com/noPerfection/os => ../os
 	github.com/noPerfection/protocol/client => ../protocol/client
 	github.com/noPerfection/protocol/handler => ../protocol/handler
 	github.com/noPerfection/protocol/message => ../protocol/message
+	github.com/noPerfection/topology/config => ./config
 )

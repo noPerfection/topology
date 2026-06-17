@@ -42,7 +42,10 @@ func (test *TestHandlerSuite) SetupTest() {
 	test.logger = logger
 
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{})
+	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
+	cfg, err := config.Load(cfgPath)
+	s().NoError(err)
+	test.depHandler, err = newHandler(&cfg)
 	s().NoError(err)
 
 	// Start the handler
@@ -121,7 +124,11 @@ func TestHandlerTopologyInterfaceBeforeStart(t *testing.T) {
 }
 
 func TestHandlerStartSkipsWhenTopologyAlreadyRunning(t *testing.T) {
-	appConfig := config.NoPerfection{}
+	cfgPath := filepath.Join(t.TempDir(), "app.json")
+	appConfig, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
 	first, err := newHandler(&appConfig)
 	if err != nil {
 		t.Fatalf("newHandler first: %v", err)

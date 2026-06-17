@@ -2,39 +2,165 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/ahmetson/mushroom/substrates/json_substrate"
 )
 
 // NoPerfection is the configuration of the entire application.
 // Consists the supported services.
 type NoPerfection struct {
-	Services []Service `json:"services"`
+	mycelium *json_substrate.Mycelium
 	filePath string
+}
+
+const (
+	defaultServicesURL      = "pkg:$?var=services"
+	defaultServicesQueryURL = "pkg:$?*var=services"
+)
+
+func resolveParentURL(parent ...string) string {
+	if len(parent) > 0 && parent[0] != "" {
+		return parent[0]
+	}
+	return defaultServicesURL
+}
+
+func normalizeServiceURL(mushroomURL string) string {
+	if strings.HasPrefix(mushroomURL, "pkg:") || strings.HasPrefix(mushroomURL, "*pkg:") {
+		return mushroomURL
+	}
+	return fmt.Sprintf("%s[name:%s]", defaultServicesQueryURL, mushroomURL)
+}
+
+func (a *NoPerfection) queryMycelium(mushroomURL string) (any, error) {
+	if a == nil {
+		return nil, fmt.Errorf("app struct is nil")
+	}
+	if a.mycelium == nil {
+		return nil, fmt.Errorf("topology mycelium not set, call config.Load()")
+	}
+
+	spored, err := a.mycelium.Spore(mushroomURL)
+	if err != nil {
+		return nil, fmt.Errorf("mycelium.Spore(%q): %w", mushroomURL, err)
+	}
+
+	fruited, err := a.mycelium.Fruit(spored)
+	if err != nil {
+		return nil, fmt.Errorf("mycelium.Fruit: %w", err)
+	}
+
+	return fruited, nil
+}
+
+func decodeService(value any) (Service, error) {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return Service{}, fmt.Errorf("value is not a service: %w", err)
+	}
+
+	var service Service
+	if err := json.Unmarshal(data, &service); err != nil {
+		return Service{}, fmt.Errorf("value is not a service: %w", err)
+	}
+	if service.Name == "" {
+		return Service{}, fmt.Errorf("value is not a service: missing name")
+	}
+
+	return service, nil
+}
+
+func decodeServices(value any) ([]Service, error) {
+	items, ok := value.([]any)
+	if !ok {
+		return nil, fmt.Errorf("mushroom url is fetching wrong data: expected array, got %T", value)
+	}
+
+	services := make([]Service, 0, len(items))
+	for _, item := range items {
+		service, err := decodeService(item)
+		if err != nil {
+			return nil, fmt.Errorf("mushroom url is fetching wrong data: %w", err)
+		}
+		services = append(services, service)
+	}
+
+	return services, nil
+}
+
+func encodeServiceMap(record Service) (map[string]any, error) {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return nil, fmt.Errorf("json.Marshal service: %w", err)
+	}
+
+	var serviceMap map[string]any
+	if err := json.Unmarshal(data, &serviceMap); err != nil {
+		return nil, fmt.Errorf("json.Unmarshal service map: %w", err)
+	}
+
+	return serviceMap, nil
+}
+
+func unwrapServiceValue(value any) (any, error) {
+	items, ok := value.([]any)
+	if !ok {
+		return value, nil
+	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("service not found")
+	}
+	if len(items) > 1 {
+		return nil, fmt.Errorf("multiple services matched")
+	}
+	return items[0], nil
+}
+
+func serviceExists(services []Service, name string) bool {
+	for _, service := range services {
+		if service.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Load loads an app configuration from a JSON file.
 // If the file does not exist, it creates a new configuration with the empty services list.
 func Load(filePath string) (NoPerfection, error) {
-	appConfig := NoPerfection{
-		Services: make([]Service, 0),
-		filePath: filePath,
+	if !strings.HasSuffix(filePath, ".json") {
+		return NoPerfection{}, fmt.Errorf("config file %q must end with .json", filePath)
 	}
+
+	appConfig := NoPerfection{filePath: filePath}
+	myceliumURL := fmt.Sprintf("pkg:json/%s#%s", filepath.Dir(filePath), filepath.Base(filePath))
 
 	data, err := os.ReadFile(filePath)
 	if errors.Is(err, fs.ErrNotExist) {
+		mycelium, err := json_substrate.Digest(myceliumURL, `{"services":[]}`)
+		if err != nil {
+			return NoPerfection{}, fmt.Errorf("digest mycelium: %w", err)
+		}
+		appConfig.mycelium = mycelium
 		return appConfig, nil
 	}
 	if err != nil {
 		return NoPerfection{}, fmt.Errorf("os.ReadFile('%s'): %w", filePath, err)
 	}
 
-	if err := json.Unmarshal(data, &appConfig); err != nil {
-		return NoPerfection{}, fmt.Errorf("json.Unmarshal: %w", err)
+	mycelium, err := json_substrate.Digest(myceliumURL, string(data))
+	if err != nil {
+		return NoPerfection{}, fmt.Errorf("digest mycelium: %w", err)
 	}
+	appConfig.mycelium = mycelium
 
 	if err := appConfig.ValidateTopology(); err != nil {
 		return NoPerfection{}, fmt.Errorf("ValidateTopology: %w", err)
@@ -50,14 +176,19 @@ func (a *NoPerfection) ValidateTopology() error {
 		return fmt.Errorf("app struct is nil")
 	}
 
+	services, err := a.Services()
+	if err != nil {
+		return err
+	}
+
 	visiting := make(map[string]bool)
-	for i := range a.Services {
-		if err := a.validateServiceTopology(&a.Services[i], visiting); err != nil {
-			return fmt.Errorf("service %q: %w", a.Services[i].Name, err)
+	for i := range services {
+		if err := a.validateServiceTopology(&services[i], visiting); err != nil {
+			return fmt.Errorf("service %q: %w", services[i].Name, err)
 		}
 	}
 
-	return a.validatePointedRefs()
+	return a.validatePointedRefs(services)
 }
 
 func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[string]bool) error {
@@ -161,8 +292,8 @@ func (a *NoPerfection) validateServicePointerTopology(target *ServicePointer, vi
 	return nil
 }
 
-func (a *NoPerfection) validatePointedRefs() error {
-	for _, service := range a.Services {
+func (a *NoPerfection) validatePointedRefs(services []Service) error {
+	for _, service := range services {
 		if err := a.validateServiceRefs(service); err != nil {
 			return fmt.Errorf("service %q: %w", service.Name, err)
 		}
@@ -256,82 +387,86 @@ func (a NoPerfection) Save() error {
 	if len(a.filePath) == 0 {
 		return fmt.Errorf("app file path is empty")
 	}
-
-	data, err := json.MarshalIndent(a, "", "  ")
-	if err != nil {
-		return fmt.Errorf("json.MarshalIndent: %w", err)
+	if a.mycelium == nil {
+		return fmt.Errorf("topology mycelium not set, call config.Load()")
 	}
-	data = append(data, '\n')
 
-	if err := os.WriteFile(a.filePath, data, 0600); err != nil {
+	raw, err := a.mycelium.Mineralize()
+	if err != nil {
+		return fmt.Errorf("mycelium.Mineralize: %w", err)
+	}
+
+	jsonText, ok := raw.(string)
+	if !ok {
+		return fmt.Errorf("mycelium.Mineralize returned %T, want string", raw)
+	}
+
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, []byte(jsonText), "", "  "); err != nil {
+		return fmt.Errorf("json.Indent: %w", err)
+	}
+	indented.WriteByte('\n')
+
+	if err := os.WriteFile(a.filePath, indented.Bytes(), 0600); err != nil {
 		return fmt.Errorf("os.WriteFile('%s'): %w", a.filePath, err)
 	}
 
 	return nil
 }
 
-// GetService returns a service by name from the app configuration.
-// If not found, return an error.
-func (a *NoPerfection) GetService(name string) (Service, error) {
-	for i := range a.Services {
-		if a.Services[i].Name == name {
-			return a.Services[i], nil
-		}
-	}
-
-	return Service{}, fmt.Errorf("service('%s') not found", name)
+// Services returns all configured services from the root services array.
+func (a *NoPerfection) Services() ([]Service, error) {
+	return a.GetServices(defaultServicesQueryURL)
 }
 
-// GetByType returns the first service of the given type from the app configuration.
-// If the service type is invalid or no service is found, return an error.
-func (a *NoPerfection) GetByType(serviceType Type) (*Service, error) {
-	if err := ValidateServiceType(serviceType); err != nil {
-		return nil, fmt.Errorf("ValidateServiceType: %w", err)
+// GetService resolves a Mushroom URL and returns a single service.
+// Plain service names are resolved as pkg:$?*var=services[name:<name>].
+func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
+	fruited, err := a.queryMycelium(normalizeServiceURL(mushroomURL))
+	if err != nil {
+		return Service{}, err
 	}
 
-	for i := range a.Services {
-		if a.Services[i].Type == serviceType {
-			return &a.Services[i], nil
-		}
+	value, err := unwrapServiceValue(fruited)
+	if err != nil {
+		return Service{}, fmt.Errorf("GetService(%q): %w", mushroomURL, err)
 	}
 
-	return nil, fmt.Errorf("service of '%s' type not found", serviceType)
+	service, err := decodeService(value)
+	if err != nil {
+		return Service{}, fmt.Errorf("GetService(%q): %w", mushroomURL, err)
+	}
+
+	return service, nil
 }
 
-// FilterByType returns all services of the given type from the app configuration.
-// If the service type is invalid or no services are found, return an error.
-func (a *NoPerfection) FilterByType(serviceType Type) ([]*Service, error) {
-	if err := ValidateServiceType(serviceType); err != nil {
-		return nil, fmt.Errorf("ValidateServiceType: %w", err)
+// GetServices resolves a Mushroom URL and returns the services at that path.
+func (a *NoPerfection) GetServices(mushroomURL string) ([]Service, error) {
+	fruited, err := a.queryMycelium(mushroomURL)
+	if err != nil {
+		return nil, err
 	}
 
-	services := make([]*Service, 0)
-	for i := range a.Services {
-		if a.Services[i].Type == serviceType {
-			services = append(services, &a.Services[i])
-		}
+	services, err := decodeServices(fruited)
+	if err != nil {
+		return nil, fmt.Errorf("GetServices(%q): %w", mushroomURL, err)
 	}
 
-	if len(services) == 0 {
-		return nil, fmt.Errorf("no services of '%s' type found", serviceType)
-	}
 	return services, nil
 }
 
-// CountByType returns the amount of services of the given type.
-func (a *NoPerfection) CountByType(serviceType Type) int {
-	count := 0
-	for i := range a.Services {
-		if a.Services[i].Type == serviceType {
-			count++
-		}
+// CountByType returns the number of services resolved by the Mushroom URL.
+func (a *NoPerfection) CountByType(mushroomURL string) (int, error) {
+	services, err := a.GetServices(mushroomURL)
+	if err != nil {
+		return 0, err
 	}
-
-	return count
+	return len(services), nil
 }
 
-// AddService adds a new service into the configuration.
-func (a *NoPerfection) AddService(record Service) error {
+// AddService adds a new service into the services array at parent.
+// parent defaults to pkg:$?var=services.
+func (a *NoPerfection) AddService(record Service, parent ...string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
@@ -339,17 +474,29 @@ func (a *NoPerfection) AddService(record Service) error {
 		return fmt.Errorf("service name is empty")
 	}
 
-	for _, old := range a.Services {
-		if old.Name == record.Name {
-			return fmt.Errorf("service('%s') already exists", record.Name)
-		}
+	parentURL := resolveParentURL(parent...)
+	services, err := a.GetServices(parentURL)
+	if err != nil {
+		return fmt.Errorf("GetServices(%q): %w", parentURL, err)
 	}
-	a.Services = append(a.Services, record)
+	if serviceExists(services, record.Name) {
+		return fmt.Errorf("service('%s') already exists", record.Name)
+	}
+
+	serviceMap, err := encodeServiceMap(record)
+	if err != nil {
+		return err
+	}
+	if err := a.mycelium.Graft(parentURL, serviceMap); err != nil {
+		return fmt.Errorf("mycelium.Graft(%q): %w", parentURL, err)
+	}
+
 	return nil
 }
 
-// SetService updates an existing service in the configuration.
-func (a *NoPerfection) SetService(record Service) error {
+// SetService updates an existing service in the services array at parent.
+// parent defaults to pkg:$?var=services.
+func (a *NoPerfection) SetService(record Service, parent ...string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
@@ -357,18 +504,31 @@ func (a *NoPerfection) SetService(record Service) error {
 		return fmt.Errorf("service name is empty")
 	}
 
-	for i, old := range a.Services {
-		if old.Name == record.Name {
-			a.Services[i] = record
-			return nil
-		}
+	parentURL := resolveParentURL(parent...)
+	services, err := a.GetServices(parentURL)
+	if err != nil {
+		return fmt.Errorf("GetServices(%q): %w", parentURL, err)
+	}
+	if !serviceExists(services, record.Name) {
+		return fmt.Errorf("service('%s') not found", record.Name)
 	}
 
-	return fmt.Errorf("service('%s') not found", record.Name)
+	serviceMap, err := encodeServiceMap(record)
+	if err != nil {
+		return err
+	}
+
+	targetURL := fmt.Sprintf("%s[name:%s]", parentURL, record.Name)
+	if err := a.mycelium.Inoculate(targetURL, serviceMap); err != nil {
+		return fmt.Errorf("mycelium.Inoculate(%q): %w", targetURL, err)
+	}
+
+	return nil
 }
 
-// RemoveService removes a service by name from the app configuration.
-func (a *NoPerfection) RemoveService(name string) error {
+// RemoveService removes a service by name from the services array at parent.
+// parent defaults to pkg:$?var=services.
+func (a *NoPerfection) RemoveService(name string, parent ...string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
@@ -376,12 +536,19 @@ func (a *NoPerfection) RemoveService(name string) error {
 		return fmt.Errorf("service name argument is empty")
 	}
 
-	for i := range a.Services {
-		if a.Services[i].Name == name {
-			a.Services = append(a.Services[:i], a.Services[i+1:]...)
-			return nil
-		}
+	parentURL := resolveParentURL(parent...)
+	services, err := a.GetServices(parentURL)
+	if err != nil {
+		return fmt.Errorf("GetServices(%q): %w", parentURL, err)
+	}
+	if !serviceExists(services, name) {
+		return fmt.Errorf("service('%s') not found", name)
 	}
 
-	return fmt.Errorf("service('%s') not found", name)
+	targetURL := fmt.Sprintf("%s[name:%s]", parentURL, name)
+	if err := a.mycelium.Prune(targetURL); err != nil {
+		return fmt.Errorf("mycelium.Prune(%q): %w", targetURL, err)
+	}
+
+	return nil
 }

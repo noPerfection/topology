@@ -31,17 +31,20 @@ type TestDepManagerSuite struct {
 }
 
 func (test *TestDepManagerSuite) setServiceStartCommand(name string, startCommand string) {
-	for i := range test.topology.config.Services {
-		if test.topology.config.Services[i].Name == name {
-			test.topology.config.Services[i].StartCommand = startCommand
+	services, err := test.topology.config.Services()
+	test.Require().NoError(err)
+	for i := range services {
+		if services[i].Name == name {
+			services[i].StartCommand = startCommand
+			test.Require().NoError(test.topology.config.SetService(services[i]))
 			return
 		}
 	}
 
-	test.topology.config.Services = append(test.topology.config.Services, config.Service{
+	test.Require().NoError(test.topology.config.AddService(config.Service{
 		Name:         name,
 		StartCommand: startCommand,
-	})
+	}))
 }
 
 func (test *TestDepManagerSuite) requireTestBinary(binary string) {
@@ -64,25 +67,26 @@ func (test *TestDepManagerSuite) SetupTest() {
 	s().NoError(err)
 	test.currentDir = currentDir
 
-	test.topology = &Topology{
-		config: &config.NoPerfection{
-			Services: []config.Service{
-				{
-					Type:         config.ProxyType,
-					Name:         "test-manager",
-					StartCommand: "test",
-					Handlers: []config.Handler{
-						config.ProxyHandler{
-							IndependentHandler: config.IndependentHandler{
-								Type:     config.ReplierType,
-								Category: ServiceManagerCategory,
-								Endpoint: message.NewEndpoint("test-manager", 6000),
-							},
-						},
-					},
+	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
+	cfg, err := config.Load(cfgPath)
+	s().NoError(err)
+	s().NoError(cfg.AddService(config.Service{
+		Type:         config.ProxyType,
+		Name:         "test-manager",
+		StartCommand: "test",
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("test-manager", 6000),
 				},
 			},
 		},
+	}))
+
+	test.topology = &Topology{
+		config:           &cfg,
 		sameServices:     make(map[string]int),
 		runningProcesses: make(map[string]*Process, 0),
 		timeout:          DefaultTimeout,
@@ -101,10 +105,12 @@ func (test *TestDepManagerSuite) SetupTest() {
 func (test *TestDepManagerSuite) Test_0_New() {
 	s := test.Require
 
-	cfg := &config.NoPerfection{}
-	depTopology := New(cfg)
+	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
+	cfg, err := config.Load(cfgPath)
+	s().NoError(err)
+	depTopology := New(&cfg)
 	s().NotNil(depTopology)
-	s().Same(cfg, depTopology.config)
+	s().Same(&cfg, depTopology.config)
 	s().NotNil(depTopology.sameServices)
 	s().NotNil(depTopology.runningProcesses)
 	s().Equal(DefaultTimeout, depTopology.timeout)
@@ -120,8 +126,10 @@ func (test *TestDepManagerSuite) Test_10_GenerateId() {
 	s().Equal("test-manager1", id)
 	s().Equal(1, test.topology.sameServices[test.id])
 
+	service, err := test.topology.config.GetService("test-manager")
+	s().NoError(err)
 	test.topology.runningProcesses[id] = &Process{
-		config: &test.topology.config.Services[0],
+		config: &service,
 		id:     id,
 	}
 
@@ -189,7 +197,9 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
 	cfg, err := config.Load(cfgPath)
 	s().NoError(err)
-	s().NoError(cfg.AddService(test.topology.config.Services[0]))
+	service, err := test.topology.config.GetService("test-manager")
+	s().NoError(err)
+	s().NoError(cfg.AddService(service))
 	test.topology = New(&cfg)
 
 	err = test.topology.AddService(config.Service{})
@@ -436,28 +446,37 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 }
 
 func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
-	tp := &Topology{
-		config: &config.NoPerfection{
-			Services: []config.Service{
-				{
-					Type:         config.ProxyType,
-					Name:         "ipc-proxy",
-					StartCommand: "true",
-					Handlers: []config.Handler{
-						config.IndependentHandler{
-							Type:     config.SyncReplierType,
-							Category: "main",
-							Endpoint: message.NewEndpoint("tmp/unreachable_proxy", 0),
-						},
-						config.IndependentHandler{
-							Type:     config.SyncReplierType,
-							Category: ServiceManagerCategory,
-							Endpoint: message.NewEndpoint("tmp/unreachable_proxy_manager", 0),
-						},
-					},
+	cfgPath := filepath.Join(t.TempDir(), "app.json")
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if err := cfg.AddService(config.Service{
+		Type:         config.ProxyType,
+		Name:         "ipc-proxy",
+		StartCommand: "true",
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.SyncReplierType,
+					Category: "main",
+					Endpoint: message.NewEndpoint("tmp/unreachable_proxy", 0),
+				},
+			},
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.SyncReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("tmp/unreachable_proxy_manager", 0),
 				},
 			},
 		},
+	}); err != nil {
+		t.Fatalf("AddService: %v", err)
+	}
+
+	tp := &Topology{
+		config:           &cfg,
 		sameServices:     make(map[string]int),
 		runningProcesses: make(map[string]*Process),
 		timeout:          time.Millisecond * 100,

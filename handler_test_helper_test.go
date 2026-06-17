@@ -10,7 +10,7 @@ import (
 
 func newHandler(appConfig *config.NoPerfection) (*Handler, error) {
 	if appConfig == nil {
-		appConfig = &config.NoPerfection{}
+		return nil, fmt.Errorf("app config is nil, call config.Load() first")
 	}
 
 	handler := replier.New()

@@ -135,10 +135,15 @@ func (tp *Topology) Services() ([]config.Service, error) {
 		return nil, fmt.Errorf("nil config")
 	}
 
-	services := make([]config.Service, len(tp.config.Services))
-	copy(services, tp.config.Services)
+	services, err := tp.config.Services()
+	if err != nil {
+		return nil, fmt.Errorf("tp.config.Services: %w", err)
+	}
 
-	return services, nil
+	copied := make([]config.Service, len(services))
+	copy(copied, services)
+
+	return copied, nil
 }
 
 // SetService updates an existing service in the topology configuration.

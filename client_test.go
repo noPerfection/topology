@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -39,7 +40,10 @@ func (test *TestClientSuite) SetupTest() {
 	test.logger = logger
 
 	var err error
-	test.depHandler, err = newHandler(&config.NoPerfection{})
+	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
+	cfg, err := config.Load(cfgPath)
+	s().NoError(err)
+	test.depHandler, err = newHandler(&cfg)
 	s().NoError(err)
 
 	// Start the handler
