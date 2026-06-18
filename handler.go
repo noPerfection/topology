@@ -19,16 +19,16 @@ import (
 
 const (
 	TopologyHandlerCategory = "service_topology" // handler category
-	TopologySocketType        = handlerConfig.ReplierType
-	IsRunning                 = "is-running"
-	IsServiceRunning          = "is-service-running"
-	StartService              = "start-service"
-	StopService               = "stop-service"
-	Service                   = "service"
-	Services                  = "services"
-	AddService                = "add-service"
-	SetService                = "set-service"
-	RemoveService             = "remove-service"
+	TopologySocketType      = handlerConfig.ReplierType
+	IsRunning               = "is-running"
+	IsServiceRunning        = "is-service-running"
+	StartService            = "start-service"
+	StopService             = "stop-service"
+	Service                 = "service"
+	Services                = "services"
+	AddService              = "add-service"
+	SetService              = "set-service"
+	RemoveService           = "remove-service"
 )
 
 // Handler acts as the router from other app processes to the topology.
@@ -56,10 +56,14 @@ func HandlerConfig() *handlerConfig.Handler {
 
 // NewHandler loads app config, ensures the independent topology service entry exists,
 // persists config when it changed, and returns a dependency topology handler.
-func NewHandler(configPath string) (*Handler, error) {
-	appConfig, err := config.Load(configPath)
+//
+// configMushroomURL is the mushroom URL of the service to load the config from.
+// If its starts with "pkg:", then it is a mushroom URL and the config is loaded from the package.
+// Otherwise, it is a file path and the config is loaded from the file that internally converted into mushroom url.
+func NewHandler(configMushroomURL string) (*Handler, error) {
+	appConfig, err := config.Load(configMushroomURL)
 	if err != nil {
-		return nil, fmt.Errorf("config.Load('%s'): %w", configPath, err)
+		return nil, fmt.Errorf("config.Load('%s'): %w", configMushroomURL, err)
 	}
 
 	handler := replier.New()
