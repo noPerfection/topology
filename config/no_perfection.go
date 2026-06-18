@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ahmetson/mushroom"
 	"github.com/ahmetson/mushroom/substrates/json_substrate"
 )
 
@@ -125,14 +126,24 @@ func serviceExists(services []Service, name string) bool {
 	return false
 }
 
-// Load loads an app configuration from a JSON file.
-// If the file does not exist, it seeds an empty services list and loads via Root.
-func Load(filePath string) (NoPerfection, error) {
-	if !strings.HasSuffix(filePath, ".json") {
-		return NoPerfection{}, fmt.Errorf("config file %q must end with .json", filePath)
+// Load loads an app configuration from a symbolic file path or a Mushroom link URL.
+//
+// Symbolic paths are plain filesystem paths ending in .json (e.g. "noPerfection.json",
+// "/etc/app/noPerfection.json"). They are turned into a json mycelium link:
+//
+//	noPerfection.json  →  pkg:json/.#noPerfection.json
+//
+// Mushroom URLs must be links (not dereferences), use substrate type json, refer to a
+// module (no ?var= resource path), and end with a .json module id
+// (e.g. pkg:json/tmp#app.json).
+//
+// If the backing file does not exist, Load seeds an empty services list. When the file
+// already exists, Load validates the topology graph.
+func Load(mushroomURL string) (NoPerfection, error) {
+	linkURL, filePath, err := resolveLoadMyceliumURL(mushroomURL)
+	if err != nil {
+		return NoPerfection{}, err
 	}
-
-	myceliumURL := fmt.Sprintf("pkg:json/%s#%s", filepath.Dir(filePath), filepath.Base(filePath))
 
 	loaded := true
 	if _, err := os.Stat(filePath); errors.Is(err, fs.ErrNotExist) {
@@ -147,9 +158,9 @@ func Load(filePath string) (NoPerfection, error) {
 		return NoPerfection{}, fmt.Errorf("os.Stat('%s'): %w", filePath, err)
 	}
 
-	mycelium, err := json_substrate.Root(myceliumURL)
+	mycelium, err := json_substrate.Root(linkURL)
 	if err != nil {
-		return NoPerfection{}, fmt.Errorf("json_substrate.Root(%q): %w", myceliumURL, err)
+		return NoPerfection{}, fmt.Errorf("json_substrate.Root(%q): %w", linkURL, err)
 	}
 
 	appConfig := NoPerfection{mycelium: mycelium}
@@ -161,6 +172,51 @@ func Load(filePath string) (NoPerfection, error) {
 	}
 
 	return appConfig, nil
+}
+
+// resolveLoadMyceliumURL maps a Load argument to a json mycelium link and filesystem path.
+func resolveLoadMyceliumURL(arg string) (linkURL string, filePath string, err error) {
+	if arg == "" {
+		return "", "", fmt.Errorf("mushroom url is empty")
+	}
+
+	if strings.HasPrefix(arg, "*pkg:") {
+		return "", "", fmt.Errorf("Load mushroom URL %q must be a link, not a dereference", arg)
+	}
+
+	if strings.HasPrefix(arg, "pkg:") {
+		soil := &mushroom.Soil{}
+		hypha, parseErr := soil.Hypha(arg)
+		if parseErr != nil {
+			return "", "", fmt.Errorf("soil.Hypha(%q): %w", arg, parseErr)
+		}
+		if hypha.Dereference {
+			return "", "", fmt.Errorf("Load mushroom URL %q must be a link, not a dereference", arg)
+		}
+		if hypha.Type != "json" {
+			return "", "", fmt.Errorf("Load mushroom URL %q type must be json, got %q", arg, hypha.Type)
+		}
+		if hypha.ModuleID == "" {
+			return "", "", fmt.Errorf("Load mushroom URL %q must include a module", arg)
+		}
+		if !strings.HasSuffix(hypha.ModuleID, ".json") {
+			return "", "", fmt.Errorf("Load mushroom URL %q module must end with .json", arg)
+		}
+		if hypha.PackageID == "" {
+			return "", "", fmt.Errorf("Load mushroom URL %q must include a package", arg)
+		}
+		if hypha.ResourceKind != "" {
+			return "", "", fmt.Errorf("Load mushroom URL %q must refer to a module, not a resource path", arg)
+		}
+		return hypha.String(), filepath.Join(hypha.PackageID, hypha.ModuleID), nil
+	}
+
+	if !strings.HasSuffix(arg, ".json") {
+		return "", "", fmt.Errorf("config file %q must end with .json", arg)
+	}
+
+	link := fmt.Sprintf("pkg:json/%s#%s", filepath.Dir(arg), filepath.Base(arg))
+	return link, arg, nil
 }
 
 func (a *NoPerfection) validateTopology(servicesURL string) error {

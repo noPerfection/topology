@@ -2,8 +2,10 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/noPerfection/protocol/message"
@@ -653,6 +655,62 @@ func TestLoadProxyChainExample(t *testing.T) {
 		if _, err := app.GetService(name); err == nil {
 			t.Fatalf("GetService(%q) returned nil error for inline service", name)
 		}
+	}
+}
+
+func TestLoadMushroomURL(t *testing.T) {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "app.json")
+	if err := os.WriteFile(filePath, []byte("{\n  \"services\": []\n}\n"), 0600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	app, err := Load(fmt.Sprintf("pkg:json/%s#app.json", dir))
+	if err != nil {
+		t.Fatalf("Load mushroom URL: %v", err)
+	}
+	if _, err := app.GetServices(testServicesParent); err != nil {
+		t.Fatalf("GetServices: %v", err)
+	}
+}
+
+func TestLoadRejectsDereferenceMushroomURL(t *testing.T) {
+	_, err := Load("*pkg:json/tmp#app.json")
+	if err == nil {
+		t.Fatal("Load dereference URL: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "link") {
+		t.Fatalf("Load dereference URL error = %q, want link mention", err.Error())
+	}
+}
+
+func TestLoadRejectsNonJSONMushroomType(t *testing.T) {
+	_, err := Load("pkg:yaml/tmp#app.json")
+	if err == nil {
+		t.Fatal("Load non-json type: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "type must be json") {
+		t.Fatalf("Load non-json type error = %q", err.Error())
+	}
+}
+
+func TestLoadRejectsMushroomURLWithoutJSONModule(t *testing.T) {
+	_, err := Load("pkg:json/tmp#app.yaml")
+	if err == nil {
+		t.Fatal("Load non-json module: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "module must end with .json") {
+		t.Fatalf("Load non-json module error = %q", err.Error())
+	}
+}
+
+func TestLoadRejectsMushroomURLWithResourcePath(t *testing.T) {
+	_, err := Load("pkg:json/tmp#app.json?var=services")
+	if err == nil {
+		t.Fatal("Load resource path: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "module, not a resource path") {
+		t.Fatalf("Load resource path error = %q", err.Error())
 	}
 }
 

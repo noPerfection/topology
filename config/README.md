@@ -51,6 +51,32 @@ See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a complet
 
 `Load` calls `json_substrate.Root`, which forages the JSON file from disk and germinates a mycelium. `Save` mineralizes in memory and persists with `Substrate.Sow`.
 
+### `Load(mushroomURL)`
+
+`Load` accepts either a **symbolic file path** or a **Mushroom link URL**.
+
+| Form | Example | Mycelium link |
+|------|---------|---------------|
+| Symbolic path | `noPerfection.json`, `/etc/app/noPerfection.json` | `pkg:json/.#noPerfection.json` |
+| Mushroom link | `pkg:json/tmp#app.json` | used as-is (normalized via `Hypha`) |
+
+Mushroom link requirements:
+
+- must be a **link** (`pkg:…`), not a dereference (`*pkg:…`)
+- substrate **type** must be `json`
+- **module** id must end with `.json`
+- must refer to a **module** only (no `?var=` resource path)
+
+If the backing file does not exist, `Load` creates parent directories, seeds `{"services":[]}`, and skips topology validation. When the file already exists, `Load` validates the graph.
+
+```go
+// Symbolic path (same as before)
+app, err := config.Load("noPerfection.json")
+
+// Explicit Mushroom link
+app, err := config.Load("pkg:json/tmp#app.json")
+```
+
 ## Mycelium Storage
 
 Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` uses `json_substrate.Root` (forage + germinate). Reads and writes go through **dereference** Mushroom URLs (`*pkg:$?var=`) via `Spore`/`Fruit`; mutations use `Graft`/`Inoculate`/`Prune`. `Save` uses `Mineralize` and `Sow`.
@@ -260,7 +286,7 @@ Endpoint `port` defaults to `0` when omitted.
 
 ## Validation
 
-`Load` validates the graph via an internal `validateTopology` check.
+`Load` validates the graph via an internal `validateTopology` check when the JSON file already exists on disk.
 
 Validation checks service names, service types, handler types, handler categories, endpoint ids, dependency target shape, inline service definitions, and ref existence. If a ref includes a handler category, the referenced service must contain that category.
 
