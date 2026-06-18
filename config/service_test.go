@@ -580,6 +580,57 @@ func TestServiceEqualHandlers(t *testing.T) {
 	}
 }
 
+func TestProxyHandlerSetOutbound(t *testing.T) {
+	proxy := ProxyHandler{
+		Outbounds: []Service{{
+			Type: IndependentType,
+			Name: "custom-service",
+			Handlers: []Handler{IndependentHandler{
+				Type:     ReplierType,
+				Category: "api",
+				Endpoint: message.NewEndpoint("api", 4101),
+			}},
+		}},
+	}
+	outbound := Service{
+		Type: IndependentType,
+		Name: "custom-service",
+		Handlers: []Handler{IndependentHandler{
+			Type:     ReplierType,
+			Category: "web",
+			Endpoint: message.NewEndpoint("web", 4102),
+		}},
+	}
+
+	if !proxy.SetOutbound(outbound) {
+		t.Fatal("SetOutbound returned false, want true for handler update")
+	}
+	_, err := proxy.Outbounds[0].HandlerByCategory("web")
+	if err != nil {
+		t.Fatalf("HandlerByCategory(web): %v", err)
+	}
+
+	if proxy.SetOutbound(outbound) {
+		t.Fatal("SetOutbound returned true, want false when already set")
+	}
+
+	newOutbound := Service{
+		Type: IndependentType,
+		Name: "other-service",
+		Handlers: []Handler{IndependentHandler{
+			Type:     ReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("main", 4200),
+		}},
+	}
+	if !proxy.SetOutbound(newOutbound) {
+		t.Fatal("SetOutbound returned false, want true for append")
+	}
+	if len(proxy.Outbounds) != 2 {
+		t.Fatalf("len(Outbounds) = %d, want 2", len(proxy.Outbounds))
+	}
+}
+
 func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
 	serviceConfig.Handlers = []Handler{handlerOfType}

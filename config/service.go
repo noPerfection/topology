@@ -77,6 +77,27 @@ func (h ProxyHandler) AsProxyHandler() (ProxyHandler, bool) {
 	return h, true
 }
 
+// SetOutbound updates or appends outbound on the proxy handler.
+// If an outbound with the same service identity already exists but handlers differ, it updates that entry.
+// If identity and handlers already match, it does nothing.
+// Otherwise it appends outbound.
+// Returns whether the proxy handler was modified.
+func (p *ProxyHandler) SetOutbound(outbound Service) bool {
+	for i := range p.Outbounds {
+		if !p.Outbounds[i].Equal(outbound) {
+			continue
+		}
+		if p.Outbounds[i].EqualHandlers(outbound) {
+			return false
+		}
+		p.Outbounds[i] = outbound
+		return true
+	}
+
+	p.Outbounds = append(p.Outbounds, outbound)
+	return true
+}
+
 func (h ProxyHandler) AsExtensionHandler() (ExtensionHandler, bool) {
 	return ExtensionHandler{}, false
 }
