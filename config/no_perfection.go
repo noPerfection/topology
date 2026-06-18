@@ -18,7 +18,6 @@ import (
 // Consists the supported services.
 type NoPerfection struct {
 	mycelium *json_substrate.Mycelium
-	filePath string
 }
 
 // normalizeServiceURL maps a service lookup argument to a dereference Mushroom URL.
@@ -127,33 +126,31 @@ func serviceExists(services []Service, name string) bool {
 }
 
 // Load loads an app configuration from a JSON file.
-// If the file does not exist, it creates a new configuration with the empty services list.
+// If the file does not exist, it seeds an empty services list and loads via Root.
 func Load(filePath string) (NoPerfection, error) {
 	if !strings.HasSuffix(filePath, ".json") {
 		return NoPerfection{}, fmt.Errorf("config file %q must end with .json", filePath)
 	}
 
-	appConfig := NoPerfection{filePath: filePath}
 	myceliumURL := fmt.Sprintf("pkg:json/%s#%s", filepath.Dir(filePath), filepath.Base(filePath))
 
-	data, err := os.ReadFile(filePath)
-	if errors.Is(err, fs.ErrNotExist) {
-		mycelium, err := json_substrate.Digest(myceliumURL, `{"services":[]}`)
-		if err != nil {
-			return NoPerfection{}, fmt.Errorf("digest mycelium: %w", err)
+	if _, err := os.Stat(filePath); errors.Is(err, fs.ErrNotExist) {
+		if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
+			return NoPerfection{}, fmt.Errorf("os.MkdirAll(%q): %w", filepath.Dir(filePath), err)
 		}
-		appConfig.mycelium = mycelium
-		return appConfig, nil
-	}
-	if err != nil {
-		return NoPerfection{}, fmt.Errorf("os.ReadFile('%s'): %w", filePath, err)
+		if err := os.WriteFile(filePath, []byte("{\n  \"services\": []\n}\n"), 0600); err != nil {
+			return NoPerfection{}, fmt.Errorf("os.WriteFile('%s'): %w", filePath, err)
+		}
+	} else if err != nil {
+		return NoPerfection{}, fmt.Errorf("os.Stat('%s'): %w", filePath, err)
 	}
 
-	mycelium, err := json_substrate.Digest(myceliumURL, string(data))
+	mycelium, err := json_substrate.Root(myceliumURL)
 	if err != nil {
-		return NoPerfection{}, fmt.Errorf("digest mycelium: %w", err)
+		return NoPerfection{}, fmt.Errorf("json_substrate.Root(%q): %w", myceliumURL, err)
 	}
-	appConfig.mycelium = mycelium
+
+	appConfig := NoPerfection{mycelium: mycelium}
 
 	if err := appConfig.ValidateTopology("pkg:$?*var=services"); err != nil {
 		return NoPerfection{}, fmt.Errorf("ValidateTopology: %w", err)
@@ -377,9 +374,6 @@ func (a *NoPerfection) validateServicePointer(target ServicePointer) error {
 
 // Save saves the app configuration as JSON into its file path.
 func (a NoPerfection) Save() error {
-	if len(a.filePath) == 0 {
-		return fmt.Errorf("app file path is empty")
-	}
 	if a.mycelium == nil {
 		return fmt.Errorf("topology mycelium not set, call config.Load()")
 	}
@@ -394,14 +388,29 @@ func (a NoPerfection) Save() error {
 		return fmt.Errorf("mycelium.Mineralize returned %T, want string", raw)
 	}
 
+	substrate, ok := (*a.mycelium.Substrate()).(*json_substrate.Substrate)
+	if !ok {
+		return fmt.Errorf("mycelium substrate is %T, want *json_substrate.Substrate", *a.mycelium.Substrate())
+	}
+
+	hypha, err := a.mycelium.Soil().Hypha(a.mycelium.MushroomURL())
+	if err != nil {
+		return fmt.Errorf("soil.Hypha(%q): %w", a.mycelium.MushroomURL(), err)
+	}
+
 	var indented bytes.Buffer
 	if err := json.Indent(&indented, []byte(jsonText), "", "  "); err != nil {
 		return fmt.Errorf("json.Indent: %w", err)
 	}
 	indented.WriteByte('\n')
 
-	if err := os.WriteFile(a.filePath, indented.Bytes(), 0600); err != nil {
-		return fmt.Errorf("os.WriteFile('%s'): %w", a.filePath, err)
+	if err := substrate.Sow(hypha, indented.String()); err != nil {
+		return fmt.Errorf("substrate.Sow: %w", err)
+	}
+
+	filePath := filepath.Join(hypha.PackageID, hypha.ModuleID)
+	if err := os.Chmod(filePath, 0600); err != nil {
+		return fmt.Errorf("os.Chmod('%s'): %w", filePath, err)
 	}
 
 	return nil

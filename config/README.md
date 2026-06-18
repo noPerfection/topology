@@ -49,11 +49,11 @@ See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a complet
 }
 ```
 
-`Load` reads this document into a JSON mycelium and validates the whole graph. `Save` mineralizes the mycelium back to indented JSON on disk.
+`Load` calls `json_substrate.Root`, which forages the JSON file from disk and germinates a mycelium. `Save` mineralizes in memory and persists with `Substrate.Sow`.
 
 ## Mycelium Storage
 
-Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` digests the file through `json_substrate`. All config access — reads and writes — goes through **dereference** Mushroom URLs (`?*var=`) via `Spore`/`Fruit` for queries and `Graft`/`Inoculate`/`Prune` for mutations.
+Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` uses `json_substrate.Root` (forage + germinate). Reads and writes go through **dereference** Mushroom URLs (`?*var=`) via `Spore`/`Fruit`; mutations use `Graft`/`Inoculate`/`Prune`. `Save` uses `Mineralize` and `Sow`.
 
 ```text
 pkg:$?*var=services
