@@ -70,6 +70,17 @@ type TopologyInterface interface {
 	//	svc, err := tp.Service("*pkg:$?var=services[name:auth_proxy]")
 	Service(mushroomURL string) (config.Service, error)
 
+	// Handler returns a handler configuration resolved by dereference Mushroom URL.
+	//
+	// Dereference Mushroom URL:
+	//
+	//	h, err := tp.Handler("*pkg:$?var=services[name:auth_proxy].handlers[category:main]")
+	//
+	// When the URL resolves to a service rather than a handler, DefaultCategory is used:
+	//
+	//	h, err := tp.Handler("*pkg:$?var=services[name:auth_proxy]")
+	Handler(mushroomURL string) (config.Handler, error)
+
 	// Services returns the list of configured services.
 	Services() ([]config.Service, error)
 
@@ -112,6 +123,8 @@ type TopologyInterface interface {
 const DefaultTimeout = time.Second * 5
 
 const rootServicesParent = "*pkg:$?var=services"
+
+const DefaultCategory = config.DefaultCategory
 
 const ipcManagerProbeTimeout = 100 * time.Millisecond
 
@@ -183,6 +196,22 @@ func (tp *Topology) Service(mushroomURL string) (config.Service, error) {
 	}
 
 	return record, nil
+}
+
+// Handler returns a handler configuration resolved by dereference Mushroom URL.
+func (tp *Topology) Handler(mushroomURL string) (config.Handler, error) {
+	if tp == nil || tp.config == nil {
+		return nil, fmt.Errorf("nil config")
+	}
+	if len(mushroomURL) == 0 {
+		return nil, fmt.Errorf("mushroom url is empty")
+	}
+
+	handler, err := tp.config.GetHandler(mushroomURL)
+	if err != nil {
+		return nil, fmt.Errorf("tp.config.GetHandler(%q): %w", mushroomURL, err)
+	}
+	return handler, nil
 }
 
 // Services returns all configured services.

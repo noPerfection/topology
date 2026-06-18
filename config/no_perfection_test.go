@@ -109,6 +109,48 @@ func TestGetServiceByMushroomURL(t *testing.T) {
 	}
 }
 
+func TestGetHandler(t *testing.T) {
+	service := Service{
+		Name: "auth_proxy",
+		Type: ProxyType,
+		Handlers: []Handler{
+			IndependentHandler{
+				Type:     ReplierType,
+				Category: ServiceManagerCategory,
+				Endpoint: message.NewEndpoint("auth_manager", 0),
+			},
+			IndependentHandler{
+				Type:     ReplierType,
+				Category: DefaultCategory,
+				Endpoint: message.NewEndpoint("auth_main", 4301),
+			},
+		},
+	}
+	app := mustLoadServices(t, []Service{service})
+
+	handler, err := app.GetHandler("*pkg:$?var=services[name:auth_proxy]")
+	if err != nil {
+		t.Fatalf("GetHandler by service url: %v", err)
+	}
+	ind, ok := handler.AsIndependentHandler()
+	if !ok || ind.Category != DefaultCategory || ind.Endpoint.Port != 4301 {
+		t.Fatalf("handler = %#v, want %q on port 4301", handler, DefaultCategory)
+	}
+
+	handler, err = app.GetHandler("*pkg:$?var=services[name:auth_proxy].handlers[category:main]")
+	if err != nil {
+		t.Fatalf("GetHandler by handler url: %v", err)
+	}
+	ind, ok = handler.AsIndependentHandler()
+	if !ok || ind.Category != DefaultCategory {
+		t.Fatalf("handler = %#v, want %q", handler, DefaultCategory)
+	}
+
+	if _, err := app.GetHandler("*pkg:$?var=services[name:missing]"); err == nil {
+		t.Fatal("GetHandler missing service returned nil error")
+	}
+}
+
 func TestGetServices(t *testing.T) {
 	a := mustLoadEmpty(t)
 	services := []Service{

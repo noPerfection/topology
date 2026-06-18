@@ -26,6 +26,7 @@ const (
 	StopService             = "stop-service"
 	Service                 = "service"
 	Services                = "services"
+	GetHandler              = "get-handler"
 	AddService              = "add-service"
 	SetService              = "set-service"
 	RemoveService           = "remove-service"
@@ -209,6 +210,20 @@ func (h *Handler) Service(mushroomURL string) (config.Service, error) {
 	return h.topology.Service(mushroomURL)
 }
 
+// Handler returns a handler configuration before the topology handler is started.
+func (h *Handler) Handler(mushroomURL string) (config.Handler, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.requireNotStarted(); err != nil {
+		return nil, err
+	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	return h.topology.Handler(mushroomURL)
+}
+
 // Services returns service configurations before the topology handler is started.
 func (h *Handler) Services() ([]config.Service, error) {
 	h.mu.Lock()
@@ -350,6 +365,26 @@ func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface
 	return req.Ok(datatype.New().Set("service", record))
 }
 
+// onGetHandler returns the configuration for a handler.
+// Requires 'handler' — a dereference Mushroom URL.
+func (h *Handler) onGetHandler(req message.RequestInterface) message.ReplyInterface {
+	mushroomURL, err := req.RouteParameters().StringValue("handler")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('handler'): %v", err))
+	}
+
+	record, err := h.topology.Handler(mushroomURL)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.Handler(%q): %v", mushroomURL, err))
+	}
+
+	params, err := datatype.NewFromInterface(record)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("datatype.NewFromInterface: %v", err))
+	}
+	return req.Ok(params)
+}
+
 // onServices returns the configuration for all services.
 func (h *Handler) onServices(req message.RequestInterface) message.ReplyInterface {
 	records, err := h.topology.Services()
@@ -394,6 +429,9 @@ func (h *Handler) Start() error {
 	}
 	if err := h.handler.Route(Service, h.onService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Service, err)
+	}
+	if err := h.handler.Route(GetHandler, h.onGetHandler); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", GetHandler, err)
 	}
 	if err := h.handler.Route(Services, h.onServices); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Services, err)

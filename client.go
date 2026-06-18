@@ -125,6 +125,40 @@ func (c *Client) Service(mushroomURL string) (config.Service, error) {
 	return record, nil
 }
 
+// Handler returns a handler configuration resolved by dereference Mushroom URL.
+//
+// Dereference Mushroom URL:
+//
+//	h, err := client.Handler("*pkg:$?var=services[name:auth_proxy].handlers[category:main]")
+func (c *Client) Handler(mushroomURL string) (config.Handler, error) {
+	req := message.Request{
+		Command: GetHandler,
+		Parameters: datatype.New().
+			Set("handler", mushroomURL),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return nil, fmt.Errorf("socket.Request('%s'): %w", GetHandler, err)
+	}
+
+	if !reply.IsOK() {
+		return nil, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	raw, err := reply.ReplyParameters().Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("reply.ReplyParameters().Bytes(): %w", err)
+	}
+
+	record, err := config.UnmarshalHandler(raw)
+	if err != nil {
+		return nil, fmt.Errorf("config.UnmarshalHandler: %w", err)
+	}
+
+	return record, nil
+}
+
 // Services returns all service configurations.
 func (c *Client) Services() ([]config.Service, error) {
 	req := message.Request{

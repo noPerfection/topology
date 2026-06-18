@@ -13,6 +13,8 @@ import (
 const (
 	// All services must have a manager handler. Identified by this category.
 	ServiceManagerCategory = "manager"
+	// DefaultCategory is the handler category used when a Mushroom URL resolves to a service.
+	DefaultCategory = "main"
 	// For proxy or extension services, use "inproc-handlers" to list handler categories that should be treated as inproc.
 	// Its in the service parameters: parameters.inproc-handlers: [list of handler categories]
 	InprocHandlersParameter = "inproc-handlers"
@@ -116,49 +118,86 @@ func (h ExtensionHandler) AsExtensionHandler() (ExtensionHandler, bool) {
 	return h, true
 }
 
-func unmarshalHandler(data []byte) (Handler, error) {
+func UnmarshalHandler(data []byte) (Handler, error) {
 	trimmed := bytes.TrimSpace(data)
 	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null")) {
 		return nil, fmt.Errorf("handler is empty")
 	}
-	var raw map[string]json.RawMessage
+
+	var raw map[string]any
 	if err := json.Unmarshal(trimmed, &raw); err != nil {
 		return nil, fmt.Errorf("handler object: %w", err)
 	}
+	return handlerFromMap(raw)
+}
+
+func decodeHandler(value any) (Handler, error) {
+	switch handler := value.(type) {
+	case IndependentHandler:
+		return handler, nil
+	case ProxyHandler:
+		return handler, nil
+	case ExtensionHandler:
+		return handler, nil
+	case map[string]any:
+		return handlerFromMap(handler)
+	default:
+		return nil, fmt.Errorf("value is not a handler: got %T", value)
+	}
+}
+
+func handlerFromMap(raw map[string]any) (Handler, error) {
+	if len(raw) == 0 {
+		return nil, fmt.Errorf("handler is empty")
+	}
+	if _, ok := raw["name"]; ok {
+		return nil, fmt.Errorf("value is not a handler: service object")
+	}
+	if _, ok := raw["handlers"]; ok {
+		return nil, fmt.Errorf("value is not a handler: service object")
+	}
 	if _, ok := raw["inbounds"]; ok {
 		var handler ExtensionHandler
-		if err := json.Unmarshal(trimmed, &handler); err != nil {
+		if err := mapInto(raw, &handler); err != nil {
 			return nil, fmt.Errorf("extension handler: %w", err)
 		}
 		return handler, nil
 	}
 	if _, ok := raw["outbounds"]; ok {
 		var handler ProxyHandler
-		if err := json.Unmarshal(trimmed, &handler); err != nil {
+		if err := mapInto(raw, &handler); err != nil {
 			return nil, fmt.Errorf("proxy handler: %w", err)
 		}
 		return handler, nil
 	}
 	if _, ok := raw["routes"]; ok {
 		var handler ProxyHandler
-		if err := json.Unmarshal(trimmed, &handler); err != nil {
+		if err := mapInto(raw, &handler); err != nil {
 			return nil, fmt.Errorf("proxy handler: %w", err)
 		}
 		return handler, nil
 	}
 	if _, ok := raw["forward"]; ok {
 		var handler ProxyHandler
-		if err := json.Unmarshal(trimmed, &handler); err != nil {
+		if err := mapInto(raw, &handler); err != nil {
 			return nil, fmt.Errorf("proxy handler: %w", err)
 		}
 		return handler, nil
 	}
 
 	var handler IndependentHandler
-	if err := json.Unmarshal(trimmed, &handler); err != nil {
+	if err := mapInto(raw, &handler); err != nil {
 		return nil, fmt.Errorf("handler: %w", err)
 	}
 	return handler, nil
+}
+
+func mapInto(src map[string]any, dst any) error {
+	data, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, dst)
 }
 
 // Service type defined in the config.
@@ -194,7 +233,7 @@ func (s *Service) UnmarshalJSON(data []byte) error {
 
 	handlers := make([]Handler, len(raw.Handlers))
 	for i, rawHandler := range raw.Handlers {
-		handler, err := unmarshalHandler(rawHandler)
+		handler, err := UnmarshalHandler(rawHandler)
 		if err != nil {
 			return fmt.Errorf("handlers[%d]: %w", i, err)
 		}

@@ -103,6 +103,11 @@ func encodeServiceMap(record Service) (map[string]any, error) {
 	return serviceMap, nil
 }
 
+// unwrapServiceValue normalizes a single mycelium result for decodeService.
+// Filtered queries return an array; a direct path returns one object.
+//
+//	*pkg:$?var=services[name:auth_proxy]  →  [{...service...}]
+//	unwrapServiceValue(...)                 →  {...service...}
 func unwrapServiceValue(value any) (any, error) {
 	items, ok := value.([]any)
 	if !ok {
@@ -420,6 +425,38 @@ func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
 	}
 
 	return service, nil
+}
+
+// GetHandler resolves a Mushroom URL and returns a single handler.
+// When the URL resolves to a service, the handler with DefaultCategory is returned.
+func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
+	fruited, err := a.queryMycelium(mushroomURL)
+	if err != nil {
+		return nil, err
+	}
+
+	handler, err := decodeHandler(fruited)
+	if err == nil {
+		return handler, nil
+	}
+
+	// URL resolved to a service (often an array from a name filter); unwrap before decode.
+	value, err := unwrapServiceValue(fruited)
+	if err != nil {
+		return nil, fmt.Errorf("GetHandler(%q): handler not found", mushroomURL)
+	}
+
+	service, err := decodeService(value)
+	if err != nil {
+		return nil, fmt.Errorf("GetHandler(%q): handler not found", mushroomURL)
+	}
+
+	handler, err = service.HandlerByCategory(DefaultCategory)
+	if err != nil {
+		return nil, fmt.Errorf("GetHandler(%q): %w", mushroomURL, err)
+	}
+
+	return handler, nil
 }
 
 // GetServices resolves a Mushroom URL and returns the services at that path.

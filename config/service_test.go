@@ -445,7 +445,7 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 		}]
 	}`)
 
-	handler, err := unmarshalHandler(data)
+	handler, err := UnmarshalHandler(data)
 	if err != nil {
 		t.Fatalf("json.Unmarshal proxy handler with forward: %v", err)
 	}
