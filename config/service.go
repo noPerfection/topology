@@ -196,6 +196,36 @@ func (s Service) IsZero() bool {
 	return s.Name == ""
 }
 
+// Equal reports whether s and other describe the same service identity in topology.
+// Names must match. Manager handlers must both be absent or both present with the same endpoint.
+func (s Service) Equal(other Service) bool {
+	if s.Name != other.Name {
+		return false
+	}
+	return managersEqual(s, other)
+}
+
+func managersEqual(a, b Service) bool {
+	mgrA, errA := a.HandlerByCategory(ServiceManagerCategory)
+	mgrB, errB := b.HandlerByCategory(ServiceManagerCategory)
+	if errA != nil && errB != nil {
+		return true
+	}
+	if errA != nil || errB != nil {
+		return false
+	}
+	indA, okA := mgrA.AsIndependentHandler()
+	indB, okB := mgrB.AsIndependentHandler()
+	if !okA || !okB {
+		return false
+	}
+	return endpointsEqual(indA.Endpoint, indB.Endpoint)
+}
+
+func endpointsEqual(a, b message.Endpoint) bool {
+	return a.Id == b.Id && a.Port == b.Port
+}
+
 // If service is not Inproc, and any handler is IPC except the ServiceManagerCategory,
 // then the service is IPC.
 func (s Service) IsIpc() bool {

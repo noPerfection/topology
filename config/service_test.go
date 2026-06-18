@@ -457,6 +457,71 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 	}
 }
 
+func TestServiceEqual(t *testing.T) {
+	managerA := message.NewEndpoint("svc_manager", 0)
+	managerB := message.NewEndpoint("other_manager", 0)
+
+	base := Service{
+		Type: IndependentType,
+		Name: "worker",
+		Handlers: []Handler{
+			IndependentHandler{
+				Type:     SyncReplierType,
+				Category: ServiceManagerCategory,
+				Endpoint: managerA,
+			},
+		},
+	}
+	sameManager := Service{
+		Type: IndependentType,
+		Name: "worker",
+		Handlers: []Handler{
+			IndependentHandler{
+				Type:     ReplierType,
+				Category: ServiceManagerCategory,
+				Endpoint: managerA,
+			},
+			IndependentHandler{
+				Type:     ReplierType,
+				Category: "api",
+				Endpoint: message.NewEndpoint("api", 4101),
+			},
+		},
+	}
+
+	if !base.Equal(sameManager) {
+		t.Fatal("Equal returned false for same name and manager endpoint")
+	}
+
+	differentName := base
+	differentName.Name = "other"
+	if base.Equal(differentName) {
+		t.Fatal("Equal returned true for different names")
+	}
+
+	differentManager := base
+	differentManager.Handlers = []Handler{
+		IndependentHandler{
+			Type:     SyncReplierType,
+			Category: ServiceManagerCategory,
+			Endpoint: managerB,
+		},
+	}
+	if base.Equal(differentManager) {
+		t.Fatal("Equal returned true for different manager endpoints")
+	}
+
+	withoutManager := Service{Name: "worker"}
+	if base.Equal(withoutManager) {
+		t.Fatal("Equal returned true when only one service has a manager")
+	}
+
+	bothWithoutManager := Service{Name: "worker"}
+	if !withoutManager.Equal(bothWithoutManager) {
+		t.Fatal("Equal returned false when neither service has a manager")
+	}
+}
+
 func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
 	serviceConfig.Handlers = []Handler{handlerOfType}
