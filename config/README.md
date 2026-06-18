@@ -53,20 +53,20 @@ See [examples/app-proxy-chain.json](examples/app-proxy-chain.json) for a complet
 
 ## Mycelium Storage
 
-Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` uses `json_substrate.Root` (forage + germinate). Reads and writes go through **dereference** Mushroom URLs (`?*var=`) via `Spore`/`Fruit`; mutations use `Graft`/`Inoculate`/`Prune`. `Save` uses `Mineralize` and `Sow`.
+Topology data is stored as a [Mushroom](https://github.com/ahmetson/mushroom) JSON mycelium, not as a direct Go slice. `Load` uses `json_substrate.Root` (forage + germinate). Reads and writes go through **dereference** Mushroom URLs (`*pkg:$?var=`) via `Spore`/`Fruit`; mutations use `Graft`/`Inoculate`/`Prune`. `Save` uses `Mineralize` and `Sow`.
 
 ```text
-pkg:$?*var=services
+*pkg:$?var=services
 ```
 
-`$` is a wildcard that fills in type, package, and module from the loaded file URL. For a file loaded as `pkg:json/tmp#app.json`, `pkg:$?*var=services` resolves against that mycelium.
+`$` is a wildcard that fills in type, package, and module from the loaded file URL. For a file loaded as `pkg:json/tmp#app.json`, `*pkg:$?var=services` resolves against that mycelium.
 
 Link URLs (`?var=` without `*`) are not used by this package. Mushroom's `Link()` API resolves symbolic paths to absolute link strings; topology config does not call it for service queries or mutations.
 
 Plain service names passed to `GetService` are shorthand for a dereference name filter on that array:
 
 ```text
-auth_proxy  →  pkg:$?*var=services[name:auth_proxy]
+auth_proxy  →  *pkg:$?var=services[name:auth_proxy]
 ```
 
 See the [Mushroom README](https://github.com/ahmetson/mushroom) for URL syntax, filters, and built-in calls such as `first()` and `last()`.
@@ -82,10 +82,10 @@ Resolves a dereference Mushroom URL with `Spore`, embeds nested links with `Frui
 service, err := app.GetService("auth_proxy")
 
 // Explicit dereference Mushroom URL
-service, err := app.GetService("pkg:$?*var=services[name:auth_proxy]")
+service, err := app.GetService("*pkg:$?var=services[name:auth_proxy]")
 
 // First Independent service
-service, err := app.GetService("pkg:$?*var=services[type:Independent][$.first()]")
+service, err := app.GetService("*pkg:$?var=services[type:Independent][$.first()]")
 ```
 
 ### `GetServices(mushroomURL)`
@@ -94,14 +94,14 @@ Same query flow as `GetService`, but expects an array and returns `[]Service`. P
 
 ```go
 // All root services
-services, err := app.GetServices("pkg:$?*var=services")
+services, err := app.GetServices("*pkg:$?var=services")
 
 // Filter by type
-services, err := app.GetServices("pkg:$?*var=services[type:Independent]")
+services, err := app.GetServices("*pkg:$?var=services[type:Independent]")
 
 // Proxy outbounds on a named handler
 services, err := app.GetServices(
-    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "*pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
@@ -110,19 +110,19 @@ services, err := app.GetServices(
 Calls `GetServices` and returns the length of the result.
 
 ```go
-count, err := app.CountByType("pkg:$?*var=services[type:Proxy]")
+count, err := app.CountByType("*pkg:$?var=services[type:Proxy]")
 ```
 
 ### `Services()` (topology layer)
 
-The topology handler exposes `Services()` as a convenience wrapper around `GetServices("pkg:$?*var=services")`.
+The topology handler exposes `Services()` as a convenience wrapper around `GetServices("*pkg:$?var=services")`.
 
 ## Mutating Services
 
-`AddService`, `SetService`, and `RemoveService` take a **parent dereference URL** — the same `?*var=` form used for reads. The parent identifies the array to read and mutate.
+`AddService`, `SetService`, and `RemoveService` take a **parent dereference URL** — the same `*pkg:$?var=` form used for reads. The parent identifies the array to read and mutate.
 
 ```go
-err := app.AddService(newService, "pkg:$?*var=services")
+err := app.AddService(newService, "*pkg:$?var=services")
 ```
 
 Each method first loads the parent array with `GetServices(parent)`, checks name uniqueness or existence, then mutates the mycelium in memory. Call `Save` to persist changes.
@@ -132,12 +132,12 @@ Each method first loads the parent array with `GetServices(parent)`, checks name
 Appends a service with `Graft`. The name must not already exist in the parent array.
 
 ```go
-err := app.AddService(newService, "pkg:$?*var=services")
+err := app.AddService(newService, "*pkg:$?var=services")
 
 // Append to a nested array
 err := app.AddService(
     outbound,
-    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "*pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
@@ -146,12 +146,12 @@ err := app.AddService(
 Replaces an existing service by name with `Inoculate`.
 
 ```go
-err := app.SetService(updatedService, "pkg:$?*var=services")
+err := app.SetService(updatedService, "*pkg:$?var=services")
 
 // Update a service inside a nested parent
 err := app.SetService(
     updatedOutbound,
-    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "*pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
@@ -160,21 +160,21 @@ err := app.SetService(
 Removes a service by name with `Prune`.
 
 ```go
-err := app.RemoveService("auth_proxy", "pkg:$?*var=services")
+err := app.RemoveService("auth_proxy", "*pkg:$?var=services")
 
 // Remove from a nested parent
 err := app.RemoveService(
     "old_outbound",
-    "pkg:$?*var=services[name:auth_proxy].handlers[category:main].outbounds",
+    "*pkg:$?var=services[name:auth_proxy].handlers[category:main].outbounds",
 )
 ```
 
 Underlying mycelium operations use the same dereference paths:
 
 ```go
-mycelium.Graft("pkg:$?*var=services", newServiceMap)
-mycelium.Inoculate("pkg:$?*var=services[name:foo]", newServiceMap)
-mycelium.Prune("pkg:$?*var=services[name:foo]")
+mycelium.Graft("*pkg:$?var=services", newServiceMap)
+mycelium.Inoculate("*pkg:$?var=services[name:foo]", newServiceMap)
+mycelium.Prune("*pkg:$?var=services[name:foo]")
 ```
 
 ## Services
@@ -260,7 +260,7 @@ Endpoint `port` defaults to `0` when omitted.
 
 ## Validation
 
-`Load` calls `ValidateTopology`.
+`Load` validates the graph via an internal `validateTopology` check.
 
 Validation checks service names, service types, handler types, handler categories, endpoint ids, dependency target shape, inline service definitions, and ref existence. If a ref includes a handler category, the referenced service must contain that category.
 

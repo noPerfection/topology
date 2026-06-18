@@ -95,7 +95,7 @@ func (c *Client) IsRunning() (bool, error) {
 //
 // Dereference Mushroom URL:
 //
-//	svc, err := client.Service("pkg:$?*var=services[name:auth_proxy]")
+//	svc, err := client.Service("*pkg:$?var=services[name:auth_proxy]")
 func (c *Client) Service(mushroomURL string) (config.Service, error) {
 	req := message.Request{
 		Command: Service,
@@ -161,11 +161,11 @@ func (c *Client) Services() ([]config.Service, error) {
 // AddService registers a service in the topology configuration.
 //
 // parent is the dereference Mushroom URL of the array to append to. When omitted,
-// the parent defaults to pkg:$?*var=services (the root services array).
+// the parent defaults to *pkg:$?var=services (the root services array).
 //
 //	err := client.AddService(record)
 //
-//	err := client.AddService(outbound, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+//	err := client.AddService(outbound, "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 func (c *Client) AddService(record config.Service, parent ...string) error {
 	params := datatype.New().Set("service", record)
 	if len(parent) > 0 && parent[0] != "" {
@@ -191,11 +191,11 @@ func (c *Client) AddService(record config.Service, parent ...string) error {
 // SetService updates an existing service in the topology configuration.
 //
 // parent is the dereference Mushroom URL of the array that contains the service.
-// When omitted, the parent defaults to pkg:$?*var=services.
+// When omitted, the parent defaults to *pkg:$?var=services.
 //
 //	err := client.SetService(record)
 //
-//	err := client.SetService(updated, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+//	err := client.SetService(updated, "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 func (c *Client) SetService(record config.Service, parent ...string) error {
 	params := datatype.New().Set("service", record)
 	if len(parent) > 0 && parent[0] != "" {
@@ -221,11 +221,11 @@ func (c *Client) SetService(record config.Service, parent ...string) error {
 // RemoveService removes a service from the topology configuration.
 //
 // parent is the dereference Mushroom URL of the array to remove from. When omitted,
-// the parent defaults to pkg:$?*var=services.
+// the parent defaults to *pkg:$?var=services.
 //
 //	err := client.RemoveService("worker")
 //
-//	err := client.RemoveService("old_outbound", "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+//	err := client.RemoveService("old_outbound", "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 func (c *Client) RemoveService(name string, parent ...string) error {
 	params := datatype.New().Set("service", name)
 	if len(parent) > 0 && parent[0] != "" {
@@ -256,7 +256,7 @@ func (c *Client) RemoveService(name string, parent ...string) error {
 //
 // Dereference Mushroom URL:
 //
-//	id, err := client.StartService("pkg:$?*var=services[name:worker]")
+//	id, err := client.StartService("*pkg:$?var=services[name:worker]")
 func (c *Client) StartService(mushroomURL string) (string, error) {
 	parameters := datatype.New().Set("service", mushroomURL)
 
@@ -315,7 +315,7 @@ func (c *Client) IsServiceRunning(mushroomURL string) (bool, error) {
 //
 // Dereference Mushroom URL:
 //
-//	err := client.StopService("pkg:$?*var=services[name:worker]")
+//	err := client.StopService("*pkg:$?var=services[name:worker]")
 func (c *Client) StopService(mushroomURL string) error {
 	req := message.Request{
 		Command: StopService,

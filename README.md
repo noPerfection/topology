@@ -109,7 +109,7 @@ type TopologyInterface interface {
 }
 ```
 
-Plain service names still work as shorthand for `pkg:$?*var=services[name:<name>]`. See [config/README.md](config/README.md) for Mushroom URL syntax.
+Plain service names still work as shorthand for `*pkg:$?var=services[name:<name>]`. See [config/README.md](config/README.md) for Mushroom URL syntax.
 
 ### Add or Update Services
 
@@ -131,8 +131,8 @@ if err := topologyClient.AddService(service); err != nil {
 	panic(err)
 }
 
-// Optional parent dereference URL (defaults to pkg:$?*var=services when omitted)
-if err := topologyClient.AddService(outbound, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds"); err != nil {
+// Optional parent dereference URL (defaults to *pkg:$?var=services when omitted)
+if err := topologyClient.AddService(outbound, "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds"); err != nil {
 	panic(err)
 }
 
@@ -151,7 +151,7 @@ if err != nil {
 }
 
 // Or with an explicit dereference Mushroom URL
-id, err = topologyClient.StartService("pkg:$?*var=services[name:worker]")
+id, err = topologyClient.StartService("*pkg:$?var=services[name:worker]")
 
 if running, err := topologyClient.IsServiceRunning("worker"); err != nil {
 	panic(err)

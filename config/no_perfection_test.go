@@ -9,7 +9,7 @@ import (
 	"github.com/noPerfection/protocol/message"
 )
 
-const testServicesParent = "pkg:$?*var=services"
+const testServicesParent = "*pkg:$?var=services"
 
 func addTestService(t *testing.T, a *NoPerfection, record Service) {
 	t.Helper()
@@ -98,7 +98,7 @@ func TestGetServiceByMushroomURL(t *testing.T) {
 	sample := Service{Name: "api", Type: IndependentType}
 	addTestService(t, &a, sample)
 
-	found, err := a.GetService("pkg:$?*var=services[name:api]")
+	found, err := a.GetService("*pkg:$?var=services[name:api]")
 	if err != nil {
 		t.Fatalf("GetService by mushroom url: %v", err)
 	}
@@ -120,11 +120,11 @@ func TestGetServices(t *testing.T) {
 		}
 	}
 
-	if _, err := a.GetServices("pkg:$?*var=services[type:Extension]"); err == nil {
+	if _, err := a.GetServices("*pkg:$?var=services[type:Extension]"); err == nil {
 		t.Fatal("GetServices with missing type returned nil error")
 	}
 
-	found, err := a.GetServices("pkg:$?*var=services[type:Independent]")
+	found, err := a.GetServices("*pkg:$?var=services[type:Independent]")
 	if err != nil {
 		t.Fatalf("GetServices independent: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestCountByType(t *testing.T) {
 		}
 	}
 
-	count, err := a.CountByType("pkg:$?*var=services[type:Independent]")
+	count, err := a.CountByType("*pkg:$?var=services[type:Independent]")
 	if err != nil {
 		t.Fatalf("CountByType independent: %v", err)
 	}
@@ -160,12 +160,12 @@ func TestCountByType(t *testing.T) {
 		t.Fatalf("CountByType independent = %d, want 2", count)
 	}
 
-	count, err = a.CountByType("pkg:$?*var=services[type:Extension]")
+	count, err = a.CountByType("*pkg:$?var=services[type:Extension]")
 	if err == nil {
 		t.Fatalf("CountByType extension = %d, want error", count)
 	}
 
-	count, err = a.CountByType("pkg:$?*var=services[type:invalid]")
+	count, err = a.CountByType("*pkg:$?var=services[type:invalid]")
 	if err == nil {
 		t.Fatalf("CountByType invalid = %d, want error", count)
 	}
@@ -340,7 +340,7 @@ func TestValidateTopologyInlineService(t *testing.T) {
 		t.Fatalf("SetService public_api: %v", err)
 	}
 
-	if err := app.ValidateTopology(testServicesParent); err != nil {
+	if err := app.validateTopology(testServicesParent); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
 	}
 
@@ -387,7 +387,7 @@ func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
 		},
 	})
 
-	if err := app.ValidateTopology(testServicesParent); err != nil {
+	if err := app.validateTopology(testServicesParent); err != nil {
 		t.Fatalf("ValidateTopology: %v", err)
 	}
 	if _, err := app.GetService("inline_proxy"); err == nil {
@@ -479,7 +479,7 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 		},
 	})
 
-	if err := app.ValidateTopology(testServicesParent); err != nil {
+	if err := app.validateTopology(testServicesParent); err != nil {
 		t.Fatalf("ValidateTopology with ref path: %v", err)
 	}
 

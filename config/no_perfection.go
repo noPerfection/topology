@@ -23,13 +23,13 @@ type NoPerfection struct {
 // normalizeServiceURL maps a service lookup argument to a dereference Mushroom URL.
 // Mushroom URLs are returned unchanged; a plain symbol is expanded to a root name filter.
 //
-//	symbol:      "auth_proxy"  →  "pkg:$?*var=services[name:auth_proxy]"
-//	mushroomURL: "pkg:$?*var=services[name:auth_proxy]"  →  unchanged
+//	symbol:      "auth_proxy"  →  "*pkg:$?var=services[name:auth_proxy]"
+//	mushroomURL: "*pkg:$?var=services[name:auth_proxy]"  →  unchanged
 func normalizeServiceURL(mushroomURL string) string {
 	if strings.HasPrefix(mushroomURL, "pkg:") || strings.HasPrefix(mushroomURL, "*pkg:") {
 		return mushroomURL
 	}
-	return fmt.Sprintf("pkg:$?*var=services[name:%s]", mushroomURL)
+	return fmt.Sprintf("*pkg:$?var=services[name:%s]", mushroomURL)
 }
 
 func (a *NoPerfection) queryMycelium(mushroomURL string) (any, error) {
@@ -134,6 +134,7 @@ func Load(filePath string) (NoPerfection, error) {
 
 	myceliumURL := fmt.Sprintf("pkg:json/%s#%s", filepath.Dir(filePath), filepath.Base(filePath))
 
+	loaded := true
 	if _, err := os.Stat(filePath); errors.Is(err, fs.ErrNotExist) {
 		if err := os.MkdirAll(filepath.Dir(filePath), 0700); err != nil {
 			return NoPerfection{}, fmt.Errorf("os.MkdirAll(%q): %w", filepath.Dir(filePath), err)
@@ -141,6 +142,7 @@ func Load(filePath string) (NoPerfection, error) {
 		if err := os.WriteFile(filePath, []byte("{\n  \"services\": []\n}\n"), 0600); err != nil {
 			return NoPerfection{}, fmt.Errorf("os.WriteFile('%s'): %w", filePath, err)
 		}
+		loaded = false
 	} else if err != nil {
 		return NoPerfection{}, fmt.Errorf("os.Stat('%s'): %w", filePath, err)
 	}
@@ -152,16 +154,16 @@ func Load(filePath string) (NoPerfection, error) {
 
 	appConfig := NoPerfection{mycelium: mycelium}
 
-	if err := appConfig.ValidateTopology("pkg:$?*var=services"); err != nil {
-		return NoPerfection{}, fmt.Errorf("ValidateTopology: %w", err)
+	if loaded {
+		if err := appConfig.validateTopology("*pkg:$?var=services"); err != nil {
+			return NoPerfection{}, fmt.Errorf("validateTopology: %w", err)
+		}
 	}
 
 	return appConfig, nil
 }
 
-// ValidateTopology validates services, including inline service definitions, and
-// checks that every referenced dependency target resolves.
-func (a *NoPerfection) ValidateTopology(servicesURL string) error {
+func (a *NoPerfection) validateTopology(servicesURL string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
 	}
@@ -171,9 +173,8 @@ func (a *NoPerfection) ValidateTopology(servicesURL string) error {
 		return err
 	}
 
-	visiting := make(map[string]bool)
 	for i := range services {
-		if err := a.validateServiceTopology(&services[i], visiting); err != nil {
+		if err := ValidateService(services[i]); err != nil {
 			return fmt.Errorf("service %q: %w", services[i].Name, err)
 		}
 	}
@@ -181,176 +182,59 @@ func (a *NoPerfection) ValidateTopology(servicesURL string) error {
 	return a.validatePointedRefs(services)
 }
 
-func (a *NoPerfection) validateServiceTopology(service *Service, visiting map[string]bool) error {
-	if service == nil {
-		return fmt.Errorf("service is nil")
-	}
-	if service.Name == "" {
-		return fmt.Errorf("service name is empty")
-	}
-	if visiting[service.Name] {
-		return fmt.Errorf("cycle detected at service %q", service.Name)
-	}
-	visiting[service.Name] = true
-	defer delete(visiting, service.Name)
-
-	if err := ValidateService(*service); err != nil {
-		return err
-	}
-
-	for di := range service.HandlerDeps {
-		dep := &service.HandlerDeps[di]
-		if err := a.validateDepServiceTopology(dep, visiting); err != nil {
-			return fmt.Errorf("handler-deps category %q: %w", dep.Name, err)
-		}
-	}
-
-	for hi := range service.Handlers {
-		if service.Handlers[hi] == nil {
-			return fmt.Errorf("handler %d is empty", hi)
-		}
-		handler, ok := service.Handlers[hi].AsIndependentHandler()
-		if !ok {
-			return fmt.Errorf("handler %d is not an independent handler", hi)
-		}
-
-		for di := range handler.CommandDeps {
-			dep := &handler.CommandDeps[di]
-			if err := a.validateDepServiceTopology(dep, visiting); err != nil {
-				return fmt.Errorf("command %q: %w", dep.Name, err)
-			}
-		}
-		if service.Type == ProxyType {
-			proxyHandler, ok := service.Handlers[hi].AsProxyHandler()
-			if !ok {
-				return fmt.Errorf("handler[%d] must be a proxy handler", hi)
-			}
-			for oi := range proxyHandler.Outbounds {
-				target := &proxyHandler.Outbounds[oi]
-				if err := ValidateOutboundService(*target); err != nil {
-					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
-				}
-			}
-		}
-		if service.Type == ExtensionType {
-			extensionHandler, ok := service.Handlers[hi].AsExtensionHandler()
-			if !ok {
-				return fmt.Errorf("handler[%d] must be an extension handler", hi)
-			}
-			for ii := range extensionHandler.Inbounds {
-				target := &extensionHandler.Inbounds[ii]
-				if err := ValidateInboundService(*target); err != nil {
-					return fmt.Errorf("handler[%d] inbounds[%d]: %w", hi, ii, err)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (a *NoPerfection) validateDepServiceTopology(dep *DepService, visiting map[string]bool) error {
-	if err := ValidateDepService(*dep); err != nil {
-		return err
-	}
-
-	for i := range dep.Proxies {
-		if err := a.validateServicePointerTopology(&dep.Proxies[i], visiting); err != nil {
-			return fmt.Errorf("proxies[%d]: %w", i, err)
-		}
-	}
-	for i := range dep.Extensions {
-		if err := a.validateServicePointerTopology(&dep.Extensions[i], visiting); err != nil {
-			return fmt.Errorf("extensions[%d]: %w", i, err)
-		}
-	}
-	return nil
-}
-
-func (a *NoPerfection) validateServicePointerTopology(target *ServicePointer, visiting map[string]bool) error {
-	if err := ValidateServicePointer(*target); err != nil {
-		return err
-	}
-
-	if target.Ref != "" {
-		return nil
-	}
-
-	service := target.Service
-	if err := a.validateServiceTopology(&service, visiting); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (a *NoPerfection) validatePointedRefs(services []Service) error {
+	visiting := make(map[string]bool)
 	for _, service := range services {
-		if err := a.validateServiceRefs(service); err != nil {
+		if err := a.validateServiceRefs(service, visiting); err != nil {
 			return fmt.Errorf("service %q: %w", service.Name, err)
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateServiceRefs(service Service) error {
+func (a *NoPerfection) validateServiceRefs(service Service, visiting map[string]bool) error {
+	if service.Name != "" {
+		if visiting[service.Name] {
+			return fmt.Errorf("cycle detected at service %q", service.Name)
+		}
+		visiting[service.Name] = true
+		defer delete(visiting, service.Name)
+	}
+
 	for _, dep := range service.HandlerDeps {
-		if err := a.validateDepServiceRefs(dep); err != nil {
+		if err := a.validateDepServiceRefs(dep, visiting); err != nil {
 			return fmt.Errorf("handler-deps category %q: %w", dep.Name, err)
 		}
 	}
-	for hi, handler := range service.Handlers {
-		if handler == nil {
-			return fmt.Errorf("handler %d is empty", hi)
-		}
+	for _, handler := range service.Handlers {
 		baseHandler, ok := handler.AsIndependentHandler()
 		if !ok {
-			return fmt.Errorf("handler %d is not an independent handler", hi)
+			continue
 		}
 		for _, dep := range baseHandler.CommandDeps {
-			if err := a.validateDepServiceRefs(dep); err != nil {
+			if err := a.validateDepServiceRefs(dep, visiting); err != nil {
 				return fmt.Errorf("command %q: %w", dep.Name, err)
-			}
-		}
-		if service.Type == ProxyType {
-			proxyHandler, ok := handler.AsProxyHandler()
-			if !ok {
-				return fmt.Errorf("handler[%d] must be a proxy handler", hi)
-			}
-			for oi, target := range proxyHandler.Outbounds {
-				if err := ValidateOutboundService(target); err != nil {
-					return fmt.Errorf("handler[%d] outbounds[%d]: %w", hi, oi, err)
-				}
-			}
-		}
-		if service.Type == ExtensionType {
-			extensionHandler, ok := handler.AsExtensionHandler()
-			if !ok {
-				return fmt.Errorf("handler[%d] must be an extension handler", hi)
-			}
-			for ii, target := range extensionHandler.Inbounds {
-				if err := ValidateInboundService(target); err != nil {
-					return fmt.Errorf("handler[%d] inbounds[%d]: %w", hi, ii, err)
-				}
 			}
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateDepServiceRefs(dep DepService) error {
+func (a *NoPerfection) validateDepServiceRefs(dep DepService, visiting map[string]bool) error {
 	for _, target := range dep.Proxies {
-		if err := a.validateServicePointer(target); err != nil {
+		if err := a.validateServicePointer(target, visiting); err != nil {
 			return fmt.Errorf("proxy: %w", err)
 		}
 	}
 	for _, target := range dep.Extensions {
-		if err := a.validateServicePointer(target); err != nil {
+		if err := a.validateServicePointer(target, visiting); err != nil {
 			return fmt.Errorf("extension: %w", err)
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateServicePointer(target ServicePointer) error {
+func (a *NoPerfection) validateServicePointer(target ServicePointer, visiting map[string]bool) error {
 	if target.Ref != "" {
 		serviceName, handlerCategory := target.RefPath()
 		if serviceName == "" {
@@ -369,7 +253,7 @@ func (a *NoPerfection) validateServicePointer(target ServicePointer) error {
 		return nil
 	}
 
-	return a.validateServiceRefs(target.Service)
+	return a.validateServiceRefs(target.Service, visiting)
 }
 
 // Save saves the app configuration as JSON into its file path.
@@ -417,7 +301,7 @@ func (a NoPerfection) Save() error {
 }
 
 // GetService resolves a Mushroom URL and returns a single service.
-// Plain service names are resolved as pkg:$?*var=services[name:<name>].
+// Plain service names are resolved as *pkg:$?var=services[name:<name>].
 func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
 	fruited, err := a.queryMycelium(normalizeServiceURL(mushroomURL))
 	if err != nil {
@@ -462,7 +346,7 @@ func (a *NoPerfection) CountByType(mushroomURL string) (int, error) {
 }
 
 // AddService adds a new service into the services array at parent.
-// parent is a dereference Mushroom URL, e.g. pkg:$?*var=services.
+// parent is a dereference Mushroom URL, e.g. *pkg:$?var=services.
 func (a *NoPerfection) AddService(record Service, parent string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
@@ -494,7 +378,7 @@ func (a *NoPerfection) AddService(record Service, parent string) error {
 }
 
 // SetService updates an existing service in the services array at parent.
-// parent is a dereference Mushroom URL, e.g. pkg:$?*var=services.
+// parent is a dereference Mushroom URL, e.g. *pkg:$?var=services.
 func (a *NoPerfection) SetService(record Service, parent string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")
@@ -528,7 +412,7 @@ func (a *NoPerfection) SetService(record Service, parent string) error {
 }
 
 // RemoveService removes a service by name from the services array at parent.
-// parent is a dereference Mushroom URL, e.g. pkg:$?*var=services.
+// parent is a dereference Mushroom URL, e.g. *pkg:$?var=services.
 func (a *NoPerfection) RemoveService(name, parent string) error {
 	if a == nil {
 		return fmt.Errorf("app struct is nil")

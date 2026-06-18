@@ -13,7 +13,7 @@ import (
 
 // NodeInterface starts, stops, and probes dependency services.
 //
-// Pass a service name or dereference URL (pkg:$?*var=...). Topology must load
+// Pass a service name or dereference URL (*pkg:$?var=...). Topology must load
 // the config record, not just resolve a path: Spore fetches the value and Fruit
 // embeds nested links into a full Service (handlers, endpoints, start_command).
 type NodeInterface interface {
@@ -25,7 +25,7 @@ type NodeInterface interface {
 	//
 	// Dereference Mushroom URL:
 	//
-	//	tp.StopService("pkg:$?*var=services[name:worker]")
+	//	tp.StopService("*pkg:$?var=services[name:worker]")
 	StopService(mushroomURL string) error
 
 	// StartService starts the dependency service and returns its topology id.
@@ -36,7 +36,7 @@ type NodeInterface interface {
 	//
 	// Dereference Mushroom URL:
 	//
-	//	id, err := tp.StartService("pkg:$?*var=services[name:worker]")
+	//	id, err := tp.StartService("*pkg:$?var=services[name:worker]")
 	StartService(mushroomURL string) (string, error)
 
 	// IsServiceRunning reports whether the dependency service is running.
@@ -47,7 +47,7 @@ type NodeInterface interface {
 	//
 	// Dereference Mushroom URL:
 	//
-	//	running, err := tp.IsServiceRunning("pkg:$?*var=services[name:worker]")
+	//	running, err := tp.IsServiceRunning("*pkg:$?var=services[name:worker]")
 	IsServiceRunning(mushroomURL string) (bool, error)
 }
 
@@ -67,7 +67,7 @@ type TopologyInterface interface {
 	//
 	// Dereference Mushroom URL:
 	//
-	//	svc, err := tp.Service("pkg:$?*var=services[name:auth_proxy]")
+	//	svc, err := tp.Service("*pkg:$?var=services[name:auth_proxy]")
 	Service(mushroomURL string) (config.Service, error)
 
 	// Services returns the list of configured services.
@@ -81,7 +81,7 @@ type TopologyInterface interface {
 	//
 	// Explicit parent dereference Mushroom URL:
 	//
-	//	err := tp.AddService(record, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+	//	err := tp.AddService(record, "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 	AddService(record config.Service, parent ...string) error
 
 	// SetService updates an existing service in the topology configuration.
@@ -92,7 +92,7 @@ type TopologyInterface interface {
 	//
 	// Explicit parent dereference Mushroom URL:
 	//
-	//	err := tp.SetService(record, "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+	//	err := tp.SetService(record, "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 	SetService(record config.Service, parent ...string) error
 
 	// RemoveService removes a service from the topology configuration.
@@ -103,7 +103,7 @@ type TopologyInterface interface {
 	//
 	// Explicit parent dereference Mushroom URL:
 	//
-	//	err := tp.RemoveService("old_outbound", "pkg:$?*var=services[name:proxy].handlers[category:main].outbounds")
+	//	err := tp.RemoveService("old_outbound", "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 	RemoveService(name string, parent ...string) error
 }
 
@@ -111,7 +111,7 @@ type TopologyInterface interface {
 // Topology.IsServiceRunning method uses this value before considering the endpoint as not running.
 const DefaultTimeout = time.Second * 5
 
-const rootServicesParent = "pkg:$?*var=services"
+const rootServicesParent = "*pkg:$?var=services"
 
 const ipcManagerProbeTimeout = 100 * time.Millisecond
 
