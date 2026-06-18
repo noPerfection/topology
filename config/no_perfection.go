@@ -229,26 +229,19 @@ func (a *NoPerfection) validateTopology(servicesURL string) error {
 		return err
 	}
 
+	visiting := make(map[string]bool)
 	for i := range services {
 		if err := ValidateService(services[i]); err != nil {
 			return fmt.Errorf("service %q: %w", services[i].Name, err)
 		}
-	}
-
-	return a.validatePointedRefs(services)
-}
-
-func (a *NoPerfection) validatePointedRefs(services []Service) error {
-	visiting := make(map[string]bool)
-	for _, service := range services {
-		if err := a.validateServiceRefs(service, visiting); err != nil {
-			return fmt.Errorf("service %q: %w", service.Name, err)
+		if err := a.validateServiceTopology(services[i], visiting); err != nil {
+			return fmt.Errorf("service %q: %w", services[i].Name, err)
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateServiceRefs(service Service, visiting map[string]bool) error {
+func (a *NoPerfection) validateServiceTopology(service Service, visiting map[string]bool) error {
 	if service.Name != "" {
 		if visiting[service.Name] {
 			return fmt.Errorf("cycle detected at service %q", service.Name)
@@ -258,8 +251,15 @@ func (a *NoPerfection) validateServiceRefs(service Service, visiting map[string]
 	}
 
 	for _, dep := range service.HandlerDeps {
-		if err := a.validateDepServiceRefs(dep, visiting); err != nil {
-			return fmt.Errorf("handler-deps category %q: %w", dep.Name, err)
+		for _, target := range dep.Proxies {
+			if err := a.validateDepTarget(target, visiting); err != nil {
+				return fmt.Errorf("handler-deps category %q: proxy: %w", dep.Name, err)
+			}
+		}
+		for _, target := range dep.Extensions {
+			if err := a.validateDepTarget(target, visiting); err != nil {
+				return fmt.Errorf("handler-deps category %q: extension: %w", dep.Name, err)
+			}
 		}
 	}
 	for _, handler := range service.Handlers {
@@ -268,48 +268,93 @@ func (a *NoPerfection) validateServiceRefs(service Service, visiting map[string]
 			continue
 		}
 		for _, dep := range baseHandler.CommandDeps {
-			if err := a.validateDepServiceRefs(dep, visiting); err != nil {
-				return fmt.Errorf("command %q: %w", dep.Name, err)
+			for _, target := range dep.Proxies {
+				if err := a.validateDepTarget(target, visiting); err != nil {
+					return fmt.Errorf("command %q: proxy: %w", dep.Name, err)
+				}
+			}
+			for _, target := range dep.Extensions {
+				if err := a.validateDepTarget(target, visiting); err != nil {
+					return fmt.Errorf("command %q: extension: %w", dep.Name, err)
+				}
+			}
+		}
+		if service.Type == ProxyType {
+			proxyHandler, ok := handler.AsProxyHandler()
+			if !ok {
+				continue
+			}
+			if err := validateProxyForwardOutbounds(proxyHandler); err != nil {
+				return fmt.Errorf("handler %q: %w", baseHandler.Category, err)
 			}
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateDepServiceRefs(dep DepService, visiting map[string]bool) error {
-	for _, target := range dep.Proxies {
-		if err := a.validateServicePointer(target, visiting); err != nil {
-			return fmt.Errorf("proxy: %w", err)
-		}
-	}
-	for _, target := range dep.Extensions {
-		if err := a.validateServicePointer(target, visiting); err != nil {
-			return fmt.Errorf("extension: %w", err)
+func validateProxyForwardOutbounds(proxyHandler ProxyHandler) error {
+	for route, outboundRef := range proxyHandler.Forward {
+		if !proxyHandlerHasOutboundRef(proxyHandler, outboundRef) {
+			return fmt.Errorf("forward route %q: outbound %q is not listed in outbounds", route, outboundRef)
 		}
 	}
 	return nil
 }
 
-func (a *NoPerfection) validateServicePointer(target ServicePointer, visiting map[string]bool) error {
-	if target.Ref != "" {
-		serviceName, handlerCategory := target.RefPath()
-		if serviceName == "" {
-			return fmt.Errorf("dep target service name is empty")
+func parseForwardRef(ref string) (service string, handlerCategory string, err error) {
+	if ref == "" {
+		return "", "", fmt.Errorf("forward outbound ref is empty")
+	}
+	if strings.HasSuffix(ref, "/") {
+		return "", "", fmt.Errorf("forward outbound ref %q has empty handler category", ref)
+	}
+	if strings.Contains(ref, "//") {
+		return "", "", fmt.Errorf("forward outbound ref %q has empty path segment", ref)
+	}
+
+	service, handlerCategory, ok := strings.Cut(ref, "/")
+	if !ok {
+		return ref, "", nil
+	}
+	if service == "" {
+		return "", "", fmt.Errorf("forward outbound service name is empty")
+	}
+	if handlerCategory == "" {
+		return "", "", fmt.Errorf("forward outbound handler category is empty")
+	}
+	return service, handlerCategory, nil
+}
+
+func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
+	serviceName, handlerCategory, err := parseForwardRef(ref)
+	if err != nil || serviceName == "" {
+		return false
+	}
+	if handlerCategory == "" {
+		handlerCategory = "main"
+	}
+
+	for _, outbound := range proxyHandler.Outbounds {
+		if outbound.Name != serviceName {
+			continue
 		}
-		record, err := a.GetService(serviceName)
-		if err != nil {
-			return fmt.Errorf("service %q not found: %w", serviceName, err)
+		if _, err := outbound.HandlerByCategory(handlerCategory); err == nil {
+			return true
 		}
-		if handlerCategory == "" {
-			return nil
-		}
-		if _, err := record.HandlerByCategory(handlerCategory); err != nil {
-			return fmt.Errorf("service %q handler category %q: %w", serviceName, handlerCategory, err)
+	}
+	return false
+}
+
+func (a *NoPerfection) validateDepTarget(target DepTarget, visiting map[string]bool) error {
+	if target.IsLink() {
+		if _, err := a.mycelium.Link(target.Link); err != nil {
+			return fmt.Errorf("dep target link %q: %w", target.Link, err)
 		}
 		return nil
 	}
 
-	return a.validateServiceRefs(target.Service, visiting)
+	// Validate the inline service proxies, extensions if any.
+	return a.validateServiceTopology(target.Service, visiting)
 }
 
 // Save saves the app configuration as JSON into its file path.

@@ -311,8 +311,8 @@ func TestValidateTopologyInlineService(t *testing.T) {
 					CommandDeps: []DepService{
 						{
 							Name: "call-user-api",
-							Proxies: []ServicePointer{
-								ServiceTarget(Service{Name: "nested_proxy", Type: ProxyType}),
+							Proxies: []DepTarget{
+								NewInlineTarget(Service{Name: "nested_proxy", Type: ProxyType}),
 							},
 						},
 					},
@@ -369,8 +369,8 @@ func TestValidateTopologyServiceHandlerDeps(t *testing.T) {
 			HandlerDeps: []DepService{
 				{
 					Name: "api",
-					Proxies: []ServicePointer{
-						ServiceTarget(Service{
+					Proxies: []DepTarget{
+						NewInlineTarget(Service{
 							Type: ProxyType,
 							Name: "inline_proxy",
 							Handlers: []Handler{
@@ -410,7 +410,7 @@ func TestValidateTopologyMissingRef(t *testing.T) {
 					CommandDeps: []DepService{
 						{
 							Name:    "route",
-							Proxies: []ServicePointer{RefTarget("missing_proxy")},
+							Proxies: []DepTarget{NewLinkTarget("pkg:$?var=services[name:missing_proxy]")},
 						},
 					},
 				},
@@ -437,7 +437,7 @@ func TestValidateTopologyMissingHandlerDepRef(t *testing.T) {
 			HandlerDeps: []DepService{
 				{
 					Name:    "api",
-					Proxies: []ServicePointer{RefTarget("missing_proxy")},
+					Proxies: []DepTarget{NewLinkTarget("pkg:$?var=services[name:missing_proxy]")},
 				},
 			},
 		},
@@ -460,7 +460,7 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 					CommandDeps: []DepService{
 						{
 							Name:    "route",
-							Proxies: []ServicePointer{RefTarget("auth_proxy", "main")},
+							Proxies: []DepTarget{NewLinkTarget("pkg:$?var=services[name:auth_proxy].handlers[category:main]")},
 						},
 					},
 				},
@@ -491,12 +491,8 @@ func TestValidateTopologyRefPathWithHandlerCategory(t *testing.T) {
 		t.Fatal("handler is not an independent handler")
 	}
 	target := handler.CommandDeps[0].Proxies[0]
-	if target.Ref != "auth_proxy/main" {
-		t.Fatalf("ref path = %q, want auth_proxy/main", target.Ref)
-	}
-	serviceName, category := target.RefPath()
-	if serviceName != "auth_proxy" || category != "main" {
-		t.Fatalf("Ref() = (%q, %q), want (auth_proxy, main)", serviceName, category)
+	if target.Link != "pkg:$?var=services[name:auth_proxy].handlers[category:main]" {
+		t.Fatalf("link = %q, want auth_proxy handler link", target.Link)
 	}
 }
 
@@ -513,7 +509,7 @@ func TestValidateTopologyRefPathMissingHandlerCategory(t *testing.T) {
 					CommandDeps: []DepService{
 						{
 							Name:    "route",
-							Proxies: []ServicePointer{RefTarget("auth_proxy", "missing")},
+							Proxies: []DepTarget{NewLinkTarget("pkg:$?var=services[name:auth_proxy].handlers[category:missing]")},
 						},
 					},
 				},
@@ -549,7 +545,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
       "handler-deps": [
         {
           "name": "api",
-          "proxies": ["auth_proxy"]
+          "proxies": ["pkg:$?var=services[name:auth_proxy]"]
         }
       ],
       "handlers": [
@@ -561,7 +557,7 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
             {
               "name": "route",
               "proxies": [
-                "auth_proxy",
+                "pkg:$?var=services[name:auth_proxy]",
                 {
                   "type": "Proxy",
                   "name": "inline_proxy",
@@ -619,15 +615,15 @@ func TestLoadWithMixedDepTargets(t *testing.T) {
 	if len(dep.Proxies) != 2 {
 		t.Fatalf("len(Proxies) = %d, want 2", len(dep.Proxies))
 	}
-	if dep.Proxies[0].Ref != "auth_proxy" {
-		t.Fatalf("first proxy path = %q, want auth_proxy", dep.Proxies[0].Ref)
+	if dep.Proxies[0].Link != "pkg:$?var=services[name:auth_proxy]" {
+		t.Fatalf("first proxy link = %q, want auth_proxy link", dep.Proxies[0].Link)
 	}
 	if dep.Proxies[1].Service.Name != "inline_proxy" {
 		t.Fatalf("second proxy inline = %#v", dep.Proxies[1].Service)
 	}
 	handlerDep := services[0].HandlerDeps[0]
-	if handlerDep.Proxies[0].Ref != "auth_proxy" {
-		t.Fatalf("handler-deps first proxy path = %q, want auth_proxy", handlerDep.Proxies[0].Ref)
+	if handlerDep.Proxies[0].Link != "pkg:$?var=services[name:auth_proxy]" {
+		t.Fatalf("handler-deps first proxy link = %q, want auth_proxy link", handlerDep.Proxies[0].Link)
 	}
 }
 

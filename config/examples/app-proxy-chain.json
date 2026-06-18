@@ -15,8 +15,8 @@
             {
               "name": "all-target-forms",
               "proxies": [
-                "auth_proxy",
-                "auth_proxy/auth-proxy",
+                "pkg:$?var=services[name:auth_proxy]",
+                "pkg:$?var=services[name:auth_proxy].handlers[category:auth-proxy]",
                 {
                   "type": "Extension",
                   "name": "inline_service_target",
@@ -67,8 +67,8 @@
                 }
               ],
               "extensions": [
-                "user_service",
-                "user_service/user-service",
+                "pkg:$?var=services[name:user_service]",
+                "pkg:$?var=services[name:user_service].handlers[category:user-service]",
                 {
                   "type": "Extension",
                   "name": "inline_extension_target",
@@ -131,7 +131,7 @@
         {
           "name": "public-api",
           "proxies": [
-            "auth_proxy"
+            "pkg:$?var=services[name:auth_proxy]"
           ]
         }
       ],
@@ -147,7 +147,7 @@
             {
               "name": "authorize",
               "proxies": [
-                "auth_proxy/auth-proxy"
+                "pkg:$?var=services[name:auth_proxy].handlers[category:auth-proxy]"
               ]
             }
           ]
@@ -170,7 +170,7 @@
             {
               "name": "authorize",
               "proxies": [
-                "audit_proxy"
+                "pkg:$?var=services[name:audit_proxy]"
               ]
             }
           ]
@@ -193,7 +193,7 @@
             {
               "name": "record-audit",
               "extensions": [
-                "user_service/user-service"
+                "pkg:$?var=services[name:user_service].handlers[category:user-service]"
               ]
             }
           ]

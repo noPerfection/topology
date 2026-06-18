@@ -339,14 +339,14 @@ func TestValidateDepService(t *testing.T) {
 
 	if err := ValidateDepService(DepService{
 		Name:    "call-user-api",
-		Proxies: []ServicePointer{RefTarget("auth_proxy")},
+		Proxies: []DepTarget{NewLinkTarget("pkg:$?var=services[name:auth_proxy]")},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with proxies: %v", err)
 	}
 
 	if err := ValidateDepService(DepService{
 		Name:       "get-user",
-		Extensions: []ServicePointer{RefTarget("user_service")},
+		Extensions: []DepTarget{NewLinkTarget("pkg:$?var=services[name:user_service]")},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with extensions: %v", err)
 	}
@@ -421,8 +421,9 @@ func TestValidateProxyForwards(t *testing.T) {
 
 	proxyHandler.Forward = map[string]string{"hello": "missing-service"}
 	service.Handlers = []Handler{proxyHandler}
-	if err := ValidateService(service); err == nil {
-		t.Fatal("ValidateService with forward outbound missing from outbounds returned nil error")
+	_, err := loadServices(t, []Service{service})
+	if err == nil {
+		t.Fatal("Load with forward outbound missing from outbounds returned nil error")
 	}
 }
 
@@ -706,8 +707,8 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 	serviceConfig.HandlerDeps = []DepService{
 		{
 			Name: "public",
-			Proxies: []ServicePointer{
-				RefTarget("auth_proxy"),
+			Proxies: []DepTarget{
+				NewLinkTarget("pkg:$?var=services[name:auth_proxy]"),
 			},
 		},
 	}

@@ -21,10 +21,10 @@ const (
 // Command Deps or Service deps per handler of service.
 // Use it to pipe other services
 type DepService struct {
-	// For command deps its command, for handler deps its handler catego
+	// For command deps its command, for handler deps its handler category
 	Name       string           `json:"name"`
-	Proxies    []ServicePointer `json:"proxies,omitempty"`
-	Extensions []ServicePointer `json:"extensions,omitempty"`
+	Proxies    []DepTarget `json:"proxies,omitempty"`
+	Extensions []DepTarget `json:"extensions,omitempty"`
 }
 
 type IndependentHandler struct {
@@ -213,6 +213,7 @@ func (s *Service) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// If no name its wrong.
 func (s Service) IsZero() bool {
 	return s.Name == ""
 }
@@ -497,35 +498,12 @@ func ValidateService(service Service) error {
 }
 
 func ValidateProxyForwards(proxyHandler ProxyHandler) error {
-	for route, outboundRef := range proxyHandler.Forward {
+	for route := range proxyHandler.Forward {
 		if !slices.Contains(proxyHandler.Routes, route) {
 			return fmt.Errorf("route %q is not listed in routes", route)
 		}
-		if !proxyHandlerHasOutboundRef(proxyHandler, outboundRef) {
-			return fmt.Errorf("outbound %q is not listed in outbounds", outboundRef)
-		}
 	}
 	return nil
-}
-
-func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
-	serviceName, handlerCategory, err := parseRefPath(ref)
-	if err != nil || serviceName == "" {
-		return false
-	}
-	if handlerCategory == "" {
-		handlerCategory = "main"
-	}
-
-	for _, outbound := range proxyHandler.Outbounds {
-		if outbound.Name != serviceName {
-			continue
-		}
-		if _, err := outbound.HandlerByCategory(handlerCategory); err == nil {
-			return true
-		}
-	}
-	return false
 }
 
 // HandlerByCategory returns the handler config by the handler category.
@@ -653,12 +631,12 @@ func ValidateDepService(dep DepService) error {
 	}
 
 	for i, target := range dep.Proxies {
-		if err := ValidateServicePointer(target); err != nil {
+		if err := ValidateDepTarget(target); err != nil {
 			return fmt.Errorf("proxies[%d]: %w", i, err)
 		}
 	}
 	for i, target := range dep.Extensions {
-		if err := ValidateServicePointer(target); err != nil {
+		if err := ValidateDepTarget(target); err != nil {
 			return fmt.Errorf("extensions[%d]: %w", i, err)
 		}
 	}

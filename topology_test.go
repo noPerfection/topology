@@ -232,8 +232,8 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 					CommandDeps: []config.DepService{
 						{
 							Name: "proxy",
-							Proxies: []config.ServicePointer{
-								config.ServiceTarget(config.Service{
+							Proxies: []config.DepTarget{
+								config.NewInlineTarget(config.Service{
 									Type: config.ProxyType,
 									Name: "nested-child",
 									Handlers: []config.Handler{
@@ -266,8 +266,8 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 		HandlerDeps: []config.DepService{
 			{
 				Name: "manager",
-				Proxies: []config.ServicePointer{
-					config.ServiceTarget(config.Service{
+				Proxies: []config.DepTarget{
+					config.NewInlineTarget(config.Service{
 						Type: config.ProxyType,
 						Name: "service-level-child",
 						Handlers: []config.Handler{
