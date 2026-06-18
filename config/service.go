@@ -205,6 +205,37 @@ func (s Service) Equal(other Service) bool {
 	return managersEqual(s, other)
 }
 
+// EqualHandlers reports whether s and other have the same handlers, excluding ServiceManagerCategory.
+func (s Service) EqualHandlers(other Service) bool {
+	a := nonManagerHandlersByCategory(s.Handlers)
+	b := nonManagerHandlersByCategory(other.Handlers)
+	if len(a) != len(b) {
+		return false
+	}
+	for category, indA := range a {
+		indB, ok := b[category]
+		if !ok {
+			return false
+		}
+		if indA.Type != indB.Type || !endpointsEqual(indA.Endpoint, indB.Endpoint) {
+			return false
+		}
+	}
+	return true
+}
+
+func nonManagerHandlersByCategory(handlers []Handler) map[string]IndependentHandler {
+	result := make(map[string]IndependentHandler)
+	for _, handler := range handlers {
+		ind, ok := handler.AsIndependentHandler()
+		if !ok || ind.Category == "" || ind.Category == ServiceManagerCategory {
+			continue
+		}
+		result[ind.Category] = ind
+	}
+	return result
+}
+
 func managersEqual(a, b Service) bool {
 	mgrA, errA := a.HandlerByCategory(ServiceManagerCategory)
 	mgrB, errB := b.HandlerByCategory(ServiceManagerCategory)

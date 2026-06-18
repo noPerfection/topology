@@ -522,6 +522,64 @@ func TestServiceEqual(t *testing.T) {
 	}
 }
 
+func TestServiceEqualHandlers(t *testing.T) {
+	manager := IndependentHandler{
+		Type:     SyncReplierType,
+		Category: ServiceManagerCategory,
+		Endpoint: message.NewEndpoint("manager", 0),
+	}
+	api := IndependentHandler{
+		Type:     ReplierType,
+		Category: "api",
+		Endpoint: message.NewEndpoint("api", 4101),
+	}
+	web := IndependentHandler{
+		Type:     ReplierType,
+		Category: "web",
+		Endpoint: message.NewEndpoint("web", 4102),
+	}
+
+	base := Service{
+		Name:     "worker",
+		Handlers: []Handler{manager, api},
+	}
+	sameHandlers := Service{
+		Name:     "worker",
+		Handlers: []Handler{manager, IndependentHandler(api)},
+	}
+	if !base.EqualHandlers(sameHandlers) {
+		t.Fatal("EqualHandlers returned false for same non-manager handlers")
+	}
+
+	differentEndpoint := Service{
+		Name:     "worker",
+		Handlers: []Handler{manager, IndependentHandler{Type: api.Type, Category: api.Category, Endpoint: message.NewEndpoint("api", 9999)}},
+	}
+	if base.EqualHandlers(differentEndpoint) {
+		t.Fatal("EqualHandlers returned true for different handler endpoints")
+	}
+
+	differentCategory := Service{
+		Name:     "worker",
+		Handlers: []Handler{manager, web},
+	}
+	if base.EqualHandlers(differentCategory) {
+		t.Fatal("EqualHandlers returned true for different handler categories")
+	}
+
+	ignoresManagerOnly := Service{
+		Name:     "worker",
+		Handlers: []Handler{IndependentHandler{
+			Type:     SyncReplierType,
+			Category: ServiceManagerCategory,
+			Endpoint: message.NewEndpoint("other-manager", 1),
+		}, api},
+	}
+	if !base.EqualHandlers(ignoresManagerOnly) {
+		t.Fatal("EqualHandlers should ignore ServiceManagerCategory handlers")
+	}
+}
+
 func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig, handlerOfType, _, _ := testService()
 	serviceConfig.Handlers = []Handler{handlerOfType}
