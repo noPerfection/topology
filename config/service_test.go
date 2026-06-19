@@ -339,14 +339,14 @@ func TestValidateDepService(t *testing.T) {
 
 	if err := ValidateDepService(DepService{
 		Name:    "call-user-api",
-		Proxies: []DepTarget{NewLinkTarget("pkg:$?var=services[name:auth_proxy]")},
+		Proxies: []string{"pkg:$?var=services[name:auth_proxy]"},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with proxies: %v", err)
 	}
 
 	if err := ValidateDepService(DepService{
 		Name:       "get-user",
-		Extensions: []DepTarget{NewLinkTarget("pkg:$?var=services[name:user_service]")},
+		Extensions: []string{"pkg:$?var=services[name:user_service]"},
 	}); err != nil {
 		t.Fatalf("ValidateDepService with extensions: %v", err)
 	}
@@ -707,8 +707,8 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 	serviceConfig.HandlerDeps = []DepService{
 		{
 			Name: "public",
-			Proxies: []DepTarget{
-				NewLinkTarget("pkg:$?var=services[name:auth_proxy]"),
+			Proxies: []string{
+				"pkg:$?var=services[name:auth_proxy]",
 			},
 		},
 	}

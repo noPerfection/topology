@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ahmetson/mushroom/substrates/json_substrate"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/message"
 )
@@ -25,8 +26,8 @@ const (
 type DepService struct {
 	// For command deps its command, for handler deps its handler category
 	Name       string           `json:"name"`
-	Proxies    []DepTarget `json:"proxies,omitempty"`
-	Extensions []DepTarget `json:"extensions,omitempty"`
+	Proxies    []string `json:"proxies,omitempty"`
+	Extensions []string `json:"extensions,omitempty"`
 }
 
 type IndependentHandler struct {
@@ -215,6 +216,9 @@ type Service struct {
 	HandlerDeps  []DepService      `json:"handler-deps,omitempty"`
 	Handlers     []Handler         `json:"handlers"`
 	Parameters   datatype.KeyValue `json:"parameters,omitempty"`
+
+	noPerf   *NoPerfection              `json:"-"`
+	mycelium **json_substrate.Mycelium `json:"-"`
 }
 
 func (s *Service) UnmarshalJSON(data []byte) error {
@@ -545,6 +549,60 @@ func ValidateProxyForwards(proxyHandler ProxyHandler) error {
 	return nil
 }
 
+// Facade resolves the dependency endpoint for the given handler category and command.
+// It walks handler-deps first, then command-deps on the matching handler,
+// following proxy links via ResolveDep until a terminal handler endpoint is reached.
+func (s Service) Facade(category, command string) (message.Endpoint, error) {
+	if s.noPerf == nil {
+		return message.Endpoint{}, fmt.Errorf("service was defined without topology, can't get its facade")
+	}
+	if s.mycelium == nil {
+		return message.Endpoint{}, fmt.Errorf("service was defined without topology config, can't get its facade")
+	}
+	if category == "" {
+		return message.Endpoint{}, fmt.Errorf("category argument is empty")
+	}
+
+	for _, dep := range s.HandlerDeps {
+		if dep.Name != category {
+			continue
+		}
+		for _, link := range dep.Proxies {
+			next, nextCategory, err := s.noPerf.ResolveDep(link)
+			if err != nil {
+				return message.Endpoint{}, err
+			}
+			return next.Facade(nextCategory, command)
+		}
+	}
+
+	handler, err := s.HandlerByCategory(category)
+	if err != nil {
+		return message.Endpoint{}, err
+	}
+	ind, ok := handler.AsIndependentHandler()
+	if !ok {
+		return message.Endpoint{}, fmt.Errorf("handler of %q category is not an independent handler", category)
+	}
+
+	if command != "" {
+		for _, dep := range ind.CommandDeps {
+			if dep.Name != command {
+				continue
+			}
+			for _, link := range dep.Proxies {
+				next, nextCategory, err := s.noPerf.ResolveDep(link)
+				if err != nil {
+					return message.Endpoint{}, err
+				}
+				return next.Facade(nextCategory, command)
+			}
+		}
+	}
+
+	return ind.Endpoint, nil
+}
+
 // HandlerByCategory returns the handler config by the handler category.
 // If the handler doesn't exist, then it returns an error.
 func (s *Service) HandlerByCategory(category string) (Handler, error) {
@@ -669,14 +727,14 @@ func ValidateDepService(dep DepService) error {
 		return fmt.Errorf("dep service('%s') must declare proxies or extensions", dep.Name)
 	}
 
-	for i, target := range dep.Proxies {
-		if err := ValidateDepTarget(target); err != nil {
-			return fmt.Errorf("proxies[%d]: %w", i, err)
+	for i, link := range dep.Proxies {
+		if link == "" {
+			return fmt.Errorf("proxies[%d]: link is empty", i)
 		}
 	}
-	for i, target := range dep.Extensions {
-		if err := ValidateDepTarget(target); err != nil {
-			return fmt.Errorf("extensions[%d]: %w", i, err)
+	for i, link := range dep.Extensions {
+		if link == "" {
+			return fmt.Errorf("extensions[%d]: link is empty", i)
 		}
 	}
 

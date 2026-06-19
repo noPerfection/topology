@@ -15,109 +15,10 @@
             {
               "name": "all-target-forms",
               "proxies": [
-                "pkg:$?var=services[name:auth_proxy]",
-                "pkg:$?var=services[name:auth_proxy].handlers[category:auth-proxy]",
-                {
-                  "type": "Extension",
-                  "name": "inline_service_target",
-                  "handlers": [
-                    {
-                      "type": "Replier",
-                      "category": "inline-service",
-                      "endpoint": {
-                        "id": "inline_service_1",
-                        "port": 4991
-                      },
-                      "inbounds": []
-                    }
-                  ]
-                },
-                {
-                  "type": "Proxy",
-                  "name": "inline_proxy_target",
-                  "handlers": [
-                    {
-                      "type": "Replier",
-                      "category": "inline-proxy",
-                      "endpoint": {
-                        "id": "inline_proxy_1",
-                        "port": 4992
-                      },
-                      "routes": [
-                        "catalog"
-                      ],
-                      "outbounds": [
-                        {
-                          "type": "Independent",
-                          "name": "user_service",
-                          "handlers": [
-                            {
-                              "type": "Replier",
-                              "category": "user-service",
-                              "endpoint": {
-                                "id": "user_api_1",
-                                "port": 4401
-                              }
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
+                "pkg:$?var=services[name:auth_proxy]&category=auth-proxy"
               ],
               "extensions": [
-                "pkg:$?var=services[name:user_service]",
-                "pkg:$?var=services[name:user_service].handlers[category:user-service]",
-                {
-                  "type": "Extension",
-                  "name": "inline_extension_target",
-                  "handlers": [
-                    {
-                      "type": "Replier",
-                      "category": "inline-extension",
-                      "endpoint": {
-                        "id": "inline_extension_1",
-                        "port": 4993
-                      },
-                      "inbounds": []
-                    }
-                  ]
-                },
-                {
-                  "type": "Proxy",
-                  "name": "inline_extension_proxy_target",
-                  "handlers": [
-                    {
-                      "type": "Replier",
-                      "category": "inline-extension-proxy",
-                      "endpoint": {
-                        "id": "inline_extension_proxy_1",
-                        "port": 4994
-                      },
-                      "routes": [
-                        "catalog"
-                      ],
-                      "outbounds": [
-                        {
-                          "type": "Proxy",
-                          "name": "audit_proxy",
-                          "handlers": [
-                            {
-                              "type": "Replier",
-                              "category": "audit-proxy",
-                              "endpoint": {
-                                "id": "audit_1",
-                                "port": 4301
-                              },
-                              "outbounds": []
-                            }
-                          ]
-                        }
-                      ]
-                    }
-                  ]
-                }
+                "pkg:$?var=services[name:user_service]&category=user-service"
               ]
             }
           ]
@@ -131,7 +32,7 @@
         {
           "name": "public-api",
           "proxies": [
-            "pkg:$?var=services[name:auth_proxy]"
+            "pkg:$?var=services[name:auth_proxy]&category=auth-proxy"
           ]
         }
       ],
@@ -147,7 +48,7 @@
             {
               "name": "authorize",
               "proxies": [
-                "pkg:$?var=services[name:auth_proxy].handlers[category:auth-proxy]"
+                "pkg:$?var=services[name:auth_proxy]&category=auth-proxy"
               ]
             }
           ]
@@ -170,7 +71,7 @@
             {
               "name": "authorize",
               "proxies": [
-                "pkg:$?var=services[name:audit_proxy]"
+                "pkg:$?var=services[name:audit_proxy]&category=audit-proxy"
               ]
             }
           ]
@@ -193,7 +94,7 @@
             {
               "name": "record-audit",
               "extensions": [
-                "pkg:$?var=services[name:user_service].handlers[category:user-service]"
+                "pkg:$?var=services[name:user_service]&category=user-service"
               ]
             }
           ]

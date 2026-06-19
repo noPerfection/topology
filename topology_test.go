@@ -231,22 +231,8 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 					Endpoint: message.NewEndpoint("nested-parent-manager", 6100),
 					CommandDeps: []config.DepService{
 						{
-							Name: "proxy",
-							Proxies: []config.DepTarget{
-								config.NewInlineTarget(config.Service{
-									Type: config.ProxyType,
-									Name: "nested-child",
-									Handlers: []config.Handler{
-										config.ProxyHandler{
-											IndependentHandler: config.IndependentHandler{
-												Type:     config.ReplierType,
-												Category: ServiceManagerCategory,
-												Endpoint: message.NewEndpoint("nested-child-manager", 6101),
-											},
-										},
-									},
-								}),
-							},
+							Name:    "proxy",
+							Proxies: []string{"pkg:$?var=services[name:test-manager]"},
 						},
 					},
 				},
@@ -257,30 +243,16 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 
 	_, err = test.topology.config.GetService("nested-parent")
 	s().NoError(err)
-	_, err = test.topology.config.GetService("nested-child")
-	s().Error(err)
+	_, err = test.topology.config.GetService("test-manager")
+	s().NoError(err)
 
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "service-level-parent",
 		HandlerDeps: []config.DepService{
 			{
-				Name: "manager",
-				Proxies: []config.DepTarget{
-					config.NewInlineTarget(config.Service{
-						Type: config.ProxyType,
-						Name: "service-level-child",
-						Handlers: []config.Handler{
-							config.ProxyHandler{
-								IndependentHandler: config.IndependentHandler{
-									Type:     config.ReplierType,
-									Category: ServiceManagerCategory,
-									Endpoint: message.NewEndpoint("service-level-child-manager", 6201),
-								},
-							},
-						},
-					}),
-				},
+				Name:    "manager",
+				Proxies: []string{"pkg:$?var=services[name:test-manager]"},
 			},
 		},
 		Handlers: []config.Handler{
@@ -297,8 +269,8 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 
 	_, err = test.topology.config.GetService("service-level-parent")
 	s().NoError(err)
-	_, err = test.topology.config.GetService("service-level-child")
-	s().Error(err)
+	_, err = test.topology.config.GetService("test-manager")
+	s().NoError(err)
 
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,

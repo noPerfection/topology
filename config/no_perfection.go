@@ -54,7 +54,7 @@ func (a *NoPerfection) queryMycelium(mushroomURL string) (any, error) {
 	return fruited, nil
 }
 
-func decodeService(value any) (Service, error) {
+func (a *NoPerfection) decodeService(value any) (Service, error) {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return Service{}, fmt.Errorf("value is not a service: %w", err)
@@ -68,10 +68,15 @@ func decodeService(value any) (Service, error) {
 		return Service{}, fmt.Errorf("value is not a service: missing name")
 	}
 
+	if a != nil {
+		service.noPerf = a
+		service.mycelium = &a.mycelium
+	}
+
 	return service, nil
 }
 
-func decodeServices(value any) ([]Service, error) {
+func (a *NoPerfection) decodeServices(value any) ([]Service, error) {
 	items, ok := value.([]any)
 	if !ok {
 		return nil, fmt.Errorf("mushroom url is fetching wrong data: expected array, got %T", value)
@@ -79,7 +84,7 @@ func decodeServices(value any) ([]Service, error) {
 
 	services := make([]Service, 0, len(items))
 	for _, item := range items {
-		service, err := decodeService(item)
+		service, err := a.decodeService(item)
 		if err != nil {
 			return nil, fmt.Errorf("mushroom url is fetching wrong data: %w", err)
 		}
@@ -256,13 +261,13 @@ func (a *NoPerfection) validateServiceTopology(service Service, visiting map[str
 	}
 
 	for _, dep := range service.HandlerDeps {
-		for _, target := range dep.Proxies {
-			if err := a.validateDepTarget(target, visiting); err != nil {
+		for _, link := range dep.Proxies {
+			if err := a.validateDepLink(link); err != nil {
 				return fmt.Errorf("handler-deps category %q: proxy: %w", dep.Name, err)
 			}
 		}
-		for _, target := range dep.Extensions {
-			if err := a.validateDepTarget(target, visiting); err != nil {
+		for _, link := range dep.Extensions {
+			if err := a.validateDepLink(link); err != nil {
 				return fmt.Errorf("handler-deps category %q: extension: %w", dep.Name, err)
 			}
 		}
@@ -273,13 +278,13 @@ func (a *NoPerfection) validateServiceTopology(service Service, visiting map[str
 			continue
 		}
 		for _, dep := range baseHandler.CommandDeps {
-			for _, target := range dep.Proxies {
-				if err := a.validateDepTarget(target, visiting); err != nil {
+			for _, link := range dep.Proxies {
+				if err := a.validateDepLink(link); err != nil {
 					return fmt.Errorf("command %q: proxy: %w", dep.Name, err)
 				}
 			}
-			for _, target := range dep.Extensions {
-				if err := a.validateDepTarget(target, visiting); err != nil {
+			for _, link := range dep.Extensions {
+				if err := a.validateDepLink(link); err != nil {
 					return fmt.Errorf("command %q: extension: %w", dep.Name, err)
 				}
 			}
@@ -350,16 +355,79 @@ func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
 	return false
 }
 
-func (a *NoPerfection) validateDepTarget(target DepTarget, visiting map[string]bool) error {
-	if target.IsLink() {
-		if _, err := a.mycelium.Link(target.Link); err != nil {
-			return fmt.Errorf("dep target link %q: %w", target.Link, err)
-		}
-		return nil
+func (a *NoPerfection) validateDepLink(link string) error {
+	if _, _, err := a.ResolveDep(link); err != nil {
+		return fmt.Errorf("dep link %q: %w", link, err)
+	}
+	return nil
+}
+
+// NoHandlerError reports that a resolved service does not contain the requested handler category.
+type NoHandlerError struct {
+	Service  string
+	Category string
+}
+
+func (e *NoHandlerError) Error() string {
+	return fmt.Sprintf("handler of %q category not found on service %q", e.Category, e.Service)
+}
+
+// ResolveDep resolves a dependency mushroom URL to a service and handler category.
+// The URL may be a link or dereference pointing at a root service.
+// When the URL carries an additional "category" property, that handler category
+// is used; otherwise DefaultCategory is used.
+func (a *NoPerfection) ResolveDep(mushroomURL string) (Service, string, error) {
+	if a == nil {
+		return Service{}, "", fmt.Errorf("app struct is nil")
+	}
+	if a.mycelium == nil {
+		return Service{}, "", fmt.Errorf("topology mycelium not set, call config.Load()")
+	}
+	if mushroomURL == "" {
+		return Service{}, "", fmt.Errorf("mushroom url is empty")
 	}
 
-	// Validate the inline service proxies, extensions if any.
-	return a.validateServiceTopology(target.Service, visiting)
+	rootHypha, err := a.mycelium.Soil().Hypha(a.mycelium.MushroomURL())
+	if err != nil {
+		return Service{}, "", fmt.Errorf("soil.Hypha(%q): %w", a.mycelium.MushroomURL(), err)
+	}
+
+	hypha, err := a.mycelium.Soil().Hypha(mushroomURL, rootHypha)
+	if err != nil {
+		return Service{}, "", fmt.Errorf("soil.Hypha(%q): %w", mushroomURL, err)
+	}
+
+	category := depCategory(hypha)
+
+	var serviceURL string
+	if hypha.URL {
+		fetchHypha := hypha
+		fetchHypha.AdditionalProps = nil
+		if !fetchHypha.Dereference {
+			fetchHypha = fetchHypha.AsDereference()
+		}
+		serviceURL = fetchHypha.String()
+	} else {
+		serviceURL = normalizeServiceURL(mushroomURL)
+	}
+
+	service, err := a.GetService(serviceURL)
+	if err != nil {
+		return Service{}, "", err
+	}
+
+	if _, err := service.HandlerByCategory(category); err != nil {
+		return Service{}, "", &NoHandlerError{Service: service.Name, Category: category}
+	}
+
+	return service, category, nil
+}
+
+func depCategory(hypha mushroom.Hypha) string {
+	if category, ok := hypha.AdditionalProps["category"]; ok && category != "" {
+		return category
+	}
+	return DefaultCategory
 }
 
 // Save saves the app configuration as JSON into its file path.
@@ -419,7 +487,7 @@ func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
 		return Service{}, fmt.Errorf("GetService(%q): %w", mushroomURL, err)
 	}
 
-	service, err := decodeService(value)
+	service, err := a.decodeService(value)
 	if err != nil {
 		return Service{}, fmt.Errorf("GetService(%q): %w", mushroomURL, err)
 	}
@@ -446,7 +514,7 @@ func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 		return nil, fmt.Errorf("GetHandler(%q): handler not found", mushroomURL)
 	}
 
-	service, err := decodeService(value)
+	service, err := a.decodeService(value)
 	if err != nil {
 		return nil, fmt.Errorf("GetHandler(%q): handler not found", mushroomURL)
 	}
@@ -466,7 +534,7 @@ func (a *NoPerfection) GetServices(mushroomURL string) ([]Service, error) {
 		return nil, err
 	}
 
-	services, err := decodeServices(fruited)
+	services, err := a.decodeServices(fruited)
 	if err != nil {
 		return nil, fmt.Errorf("GetServices(%q): %w", mushroomURL, err)
 	}
