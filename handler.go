@@ -28,6 +28,7 @@ const (
 	Services                = "services"
 	GetHandler              = "get-handler"
 	GetFacade               = "get-facade"
+	GetLink                 = "get-link"
 	AddService              = "add-service"
 	SetService              = "set-service"
 	RemoveService           = "remove-service"
@@ -240,6 +241,20 @@ func (h *Handler) GetFacade(mushroomURL string, command ...string) (string, erro
 	return h.topology.GetFacade(mushroomURL, command...)
 }
 
+// GetLink normalizes mushroomURL into a verified full Mushroom link before start.
+func (h *Handler) GetLink(mushroomURL string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.requireNotStarted(); err != nil {
+		return "", err
+	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	return h.topology.GetLink(mushroomURL)
+}
+
 // Services returns service configurations before the topology handler is started.
 func (h *Handler) Services() ([]config.Service, error) {
 	h.mu.Lock()
@@ -420,6 +435,22 @@ func (h *Handler) onGetFacade(req message.RequestInterface) message.ReplyInterfa
 	return req.Ok(datatype.New().Set("facade", facade))
 }
 
+// onGetLink returns a verified full Mushroom link for mushroomURL.
+// Requires 'link' — a symbol, link, or dereference Mushroom URL.
+func (h *Handler) onGetLink(req message.RequestInterface) message.ReplyInterface {
+	mushroomURL, err := req.RouteParameters().StringValue("link")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('link'): %v", err))
+	}
+
+	link, err := h.topology.GetLink(mushroomURL)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.GetLink(%q): %v", mushroomURL, err))
+	}
+
+	return req.Ok(datatype.New().Set("link", link))
+}
+
 func optionalCommand(command string) []string {
 	if command == "" {
 		return nil
@@ -477,6 +508,9 @@ func (h *Handler) Start() error {
 	}
 	if err := h.handler.Route(GetFacade, h.onGetFacade); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", GetFacade, err)
+	}
+	if err := h.handler.Route(GetLink, h.onGetLink); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", GetLink, err)
 	}
 	if err := h.handler.Route(Services, h.onServices); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Services, err)

@@ -93,6 +93,21 @@ type TopologyInterface interface {
 	//	link, err := tp.GetFacade("*pkg:$?var=services[name:main]&category=main", "authorize")
 	GetFacade(mushroomURL string, command ...string) (string, error)
 
+	// GetLink normalizes mushroomURL into a verified full Mushroom link.
+	// Dereference URLs are converted to links; plain service names are expanded.
+	// Resource paths and additional properties are preserved.
+	//
+	// Symbol:
+	//
+	//	link, err := tp.GetLink("auth_proxy")
+	//	  → "pkg:json/…/app.json?var=services[name:auth_proxy]"
+	//
+	// Dereference Mushroom URL:
+	//
+	//	link, err := tp.GetLink("*pkg:$?var=services[name:auth_proxy]&category=main")
+	//	  → "pkg:json/…/app.json?var=services[name:auth_proxy]&category=main"
+	GetLink(mushroomURL string) (string, error)
+
 	// Services returns the list of configured services.
 	Services() ([]config.Service, error)
 
@@ -242,6 +257,23 @@ func (tp *Topology) GetFacade(mushroomURL string, command ...string) (string, er
 	}
 
 	return link.AsLink().String(), nil
+}
+
+// GetLink normalizes mushroomURL into a verified full Mushroom link.
+func (tp *Topology) GetLink(mushroomURL string) (string, error) {
+	if tp == nil || tp.config == nil {
+		return "", fmt.Errorf("nil config")
+	}
+	if len(mushroomURL) == 0 {
+		return "", fmt.Errorf("mushroom url is empty")
+	}
+
+	link, err := tp.config.GetServiceLink(mushroomURL)
+	if err != nil {
+		return "", fmt.Errorf("tp.config.GetServiceLink(%q): %w", mushroomURL, err)
+	}
+
+	return link, nil
 }
 
 // Services returns all configured services.

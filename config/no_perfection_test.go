@@ -768,6 +768,43 @@ func TestGetFacadeProxyChain(t *testing.T) {
 	}
 }
 
+func TestGetServiceLink(t *testing.T) {
+	app, err := Load(filepath.Join("examples", "app-proxy-chain.json"))
+	if err != nil {
+		t.Fatalf("Load app-proxy-chain example: %v", err)
+	}
+
+	link, err := app.GetServiceLink("auth_proxy")
+	if err != nil {
+		t.Fatalf("GetServiceLink(auth_proxy): %v", err)
+	}
+	if strings.HasPrefix(link, "*") {
+		t.Fatalf("GetServiceLink = dereference %q, want link", link)
+	}
+	if !strings.Contains(link, "services[name:auth_proxy]") {
+		t.Fatalf("GetServiceLink = %q, want auth_proxy service path", link)
+	}
+
+	link, err = app.GetServiceLink("*pkg:$?var=services[name:main]&category=main")
+	if err != nil {
+		t.Fatalf("GetServiceLink dereference with category: %v", err)
+	}
+	if strings.HasPrefix(link, "*") {
+		t.Fatalf("GetServiceLink = dereference %q, want link", link)
+	}
+	if !strings.Contains(link, "services[name:main]") || !strings.Contains(link, "category=main") {
+		t.Fatalf("GetServiceLink = %q, want main service link with category", link)
+	}
+
+	link, err = app.GetServiceLink("*pkg:$?var=services[name:main].handlers[category:main]")
+	if err != nil {
+		t.Fatalf("GetServiceLink handler path: %v", err)
+	}
+	if !strings.Contains(link, "handlers[category:main]") {
+		t.Fatalf("GetServiceLink = %q, want handler path preserved", link)
+	}
+}
+
 func TestFacadeRequiresTopology(t *testing.T) {
 	service := Service{
 		Name: "orphan",

@@ -197,6 +197,41 @@ func (c *Client) GetFacade(mushroomURL string, command ...string) (string, error
 	return facade, nil
 }
 
+// GetLink normalizes mushroomURL into a verified full Mushroom link.
+//
+// Symbol:
+//
+//	link, err := client.GetLink("auth_proxy")
+//	  → "pkg:json/.#app.json?var=services[name:auth_proxy]"
+//
+// Dereference Mushroom URL:
+//
+//	link, err := client.GetLink("*pkg:$?var=services[name:auth_proxy]&category=main")
+//	  → "pkg:json/./#app.json?var=services[name:auth_proxy]&category=main"
+func (c *Client) GetLink(mushroomURL string) (string, error) {
+	req := message.Request{
+		Command: GetLink,
+		Parameters: datatype.New().
+			Set("link", mushroomURL),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return "", fmt.Errorf("socket.Request('%s'): %w", GetLink, err)
+	}
+
+	if !reply.IsOK() {
+		return "", fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	link, err := reply.ReplyParameters().StringValue("link")
+	if err != nil {
+		return "", fmt.Errorf("reply.ReplyParameters().StringValue('link'): %w", err)
+	}
+
+	return link, nil
+}
+
 // Services returns all service configurations.
 func (c *Client) Services() ([]config.Service, error) {
 	req := message.Request{
