@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/ahmetson/mushroom"
 	"github.com/ahmetson/mushroom/substrates/json_substrate"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/protocol/message"
@@ -25,7 +26,7 @@ const (
 // Use it to pipe other services
 type DepService struct {
 	// For command deps its command, for handler deps its handler category
-	Name       string           `json:"name"`
+	Name       string   `json:"name"`
 	Proxies    []string `json:"proxies,omitempty"`
 	Extensions []string `json:"extensions,omitempty"`
 }
@@ -217,8 +218,9 @@ type Service struct {
 	Handlers     []Handler         `json:"handlers"`
 	Parameters   datatype.KeyValue `json:"parameters,omitempty"`
 
-	noPerf   *NoPerfection              `json:"-"`
-	mycelium **json_substrate.Mycelium `json:"-"`
+	noPerf      *NoPerfection             `json:"-"`
+	mycelium    **json_substrate.Mycelium `json:"-"`
+	mushroomURL mushroom.Hypha            `json:"-"`
 }
 
 func (s *Service) UnmarshalJSON(data []byte) error {
@@ -549,18 +551,42 @@ func ValidateProxyForwards(proxyHandler ProxyHandler) error {
 	return nil
 }
 
-// Facade resolves the dependency endpoint for the given handler category and command.
-// It walks handler-deps first, then command-deps on the matching handler,
-// following proxy links via ResolveDep until a terminal handler endpoint is reached.
-func (s Service) Facade(category, command string) (message.Endpoint, error) {
+// Facade resolves the Mushroom link for this service.
+//
+// The name follows the facade pattern familiar in distributed systems: the caller
+// doesn't have to know what topology this service holds. Facade returns a link to what to call.
+//
+// Resolution order:
+//  1. handler-deps on this service matching handler category
+//  2. when command is given: command-deps on the handler matching command
+//  3. otherwise return this service's link with additional property category=<category>
+//
+// Facade is possible to use in the topology/config.DepService.DepTarget so it includes category additional property.
+//
+// Examples (see config/examples/app-proxy-chain.json):
+//
+//	main.Facade("main", "authorize")
+//	  main → auth_proxy (auth-proxy) → audit_proxy (audit-proxy)
+//
+//	main.Facade("public-api", "authorize")
+//	  main → auth_proxy via handler-deps → audit_proxy via authorize chain
+//
+//	userService.Facade("user-service")
+//	  user_service link with category=user-service (terminal, no proxies)
+func (s Service) Facade(category string, command ...string) (mushroom.Hypha, error) {
+	var cmd string
+	if len(command) > 0 {
+		cmd = command[0]
+	}
+
 	if s.noPerf == nil {
-		return message.Endpoint{}, fmt.Errorf("service was defined without topology, can't get its facade")
+		return mushroom.Hypha{}, fmt.Errorf("service was defined without topology, can't get its facade")
 	}
 	if s.mycelium == nil {
-		return message.Endpoint{}, fmt.Errorf("service was defined without topology config, can't get its facade")
+		return mushroom.Hypha{}, fmt.Errorf("service was defined without topology config, can't get its facade")
 	}
 	if category == "" {
-		return message.Endpoint{}, fmt.Errorf("category argument is empty")
+		return mushroom.Hypha{}, fmt.Errorf("category argument is empty")
 	}
 
 	for _, dep := range s.HandlerDeps {
@@ -570,37 +596,42 @@ func (s Service) Facade(category, command string) (message.Endpoint, error) {
 		for _, link := range dep.Proxies {
 			next, nextCategory, err := s.noPerf.ResolveDep(link)
 			if err != nil {
-				return message.Endpoint{}, err
+				return mushroom.Hypha{}, err
 			}
-			return next.Facade(nextCategory, command)
+			return next.Facade(nextCategory, cmd)
 		}
 	}
 
 	handler, err := s.HandlerByCategory(category)
 	if err != nil {
-		return message.Endpoint{}, err
+		return mushroom.Hypha{}, err
 	}
 	ind, ok := handler.AsIndependentHandler()
 	if !ok {
-		return message.Endpoint{}, fmt.Errorf("handler of %q category is not an independent handler", category)
+		return mushroom.Hypha{}, fmt.Errorf("handler of %q category is not an independent handler", category)
 	}
 
-	if command != "" {
+	if cmd != "" {
 		for _, dep := range ind.CommandDeps {
-			if dep.Name != command {
+			if dep.Name != cmd {
 				continue
 			}
 			for _, link := range dep.Proxies {
 				next, nextCategory, err := s.noPerf.ResolveDep(link)
 				if err != nil {
-					return message.Endpoint{}, err
+					return mushroom.Hypha{}, err
 				}
-				return next.Facade(nextCategory, command)
+				return next.Facade(nextCategory, cmd)
 			}
 		}
 	}
 
-	return ind.Endpoint, nil
+	link := s.mushroomURL.AsLink()
+	if link.AdditionalProps == nil {
+		link.AdditionalProps = map[string]string{}
+	}
+	link.AdditionalProps["category"] = category
+	return link, nil
 }
 
 // HandlerByCategory returns the handler config by the handler category.

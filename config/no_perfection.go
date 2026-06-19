@@ -21,16 +21,35 @@ type NoPerfection struct {
 	mycelium *json_substrate.Mycelium
 }
 
-// normalizeServiceURL maps a service lookup argument to a dereference Mushroom URL.
-// Mushroom URLs are returned unchanged; a plain symbol is expanded to a root name filter.
-//
-//	symbol:      "auth_proxy"  →  "*pkg:$?var=services[name:auth_proxy]"
-//	mushroomURL: "*pkg:$?var=services[name:auth_proxy]"  →  unchanged
-func normalizeServiceURL(mushroomURL string) string {
-	if strings.HasPrefix(mushroomURL, "pkg:") || strings.HasPrefix(mushroomURL, "*pkg:") {
-		return mushroomURL
+// toHypha converts mushroomURL (link or dereference) into a full github.com/ahmetson/mushroom.Hypha
+// wildcards are filled against the root mycelium.
+// Plain symbols expand to *pkg:$?var=services[name:<symbol>].
+func (a *NoPerfection) toHypha(mushroomURL string) (mushroom.Hypha, error) {
+	if a == nil {
+		return mushroom.Hypha{}, fmt.Errorf("app struct is nil")
 	}
-	return fmt.Sprintf("*pkg:$?var=services[name:%s]", mushroomURL)
+	if a.mycelium == nil {
+		return mushroom.Hypha{}, fmt.Errorf("topology mycelium not set, call config.Load()")
+	}
+	if mushroomURL == "" {
+		return mushroom.Hypha{}, fmt.Errorf("mushroom url is empty")
+	}
+
+	hypha, err := a.mycelium.Soil().Hypha(mushroomURL, a.mycelium.MyceliumURL())
+	if err != nil {
+		return mushroom.Hypha{}, fmt.Errorf("soil.Hypha(%q): %w", mushroomURL, err)
+	}
+	if !hypha.URL {
+		hypha, err = a.mycelium.Soil().Hypha(
+			fmt.Sprintf("*pkg:$?var=services[name:%s]", mushroomURL),
+			a.mycelium.MyceliumURL(),
+		)
+		if err != nil {
+			return mushroom.Hypha{}, fmt.Errorf("soil.Hypha(%q): %w", mushroomURL, err)
+		}
+	}
+
+	return hypha, nil
 }
 
 func (a *NoPerfection) queryMycelium(mushroomURL string) (any, error) {
@@ -173,7 +192,9 @@ func Load(mushroomURL string) (NoPerfection, error) {
 		return NoPerfection{}, fmt.Errorf("json_substrate.Root(%q): %w", linkURL, err)
 	}
 
-	appConfig := NoPerfection{mycelium: mycelium}
+	appConfig := NoPerfection{
+		mycelium: mycelium,
+	}
 
 	if loaded {
 		if err := appConfig.validateTopology("*pkg:$?var=services"); err != nil {
@@ -387,35 +408,20 @@ func (a *NoPerfection) ResolveDep(mushroomURL string) (Service, string, error) {
 		return Service{}, "", fmt.Errorf("mushroom url is empty")
 	}
 
-	rootHypha, err := a.mycelium.Soil().Hypha(a.mycelium.MushroomURL())
-	if err != nil {
-		return Service{}, "", fmt.Errorf("soil.Hypha(%q): %w", a.mycelium.MushroomURL(), err)
-	}
-
-	hypha, err := a.mycelium.Soil().Hypha(mushroomURL, rootHypha)
-	if err != nil {
-		return Service{}, "", fmt.Errorf("soil.Hypha(%q): %w", mushroomURL, err)
-	}
-
-	category := depCategory(hypha)
-
-	var serviceURL string
-	if hypha.URL {
-		fetchHypha := hypha
-		fetchHypha.AdditionalProps = nil
-		if !fetchHypha.Dereference {
-			fetchHypha = fetchHypha.AsDereference()
-		}
-		serviceURL = fetchHypha.String()
-	} else {
-		serviceURL = normalizeServiceURL(mushroomURL)
-	}
-
-	service, err := a.GetService(serviceURL)
+	hypha, err := a.toHypha(mushroomURL)
 	if err != nil {
 		return Service{}, "", err
 	}
 
+	category := depCategory(hypha)
+	hypha.AdditionalProps = nil
+
+	service, err := a.GetService(hypha.AsDereference().String())
+	if err != nil {
+		return Service{}, "", err
+	}
+
+	// Make sure the category exists too.
 	if _, err := service.HandlerByCategory(category); err != nil {
 		return Service{}, "", &NoHandlerError{Service: service.Name, Category: category}
 	}
@@ -451,10 +457,7 @@ func (a NoPerfection) Save() error {
 		return fmt.Errorf("mycelium substrate is %T, want *json_substrate.Substrate", *a.mycelium.Substrate())
 	}
 
-	hypha, err := a.mycelium.Soil().Hypha(a.mycelium.MushroomURL())
-	if err != nil {
-		return fmt.Errorf("soil.Hypha(%q): %w", a.mycelium.MushroomURL(), err)
-	}
+	hypha := a.mycelium.MyceliumURL()
 
 	var indented bytes.Buffer
 	if err := json.Indent(&indented, []byte(jsonText), "", "  "); err != nil {
@@ -477,7 +480,12 @@ func (a NoPerfection) Save() error {
 // GetService resolves a Mushroom URL and returns a single service.
 // Plain service names are resolved as *pkg:$?var=services[name:<name>].
 func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
-	fruited, err := a.queryMycelium(normalizeServiceURL(mushroomURL))
+	hypha, err := a.toHypha(mushroomURL)
+	if err != nil {
+		return Service{}, err
+	}
+
+	fruited, err := a.queryMycelium(hypha.String())
 	if err != nil {
 		return Service{}, err
 	}
@@ -491,6 +499,9 @@ func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
 	if err != nil {
 		return Service{}, fmt.Errorf("GetService(%q): %w", mushroomURL, err)
 	}
+
+	hypha.AdditionalProps = nil
+	service.mushroomURL = hypha.AsLink()
 
 	return service, nil
 }
@@ -529,7 +540,12 @@ func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 
 // GetServices resolves a Mushroom URL and returns the services at that path.
 func (a *NoPerfection) GetServices(mushroomURL string) ([]Service, error) {
-	fruited, err := a.queryMycelium(mushroomURL)
+	hypha, err := a.toHypha(mushroomURL)
+	if err != nil {
+		return nil, err
+	}
+
+	fruited, err := a.queryMycelium(hypha.String())
 	if err != nil {
 		return nil, err
 	}
@@ -537,6 +553,18 @@ func (a *NoPerfection) GetServices(mushroomURL string) ([]Service, error) {
 	services, err := a.decodeServices(fruited)
 	if err != nil {
 		return nil, fmt.Errorf("GetServices(%q): %w", mushroomURL, err)
+	}
+
+	listLink := hypha.AsLink()
+	listLink.AdditionalProps = nil
+	parent, _ := listLink.ParentResource()
+
+	for i := range services {
+		child, err := parent.ChildResource("[name:" + services[i].Name + "]")
+		if err != nil {
+			return nil, fmt.Errorf("GetServices(%q): service %q mushroom url: %w", mushroomURL, services[i].Name, err)
+		}
+		services[i].mushroomURL = child
 	}
 
 	return services, nil

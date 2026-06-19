@@ -701,32 +701,35 @@ func TestFacadeProxyChain(t *testing.T) {
 		t.Fatalf("GetService(main): %v", err)
 	}
 
-	endpoint, err := main.Facade("main", "authorize")
+	hypha, err := main.Facade("main", "authorize")
 	if err != nil {
 		t.Fatalf("Facade(main, authorize): %v", err)
 	}
-	if endpoint.Port != 4301 {
-		t.Fatalf("Facade(main, authorize) port = %d, want 4301", endpoint.Port)
+	if hypha.Dereference {
+		t.Fatalf("Facade(main, authorize) = dereference %q, want link", hypha.String())
+	}
+	if !strings.Contains(hypha.String(), "services[name:audit_proxy]") || hypha.AdditionalProps["category"] != "audit-proxy" {
+		t.Fatalf("Facade(main, authorize) = %q category=%q, want audit_proxy link with category audit-proxy", hypha.String(), hypha.AdditionalProps["category"])
 	}
 
-	endpoint, err = main.Facade("public-api", "authorize")
+	hypha, err = main.Facade("public-api", "authorize")
 	if err != nil {
 		t.Fatalf("Facade(public-api, authorize): %v", err)
 	}
-	if endpoint.Port != 4301 {
-		t.Fatalf("Facade(public-api, authorize) port = %d, want 4301", endpoint.Port)
+	if !strings.Contains(hypha.String(), "services[name:audit_proxy]") || hypha.AdditionalProps["category"] != "audit-proxy" {
+		t.Fatalf("Facade(public-api, authorize) = %q category=%q, want audit_proxy link with category audit-proxy", hypha.String(), hypha.AdditionalProps["category"])
 	}
 
 	userService, err := app.GetService("user_service")
 	if err != nil {
 		t.Fatalf("GetService(user_service): %v", err)
 	}
-	endpoint, err = userService.Facade("user-service", "")
+	hypha, err = userService.Facade("user-service")
 	if err != nil {
 		t.Fatalf("Facade(user-service): %v", err)
 	}
-	if endpoint.Port != 4401 {
-		t.Fatalf("Facade(user-service) port = %d, want 4401", endpoint.Port)
+	if !strings.Contains(hypha.String(), "services[name:user_service]") || hypha.AdditionalProps["category"] != "user-service" {
+		t.Fatalf("Facade(user-service) = %q category=%q, want user_service link with category user-service", hypha.String(), hypha.AdditionalProps["category"])
 	}
 }
 
