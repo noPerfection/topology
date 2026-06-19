@@ -40,14 +40,20 @@ type IndependentHandler struct {
 
 type ProxyHandler struct {
 	IndependentHandler
-	Routes    []string          `json:"routes,omitempty"` // whitelist routes
-	Outbounds []Service         `json:"outbounds"`
-	Forward   map[string]string `json:"forward,omitempty"` // command route => outbound ref
+	Routes []string `json:"routes,omitempty"` // whitelist routes
+	// Outbounds are facade handler Mushroom links the proxy may send traffic to
+	// (e.g. pkg:$?var=services[name:worker]&category=main). Use links, not
+	// dereferences, so Fruit leaves them as strings on load.
+	Outbounds []string          `json:"outbounds"`
+	Forward   map[string]string `json:"forward,omitempty"` // command route => outbound URL listed in outbounds
 }
 
 type ExtensionHandler struct {
 	IndependentHandler
-	Inbounds []Service `json:"inbounds"`
+	// Inbounds are Mushroom links to services allowed to call this extension
+	// (e.g. pkg:$?var=services[name:api]). Use links, not dereferences, so Fruit
+	// leaves them as strings on load.
+	Inbounds []string `json:"inbounds"`
 }
 
 type Handler interface {
@@ -81,24 +87,13 @@ func (h ProxyHandler) AsProxyHandler() (ProxyHandler, bool) {
 	return h, true
 }
 
-// SetOutbound updates or appends outbound on the proxy handler.
-// If an outbound with the same service identity already exists but handlers differ, it updates that entry.
-// If identity and handlers already match, it does nothing.
-// Otherwise it appends outbound.
-// Returns whether the proxy handler was modified.
-func (p *ProxyHandler) SetOutbound(outbound Service) bool {
-	for i := range p.Outbounds {
-		if !p.Outbounds[i].Equal(outbound) {
-			continue
-		}
-		if p.Outbounds[i].EqualHandlers(outbound) {
-			return false
-		}
-		p.Outbounds[i] = outbound
-		return true
+// SetOutbound appends url when it is not already listed in outbounds.
+// Returns false when url was already present.
+func (p *ProxyHandler) SetOutbound(url string) bool {
+	if slices.Contains(p.Outbounds, url) {
+		return false
 	}
-
-	p.Outbounds = append(p.Outbounds, outbound)
+	p.Outbounds = append(p.Outbounds, url)
 	return true
 }
 
@@ -418,47 +413,6 @@ func serviceParameterHasInprocHandler(service Service, category string) bool {
 	return false
 }
 
-// ValidateOutboundService validates a minimal inline service used as a proxy outbound.
-// Bootstrap fields such as module-url and start-command are not required.
-func ValidateOutboundService(service Service) error {
-	if len(service.Name) == 0 {
-		return fmt.Errorf("service name is empty")
-	}
-	if err := ValidateServiceType(service.Type); err != nil {
-		return fmt.Errorf("identity.ValidateServiceType: %v", err)
-	}
-	if len(service.Handlers) == 0 {
-		return fmt.Errorf("service %q must have at least one handler", service.Name)
-	}
-
-	for i, h := range service.Handlers {
-		if h == nil {
-			return fmt.Errorf("handler[%d] is empty", i)
-		}
-		handler, ok := h.AsIndependentHandler()
-		if !ok {
-			return fmt.Errorf("handler[%d] is not an independent handler", i)
-		}
-		if err := ValidateHandlerType(handler.Type); err != nil {
-			return fmt.Errorf("ValidateHandlerType[%d]: %v", i, err)
-		}
-		if len(handler.Category) == 0 {
-			return fmt.Errorf("handler[%d] category is empty", i)
-		}
-		if len(handler.Endpoint.Id) == 0 && !handler.Endpoint.IsRemote() {
-			return fmt.Errorf("handler[%d] '%s' endpoint id is empty", i, handler.Category)
-		}
-	}
-
-	return nil
-}
-
-// ValidateInboundService validates a minimal inline service used as an extension inbound.
-// It follows the same rules as proxy outbound services.
-func ValidateInboundService(service Service) error {
-	return ValidateOutboundService(service)
-}
-
 // ValidateService validates the service metadata and endpoint bootstrap settings.
 func ValidateService(service Service) error {
 	if len(service.Name) == 0 {
@@ -511,24 +465,13 @@ func ValidateService(service Service) error {
 			if !ok {
 				return fmt.Errorf("handler[%d] must be a proxy handler", i)
 			}
-			for j, target := range proxyHandler.Outbounds {
-				if err := ValidateOutboundService(target); err != nil {
-					return fmt.Errorf("handler[%d] outbounds[%d]: %w", i, j, err)
-				}
-			}
 			if err := ValidateProxyForwards(proxyHandler); err != nil {
 				return fmt.Errorf("handler[%d] forward: %w", i, err)
 			}
 		}
 		if service.Type == ExtensionType {
-			extensionHandler, ok := h.AsExtensionHandler()
-			if !ok {
+			if _, ok := h.AsExtensionHandler(); !ok {
 				return fmt.Errorf("handler[%d] must be an extension handler", i)
-			}
-			for j, target := range extensionHandler.Inbounds {
-				if err := ValidateInboundService(target); err != nil {
-					return fmt.Errorf("handler[%d] inbounds[%d]: %w", i, j, err)
-				}
 			}
 		}
 	}
@@ -577,6 +520,8 @@ func (s Service) Facade(category string, command ...string) (mushroom.Hypha, err
 	var cmd string
 	if len(command) > 0 {
 		cmd = command[0]
+	} else {
+		cmd = ""
 	}
 
 	if s.noPerf == nil {

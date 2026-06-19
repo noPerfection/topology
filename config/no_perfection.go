@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/ahmetson/mushroom"
@@ -315,7 +316,16 @@ func (a *NoPerfection) validateServiceTopology(service Service, visiting map[str
 			if !ok {
 				continue
 			}
-			if err := validateProxyForwardOutbounds(proxyHandler); err != nil {
+			if err := a.validateProxyHandler(proxyHandler); err != nil {
+				return fmt.Errorf("handler %q: %w", baseHandler.Category, err)
+			}
+		}
+		if service.Type == ExtensionType {
+			extensionHandler, ok := handler.AsExtensionHandler()
+			if !ok {
+				continue
+			}
+			if err := a.validateExtensionHandler(extensionHandler); err != nil {
 				return fmt.Errorf("handler %q: %w", baseHandler.Category, err)
 			}
 		}
@@ -323,57 +333,27 @@ func (a *NoPerfection) validateServiceTopology(service Service, visiting map[str
 	return nil
 }
 
-func validateProxyForwardOutbounds(proxyHandler ProxyHandler) error {
+func (a *NoPerfection) validateProxyHandler(proxyHandler ProxyHandler) error {
+	for _, outbound := range proxyHandler.Outbounds {
+		if _, err := a.GetHandler("*" + outbound); err != nil {
+			return fmt.Errorf("outbound %q: %w", outbound, err)
+		}
+	}
 	for route, outboundRef := range proxyHandler.Forward {
-		if !proxyHandlerHasOutboundRef(proxyHandler, outboundRef) {
+		if !slices.Contains(proxyHandler.Outbounds, outboundRef) {
 			return fmt.Errorf("forward route %q: outbound %q is not listed in outbounds", route, outboundRef)
 		}
 	}
 	return nil
 }
 
-func parseForwardRef(ref string) (service string, handlerCategory string, err error) {
-	if ref == "" {
-		return "", "", fmt.Errorf("forward outbound ref is empty")
-	}
-	if strings.HasSuffix(ref, "/") {
-		return "", "", fmt.Errorf("forward outbound ref %q has empty handler category", ref)
-	}
-	if strings.Contains(ref, "//") {
-		return "", "", fmt.Errorf("forward outbound ref %q has empty path segment", ref)
-	}
-
-	service, handlerCategory, ok := strings.Cut(ref, "/")
-	if !ok {
-		return ref, "", nil
-	}
-	if service == "" {
-		return "", "", fmt.Errorf("forward outbound service name is empty")
-	}
-	if handlerCategory == "" {
-		return "", "", fmt.Errorf("forward outbound handler category is empty")
-	}
-	return service, handlerCategory, nil
-}
-
-func proxyHandlerHasOutboundRef(proxyHandler ProxyHandler, ref string) bool {
-	serviceName, handlerCategory, err := parseForwardRef(ref)
-	if err != nil || serviceName == "" {
-		return false
-	}
-	if handlerCategory == "" {
-		handlerCategory = "main"
-	}
-
-	for _, outbound := range proxyHandler.Outbounds {
-		if outbound.Name != serviceName {
-			continue
-		}
-		if _, err := outbound.HandlerByCategory(handlerCategory); err == nil {
-			return true
+func (a *NoPerfection) validateExtensionHandler(extensionHandler ExtensionHandler) error {
+	for _, inbound := range extensionHandler.Inbounds {
+		if _, err := a.GetHandler("*" + inbound); err != nil {
+			return fmt.Errorf("inbound %q: %w", inbound, err)
 		}
 	}
-	return false
+	return nil
 }
 
 func (a *NoPerfection) validateDepLink(link string) error {
@@ -507,7 +487,9 @@ func (a *NoPerfection) GetService(mushroomURL string) (Service, error) {
 }
 
 // GetHandler resolves a Mushroom URL and returns a single handler.
-// When the URL resolves to a service, the handler with DefaultCategory is returned.
+// The URL may point at a handler path (…handlers[category:main]) or at a service
+// with category in additional props (…services[name:x]&category=main). The path is
+// queried as-is; when the result is a service, category comes from the hypha.
 func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 	fruited, err := a.queryMycelium(mushroomURL)
 	if err != nil {
@@ -519,7 +501,6 @@ func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 		return handler, nil
 	}
 
-	// URL resolved to a service (often an array from a name filter); unwrap before decode.
 	value, err := unwrapServiceValue(fruited)
 	if err != nil {
 		return nil, fmt.Errorf("GetHandler(%q): handler not found", mushroomURL)
@@ -530,7 +511,9 @@ func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 		return nil, fmt.Errorf("GetHandler(%q): handler not found", mushroomURL)
 	}
 
-	handler, err = service.HandlerByCategory(DefaultCategory)
+	hypha, _ := a.toHypha(mushroomURL) // since query succeed, mushroom url is a valid link
+	category := depCategory(hypha)
+	handler, err = service.HandlerByCategory(category)
 	if err != nil {
 		return nil, fmt.Errorf("GetHandler(%q): %w", mushroomURL, err)
 	}

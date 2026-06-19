@@ -274,6 +274,21 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 
 	err = test.topology.AddService(config.Service{
 		Type: config.ProxyType,
+		Name: "proxy-outbound-child",
+		Handlers: []config.Handler{
+			config.ProxyHandler{
+				IndependentHandler: config.IndependentHandler{
+					Type:     config.ReplierType,
+					Category: ServiceManagerCategory,
+					Endpoint: message.NewEndpoint("proxy-outbound-child-manager", 6301),
+				},
+			},
+		},
+	})
+	s().NoError(err)
+
+	err = test.topology.AddService(config.Service{
+		Type: config.ProxyType,
 		Name: "proxy-parent",
 		Handlers: []config.Handler{
 			config.ProxyHandler{
@@ -282,20 +297,8 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 					Category: ServiceManagerCategory,
 					Endpoint: message.NewEndpoint("proxy-parent-manager", 6300),
 				},
-				Outbounds: []config.Service{
-					{
-						Type: config.ProxyType,
-						Name: "proxy-outbound-child",
-						Handlers: []config.Handler{
-							config.ProxyHandler{
-								IndependentHandler: config.IndependentHandler{
-									Type:     config.ReplierType,
-									Category: ServiceManagerCategory,
-									Endpoint: message.NewEndpoint("proxy-outbound-child-manager", 6301),
-								},
-							},
-						},
-					},
+				Outbounds: []string{
+					"pkg:$?var=services[name:proxy-outbound-child]&category=manager",
 				},
 			},
 		},
@@ -305,7 +308,7 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	_, err = test.topology.config.GetService("proxy-parent")
 	s().NoError(err)
 	_, err = test.topology.config.GetService("proxy-outbound-child")
-	s().Error(err)
+	s().NoError(err)
 }
 
 // Test_20_Run runs the given binary.

@@ -18,16 +18,8 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 					Category: "auth",
 					Endpoint: message.NewEndpoint("auth_1", 4301),
 				},
-				Outbounds: []Service{
-					{
-						Type: IndependentType,
-						Name: "user_service",
-						Handlers: []Handler{IndependentHandler{
-							Type:     ReplierType,
-							Category: "main",
-							Endpoint: message.NewEndpoint("user_1", 4302),
-						}},
-					},
+				Outbounds: []string{
+					"pkg:$?var=services[name:user_service]&category=main",
 				},
 			},
 		},
@@ -55,7 +47,46 @@ func TestServiceJSONProxyHandlers(t *testing.T) {
 	if len(proxyHandler.Outbounds) != 1 {
 		t.Fatalf("Proxy handler outbounds = %#v, want one outbound", proxyHandler.Outbounds)
 	}
-	if proxyHandler.Outbounds[0].Name != "user_service" {
-		t.Fatalf("Outbound service = %q, want user_service", proxyHandler.Outbounds[0].Name)
+	if proxyHandler.Outbounds[0] != "pkg:$?var=services[name:user_service]&category=main" {
+		t.Fatalf("Outbound url = %q, want user_service facade url", proxyHandler.Outbounds[0])
+	}
+}
+
+func TestServiceJSONExtensionHandlers(t *testing.T) {
+	service := Service{
+		Type: ExtensionType,
+		Name: "user_extension",
+		Handlers: []Handler{
+			ExtensionHandler{
+				IndependentHandler: IndependentHandler{
+					Type:     ReplierType,
+					Category: "main",
+					Endpoint: message.NewEndpoint("inproc/user_extension", 0),
+				},
+				Inbounds: []string{
+					"pkg:$?var=services[name:api]",
+				},
+			},
+		},
+	}
+
+	data, err := json.Marshal(service)
+	if err != nil {
+		t.Fatalf("Marshal extension service: %v", err)
+	}
+
+	var roundTrip Service
+	if err := json.Unmarshal(data, &roundTrip); err != nil {
+		t.Fatalf("Unmarshal extension service: %v", err)
+	}
+	extensionHandler, ok := roundTrip.Handlers[0].AsExtensionHandler()
+	if !ok {
+		t.Fatal("handler is not an ExtensionHandler")
+	}
+	if len(extensionHandler.Inbounds) != 1 {
+		t.Fatalf("Extension handler inbounds = %#v, want one inbound", extensionHandler.Inbounds)
+	}
+	if extensionHandler.Inbounds[0] != "pkg:$?var=services[name:api]" {
+		t.Fatalf("Inbound url = %q, want api service link", extensionHandler.Inbounds[0])
 	}
 }

@@ -152,6 +152,15 @@ func TestGetHandler(t *testing.T) {
 		t.Fatalf("handler = %#v, want %q", handler, DefaultCategory)
 	}
 
+	handler, err = app.GetHandler("*pkg:$?var=services[name:auth_proxy]&category=main")
+	if err != nil {
+		t.Fatalf("GetHandler by service url with category: %v", err)
+	}
+	ind, ok = handler.AsIndependentHandler()
+	if !ok || ind.Category != DefaultCategory || ind.Endpoint.Port != 4301 {
+		t.Fatalf("handler = %#v, want %q on port 4301", handler, DefaultCategory)
+	}
+
 	if _, err := app.GetHandler("*pkg:$?var=services[name:missing]"); err == nil {
 		t.Fatal("GetHandler missing service returned nil error")
 	}

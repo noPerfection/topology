@@ -352,22 +352,9 @@ func TestValidateDepService(t *testing.T) {
 	}
 }
 
-func TestValidateOutboundServiceAllowsMinimalProxyOutbound(t *testing.T) {
-	outbound := Service{
-		Type: ProxyType,
-		Name: "default-name-proxy",
-		Handlers: []Handler{IndependentHandler{
-			Type:     SyncReplierType,
-			Category: "main",
-			Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
-		}},
-	}
-	if err := ValidateOutboundService(outbound); err != nil {
-		t.Fatalf("ValidateOutboundService minimal proxy outbound: %v", err)
-	}
-}
-
 func TestValidateProxyForwards(t *testing.T) {
+	defaultProxyOutbound := "pkg:$?var=services[name:default-name-proxy]&category=main"
+	helloWorldOutbound := "pkg:$?var=services[name:hello-world]&category=main"
 	proxyHandler := ProxyHandler{
 		IndependentHandler: IndependentHandler{
 			Type:     SyncReplierType,
@@ -375,32 +362,13 @@ func TestValidateProxyForwards(t *testing.T) {
 			Endpoint: message.NewEndpoint("proxy", 4101),
 		},
 		Routes: []string{"hello", "age-verification"},
-		Outbounds: []Service{
-			{
-				Type: ProxyType,
-				Name: "default-name-proxy",
-				Handlers: []Handler{ProxyHandler{
-					IndependentHandler: IndependentHandler{
-						Type:     SyncReplierType,
-						Category: "main",
-						Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
-					},
-				}},
-			},
-			{
-				Type:      IndependentType,
-				Name:      "hello-world",
-				ModuleUrl: "github.com/noPerfection/hello-world",
-				Handlers: []Handler{IndependentHandler{
-					Type:     ReplierType,
-					Category: "main",
-					Endpoint: message.NewEndpoint("hello-world", 4102),
-				}},
-			},
+		Outbounds: []string{
+			defaultProxyOutbound,
+			helloWorldOutbound,
 		},
 		Forward: map[string]string{
-			"hello":            "default-name-proxy/main",
-			"age-verification": "hello-world",
+			"hello":            defaultProxyOutbound,
+			"age-verification": helloWorldOutbound,
 		},
 	}
 	service := Service{
@@ -413,15 +381,38 @@ func TestValidateProxyForwards(t *testing.T) {
 		t.Fatalf("ValidateService with forward mappings: %v", err)
 	}
 
-	proxyHandler.Forward = map[string]string{"missing-route": "hello-world"}
+	proxyHandler.Forward = map[string]string{"missing-route": helloWorldOutbound}
 	service.Handlers = []Handler{proxyHandler}
 	if err := ValidateService(service); err == nil {
 		t.Fatal("ValidateService with forward route missing from routes returned nil error")
 	}
 
-	proxyHandler.Forward = map[string]string{"hello": "missing-service"}
+	proxyHandler.Forward = map[string]string{"hello": "pkg:$?var=services[name:missing-service]&category=main"}
 	service.Handlers = []Handler{proxyHandler}
-	_, err := loadServices(t, []Service{service})
+	_, err := loadServices(t, []Service{
+		{
+			Type: ProxyType,
+			Name: "default-name-proxy",
+			Handlers: []Handler{ProxyHandler{
+				IndependentHandler: IndependentHandler{
+					Type:     SyncReplierType,
+					Category: "main",
+					Endpoint: message.NewEndpoint("tmp/default_name_proxy", 0),
+				},
+			}},
+		},
+		{
+			Type:      IndependentType,
+			Name:      "hello-world",
+			ModuleUrl: "github.com/noPerfection/hello-world",
+			Handlers: []Handler{IndependentHandler{
+				Type:     ReplierType,
+				Category: "main",
+				Endpoint: message.NewEndpoint("hello-world", 4102),
+			}},
+		},
+		service,
+	})
 	if err == nil {
 		t.Fatal("Load with forward outbound missing from outbounds returned nil error")
 	}
@@ -432,17 +423,8 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 		"type": "SyncReplier",
 		"category": "main",
 		"endpoint": {"id": "proxy", "port": 4101},
-		"forward": {"hello": "hello-world"},
-		"outbounds": [{
-			"type": "Independent",
-			"name": "hello-world",
-			"module-url": "github.com/noPerfection/hello-world",
-			"handlers": [{
-				"type": "Replier",
-				"category": "main",
-				"endpoint": {"id": "hello-world", "port": 4102}
-			}]
-		}]
+		"forward": {"hello": "pkg:$?var=services[name:hello-world]&category=main"},
+		"outbounds": ["pkg:$?var=services[name:hello-world]&category=main"]
 	}`)
 
 	handler, err := UnmarshalHandler(data)
@@ -453,7 +435,7 @@ func TestProxyHandlerUnmarshalForwardOnly(t *testing.T) {
 	if !ok {
 		t.Fatal("handler is not a ProxyHandler")
 	}
-	if len(proxyHandler.Forward) != 1 || proxyHandler.Forward["hello"] != "hello-world" {
+	if len(proxyHandler.Forward) != 1 || proxyHandler.Forward["hello"] != "pkg:$?var=services[name:hello-world]&category=main" {
 		t.Fatalf("Forward = %#v, want hello mapping", proxyHandler.Forward)
 	}
 }
@@ -582,53 +564,24 @@ func TestServiceEqualHandlers(t *testing.T) {
 }
 
 func TestProxyHandlerSetOutbound(t *testing.T) {
+	existing := "pkg:$?var=services[name:custom-service]&category=api"
 	proxy := ProxyHandler{
-		Outbounds: []Service{{
-			Type: IndependentType,
-			Name: "custom-service",
-			Handlers: []Handler{IndependentHandler{
-				Type:     ReplierType,
-				Category: "api",
-				Endpoint: message.NewEndpoint("api", 4101),
-			}},
-		}},
+		Outbounds: []string{existing},
 	}
-	outbound := Service{
-		Type: IndependentType,
-		Name: "custom-service",
-		Handlers: []Handler{IndependentHandler{
-			Type:     ReplierType,
-			Category: "web",
-			Endpoint: message.NewEndpoint("web", 4102),
-		}},
-	}
+	updated := "pkg:$?var=services[name:custom-service]&category=web"
 
-	if !proxy.SetOutbound(outbound) {
-		t.Fatal("SetOutbound returned false, want true for handler update")
-	}
-	_, err := proxy.Outbounds[0].HandlerByCategory("web")
-	if err != nil {
-		t.Fatalf("HandlerByCategory(web): %v", err)
-	}
-
-	if proxy.SetOutbound(outbound) {
+	if proxy.SetOutbound(existing) {
 		t.Fatal("SetOutbound returned true, want false when already set")
 	}
 
-	newOutbound := Service{
-		Type: IndependentType,
-		Name: "other-service",
-		Handlers: []Handler{IndependentHandler{
-			Type:     ReplierType,
-			Category: "main",
-			Endpoint: message.NewEndpoint("main", 4200),
-		}},
-	}
-	if !proxy.SetOutbound(newOutbound) {
+	if !proxy.SetOutbound(updated) {
 		t.Fatal("SetOutbound returned false, want true for append")
 	}
 	if len(proxy.Outbounds) != 2 {
 		t.Fatalf("len(Outbounds) = %d, want 2", len(proxy.Outbounds))
+	}
+	if proxy.Outbounds[1] != updated {
+		t.Fatalf("Outbounds[1] = %q, want %q", proxy.Outbounds[1], updated)
 	}
 }
 
