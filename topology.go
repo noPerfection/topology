@@ -81,6 +81,13 @@ type TopologyInterface interface {
 	//	h, err := tp.Handler("*pkg:$?var=services[name:auth_proxy]")
 	Handler(mushroomURL string) (config.Handler, error)
 
+	// GetFacade returns a facade Mushroom link for a service resolved by dereference URL.
+	//
+	// Dereference Mushroom URL:
+	//
+	//	link, err := tp.GetFacade("*pkg:$?var=services[name:main]", "main", "authorize")
+	GetFacade(mushroomURL, category string, command ...string) (string, error)
+
 	// Services returns the list of configured services.
 	Services() ([]config.Service, error)
 
@@ -212,6 +219,26 @@ func (tp *Topology) Handler(mushroomURL string) (config.Handler, error) {
 		return nil, fmt.Errorf("tp.config.GetHandler(%q): %w", mushroomURL, err)
 	}
 	return handler, nil
+}
+
+// GetFacade returns a facade Mushroom link for a service resolved by dereference URL.
+func (tp *Topology) GetFacade(mushroomURL, category string, command ...string) (string, error) {
+	if tp == nil || tp.config == nil {
+		return "", fmt.Errorf("nil config")
+	}
+	if len(mushroomURL) == 0 {
+		return "", fmt.Errorf("mushroom url is empty")
+	}
+	if category == "" {
+		return "", fmt.Errorf("category is empty")
+	}
+
+	link, err := tp.config.GetFacade(mushroomURL, category, command...)
+	if err != nil {
+		return "", fmt.Errorf("tp.config.GetFacade(%q, %q): %w", mushroomURL, category, err)
+	}
+
+	return link.AsLink().String(), nil
 }
 
 // Services returns all configured services.

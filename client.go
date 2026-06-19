@@ -159,6 +159,41 @@ func (c *Client) Handler(mushroomURL string) (config.Handler, error) {
 	return record, nil
 }
 
+// GetFacade returns a facade Mushroom link for a service resolved by dereference URL.
+//
+// Dereference Mushroom URL:
+//
+//	link, err := client.GetFacade("*pkg:$?var=services[name:main]", "main", "authorize")
+func (c *Client) GetFacade(mushroomURL, category string, command ...string) (string, error) {
+	params := datatype.New().
+		Set("service", mushroomURL).
+		Set("category", category)
+	if len(command) > 0 && command[0] != "" {
+		params.Set("command", command[0])
+	}
+
+	req := message.Request{
+		Command:    GetFacade,
+		Parameters: params,
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return "", fmt.Errorf("socket.Request('%s'): %w", GetFacade, err)
+	}
+
+	if !reply.IsOK() {
+		return "", fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	facade, err := reply.ReplyParameters().StringValue("facade")
+	if err != nil {
+		return "", fmt.Errorf("reply.ReplyParameters().StringValue('facade'): %w", err)
+	}
+
+	return facade, nil
+}
+
 // Services returns all service configurations.
 func (c *Client) Services() ([]config.Service, error) {
 	req := message.Request{

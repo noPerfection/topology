@@ -497,7 +497,9 @@ func ValidateProxyForwards(proxyHandler ProxyHandler) error {
 // Facade resolves the Mushroom link for this service.
 //
 // The name follows the facade pattern familiar in distributed systems: the caller
-// doesn't have to know what topology this service holds. Facade returns a link to what to call.
+// doesn't have to know what topology this service holds. Facade is the endpoint that user need to access.
+//
+// Receives the handler category that user wants to access, and optionally a command route in that handler to see exact facade for it.
 //
 // Resolution order:
 //  1. handler-deps on this service matching handler category
@@ -508,14 +510,14 @@ func ValidateProxyForwards(proxyHandler ProxyHandler) error {
 //
 // Examples (see config/examples/app-proxy-chain.json):
 //
-//	main.Facade("main", "authorize")
-//	  main → auth_proxy (auth-proxy) → audit_proxy (audit-proxy)
+//	hypha, err := main.Facade("main", "authorize")
+//	  → mushroom.Hypha link: pkg:…/services[name:audit_proxy]&category=audit-proxy
 //
-//	main.Facade("public-api", "authorize")
-//	  main → auth_proxy via handler-deps → audit_proxy via authorize chain
+//	hypha, err := main.Facade("public-api", "authorize")
+//	  → mushroom.Hypha link: pkg:…/services[name:audit_proxy]&category=audit-proxy
 //
-//	userService.Facade("user-service")
-//	  user_service link with category=user-service (terminal, no proxies)
+//	hypha, err := userService.Facade("user-service")
+//	  → mushroom.Hypha link: pkg:…/services[name:user_service]&category=user-service
 func (s Service) Facade(category string, command ...string) (mushroom.Hypha, error) {
 	var cmd string
 	if len(command) > 0 {

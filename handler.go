@@ -27,6 +27,7 @@ const (
 	Service                 = "service"
 	Services                = "services"
 	GetHandler              = "get-handler"
+	GetFacade               = "get-facade"
 	AddService              = "add-service"
 	SetService              = "set-service"
 	RemoveService           = "remove-service"
@@ -224,6 +225,20 @@ func (h *Handler) Handler(mushroomURL string) (config.Handler, error) {
 	return h.topology.Handler(mushroomURL)
 }
 
+// GetFacade returns a facade Mushroom link before the topology handler is started.
+func (h *Handler) GetFacade(mushroomURL, category string, command ...string) (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.requireNotStarted(); err != nil {
+		return "", err
+	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	return h.topology.GetFacade(mushroomURL, category, command...)
+}
+
 // Services returns service configurations before the topology handler is started.
 func (h *Handler) Services() ([]config.Service, error) {
 	h.mu.Lock()
@@ -385,6 +400,37 @@ func (h *Handler) onGetHandler(req message.RequestInterface) message.ReplyInterf
 	return req.Ok(params)
 }
 
+// onGetFacade returns the facade Mushroom link for a service.
+// Requires 'service' — a dereference Mushroom URL, 'category', and optional 'command'.
+func (h *Handler) onGetFacade(req message.RequestInterface) message.ReplyInterface {
+	mushroomURL, err := req.RouteParameters().StringValue(Service)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
+	}
+
+	category, err := req.RouteParameters().StringValue("category")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('category'): %v", err))
+	}
+
+	params := req.RouteParameters()
+	command, _ := params.StringValue("command")
+
+	facade, err := h.topology.GetFacade(mushroomURL, category, optionalCommand(command)...)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.topology.GetFacade(%q, %q): %v", mushroomURL, category, err))
+	}
+
+	return req.Ok(datatype.New().Set("facade", facade))
+}
+
+func optionalCommand(command string) []string {
+	if command == "" {
+		return nil
+	}
+	return []string{command}
+}
+
 // onServices returns the configuration for all services.
 func (h *Handler) onServices(req message.RequestInterface) message.ReplyInterface {
 	records, err := h.topology.Services()
@@ -432,6 +478,9 @@ func (h *Handler) Start() error {
 	}
 	if err := h.handler.Route(GetHandler, h.onGetHandler); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", GetHandler, err)
+	}
+	if err := h.handler.Route(GetFacade, h.onGetFacade); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", GetFacade, err)
 	}
 	if err := h.handler.Route(Services, h.onServices); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", Services, err)

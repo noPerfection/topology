@@ -742,6 +742,32 @@ func TestFacadeProxyChain(t *testing.T) {
 	}
 }
 
+func TestGetFacadeProxyChain(t *testing.T) {
+	app, err := Load(filepath.Join("examples", "app-proxy-chain.json"))
+	if err != nil {
+		t.Fatalf("Load app-proxy-chain example: %v", err)
+	}
+
+	hypha, err := app.GetFacade("main", "main", "authorize")
+	if err != nil {
+		t.Fatalf("GetFacade(main, main, authorize): %v", err)
+	}
+	if hypha.Dereference {
+		t.Fatalf("GetFacade = dereference %q, want link", hypha.String())
+	}
+	if !strings.Contains(hypha.String(), "services[name:audit_proxy]") || hypha.AdditionalProps["category"] != "audit-proxy" {
+		t.Fatalf("GetFacade = %q category=%q, want audit_proxy link with category audit-proxy", hypha.String(), hypha.AdditionalProps["category"])
+	}
+
+	hypha, err = app.GetFacade("*pkg:$?var=services[name:user_service]", "user-service")
+	if err != nil {
+		t.Fatalf("GetFacade(user_service): %v", err)
+	}
+	if !strings.Contains(hypha.String(), "services[name:user_service]") || hypha.AdditionalProps["category"] != "user-service" {
+		t.Fatalf("GetFacade = %q category=%q, want user_service link with category user-service", hypha.String(), hypha.AdditionalProps["category"])
+	}
+}
+
 func TestFacadeRequiresTopology(t *testing.T) {
 	service := Service{
 		Name: "orphan",

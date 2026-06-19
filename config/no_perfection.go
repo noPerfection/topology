@@ -521,6 +521,22 @@ func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 	return handler, nil
 }
 
+// GetFacade resolves a service by Mushroom URL and returns its facade link for the
+// given handler category and optional command.
+func (a *NoPerfection) GetFacade(mushroomURL, category string, command ...string) (mushroom.Hypha, error) {
+	service, err := a.GetService(mushroomURL)
+	if err != nil {
+		return mushroom.Hypha{}, fmt.Errorf("GetFacade(%q): %w", mushroomURL, err)
+	}
+
+	link, err := service.Facade(category, command...)
+	if err != nil {
+		return mushroom.Hypha{}, fmt.Errorf("GetFacade(%q): %w", mushroomURL, err)
+	}
+
+	return link, nil
+}
+
 // GetServices resolves a Mushroom URL and returns the services at that path.
 func (a *NoPerfection) GetServices(mushroomURL string) ([]Service, error) {
 	hypha, err := a.toHypha(mushroomURL)
