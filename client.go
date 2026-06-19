@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -316,6 +317,43 @@ func (c *Client) SetService(record config.Service, parent ...string) error {
 	reply, err := c.socket.Request(&req)
 	if err != nil {
 		return fmt.Errorf("socket.Submit('%s'): %w", SetService, err)
+	}
+
+	if !reply.IsOK() {
+		return fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	return nil
+}
+
+// SetHandler updates an existing handler in the topology configuration.
+//
+//	mushroomURL is a dereference Mushroom URL of the handler or service with category:
+//
+//	err := client.SetHandler(record, "*pkg:$?var=services[name:proxy].handlers[category:main]")
+//	err := client.SetHandler(record, "*pkg:$?var=services[name:proxy]&category=main")
+func (c *Client) SetHandler(record config.Handler, mushroomURL string) error {
+	if mushroomURL == "" {
+		return fmt.Errorf("mushroom url is empty")
+	}
+
+	raw, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("json.Marshal handler: %w", err)
+	}
+
+	params := datatype.New().
+		Set("handler", json.RawMessage(raw)).
+		Set("mushroomURL", mushroomURL)
+
+	req := message.Request{
+		Command:    SetHandler,
+		Parameters: params,
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return fmt.Errorf("socket.Submit('%s'): %w", SetHandler, err)
 	}
 
 	if !reply.IsOK() {

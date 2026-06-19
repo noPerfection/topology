@@ -133,6 +133,14 @@ type TopologyInterface interface {
 	//	err := tp.SetService(record, "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 	SetService(record config.Service, parent ...string) error
 
+	// SetHandler updates an existing handler in the topology configuration.
+	//
+	//	mushroomURL is a dereference Mushroom URL of the handler or service with category:
+	//
+	//	err := tp.SetHandler(record, "*pkg:$?var=services[name:proxy].handlers[category:main]")
+	//	err := tp.SetHandler(record, "*pkg:$?var=services[name:proxy]&category=main")
+	SetHandler(record config.Handler, mushroomURL string) error
+
 	// RemoveService removes a service from the topology configuration.
 	//
 	// Default parent:
@@ -309,6 +317,28 @@ func (tp *Topology) SetService(record config.Service, parent ...string) error {
 
 	if err := tp.config.SetService(record, parentURL); err != nil {
 		return fmt.Errorf("tp.config.SetService: %w", err)
+	}
+
+	return tp.config.Save()
+}
+
+// SetHandler updates an existing handler in the topology configuration.
+func (tp *Topology) SetHandler(record config.Handler, mushroomURL string) error {
+	if tp == nil || tp.config == nil {
+		return fmt.Errorf("nil config")
+	}
+	if record == nil {
+		return fmt.Errorf("handler is empty")
+	}
+	if _, ok := record.AsIndependentHandler(); !ok {
+		return fmt.Errorf("handler is not an independent handler")
+	}
+	if mushroomURL == "" {
+		return fmt.Errorf("mushroom url is empty")
+	}
+
+	if err := tp.config.SetHandler(record, mushroomURL); err != nil {
+		return fmt.Errorf("tp.config.SetHandler: %w", err)
 	}
 
 	return tp.config.Save()

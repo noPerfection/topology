@@ -128,6 +128,20 @@ func encodeServiceMap(record Service) (map[string]any, error) {
 	return serviceMap, nil
 }
 
+func encodeHandlerMap(record Handler) (map[string]any, error) {
+	data, err := json.Marshal(record)
+	if err != nil {
+		return nil, fmt.Errorf("json.Marshal handler: %w", err)
+	}
+
+	var handlerMap map[string]any
+	if err := json.Unmarshal(data, &handlerMap); err != nil {
+		return nil, fmt.Errorf("json.Unmarshal handler map: %w", err)
+	}
+
+	return handlerMap, nil
+}
+
 // unwrapServiceValue normalizes a single mycelium result for decodeService.
 // Filtered queries return an array; a direct path returns one object.
 //
@@ -676,6 +690,95 @@ func (a *NoPerfection) SetService(record Service, parent string) error {
 
 	targetURL := fmt.Sprintf("%s[name:%s]", parent, record.Name)
 	if err := a.mycelium.Inoculate(targetURL, serviceMap); err != nil {
+		return fmt.Errorf("mycelium.Inoculate(%q): %w", targetURL, err)
+	}
+
+	return nil
+}
+
+// SetHandler updates an existing handler at mushroomURL.
+// mushroomURL is a dereference Mushroom URL of the handler or of the service
+// with category in additional props, e.g.
+// *pkg:$?var=services[name:proxy].handlers[category:main] or
+// *pkg:$?var=services[name:proxy]&category=main.
+func (a *NoPerfection) SetHandler(record Handler, mushroomURL string) error {
+	if a == nil {
+		return fmt.Errorf("app struct is nil")
+	}
+	if record == nil {
+		return fmt.Errorf("handler is empty")
+	}
+	base, ok := record.AsIndependentHandler()
+	if !ok {
+		return fmt.Errorf("handler is not an independent handler")
+	}
+	if base.Category == "" {
+		return fmt.Errorf("handler category is empty")
+	}
+	if mushroomURL == "" {
+		return fmt.Errorf("mushroom url is empty")
+	}
+
+	hypha, err := a.toHypha(mushroomURL)
+	if err != nil {
+		return fmt.Errorf("toHypha(%q): %w", mushroomURL, err)
+	}
+	if !hypha.URL {
+		return fmt.Errorf("%q is not a mushroom URL", mushroomURL)
+	}
+	if !hypha.Dereference {
+		return fmt.Errorf("%q must be a dereference mushroom URL", mushroomURL)
+	}
+
+	fruited, err := a.queryMycelium(mushroomURL)
+	if err != nil {
+		return fmt.Errorf("queryMycelium(%q): %w", mushroomURL, err)
+	}
+
+	var existing Handler
+	var targetURL string
+
+	if handler, err := decodeHandler(fruited); err == nil {
+		existing = handler
+		targetURL = hypha.String()
+	} else {
+		if _, err := unwrapServiceValue(fruited); err != nil {
+			return fmt.Errorf("mushroomURL %q is neither a handler nor a service", mushroomURL)
+		}
+		service, err := a.GetService(mushroomURL)
+		if err != nil {
+			return fmt.Errorf("GetService(%q): %w", mushroomURL, err)
+		}
+		category := depCategory(hypha)
+		existing, err = service.HandlerByCategory(category)
+		if err != nil {
+			return fmt.Errorf("handler of %q category not found on service %q: %w", category, service.Name, err)
+		}
+		handlersHypha, err := hypha.ChildResource("handlers")
+		if err != nil {
+			return fmt.Errorf("ChildResource(handlers): %w", err)
+		}
+		target, err := handlersHypha.ChildResource("[category:" + category + "]")
+		if err != nil {
+			return fmt.Errorf("ChildResource(%q): %w", category, err)
+		}
+		targetURL = target.AsDereference().String()
+	}
+
+	existingBase, ok := existing.AsIndependentHandler()
+	if !ok {
+		return fmt.Errorf("handler at %q is not an independent handler", mushroomURL)
+	}
+	if existingBase.Category != base.Category {
+		return fmt.Errorf("handler category %q does not match record category %q", existingBase.Category, base.Category)
+	}
+
+	handlerMap, err := encodeHandlerMap(record)
+	if err != nil {
+		return err
+	}
+
+	if err := a.mycelium.Inoculate(targetURL, handlerMap); err != nil {
 		return fmt.Errorf("mycelium.Inoculate(%q): %w", targetURL, err)
 	}
 

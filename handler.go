@@ -31,6 +31,7 @@ const (
 	GetLink                 = "get-link"
 	AddService              = "add-service"
 	SetService              = "set-service"
+	SetHandler              = "set-handler"
 	RemoveService           = "remove-service"
 )
 
@@ -137,6 +138,21 @@ func (h *Handler) SetService(record config.Service, parent ...string) error {
 	defer topologyMutationMu.Unlock()
 
 	return h.topology.SetService(record, parent...)
+}
+
+// SetHandler updates a handler in the topology configuration before the topology
+// handler is started.
+func (h *Handler) SetHandler(record config.Handler, mushroomURL string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	return h.topology.SetHandler(record, mushroomURL)
 }
 
 // RemoveService removes a service from the topology configuration before the
@@ -348,6 +364,37 @@ func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterf
 	return req.Ok(datatype.New())
 }
 
+// onSetHandler updates a handler in the topology configuration.
+// Requires 'handler' record and 'mushroomURL' dereference Mushroom URL of the handler.
+func (h *Handler) onSetHandler(req message.RequestInterface) message.ReplyInterface {
+	kv, err := req.RouteParameters().NestedValue("handler")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetKeyValue('handler'): %v", err))
+	}
+
+	raw, err := kv.Bytes()
+	if err != nil {
+		return req.Fail(fmt.Sprintf("kv.Bytes: %v", err))
+	}
+
+	record, err := config.UnmarshalHandler(raw)
+	if err != nil {
+		return req.Fail(fmt.Sprintf("config.UnmarshalHandler: %v", err))
+	}
+
+	mushroomURL, err := req.RouteParameters().StringValue("mushroomURL")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.GetString('mushroomURL'): %v", err))
+	}
+
+	if err := h.topology.SetHandler(record, mushroomURL); err != nil {
+		base, _ := record.AsIndependentHandler()
+		return req.Fail(fmt.Sprintf("h.topology.SetHandler(%q): %v", base.Category, err))
+	}
+
+	return req.Ok(datatype.New())
+}
+
 // onRemoveService removes a service from the topology configuration.
 // Requires 'service' string parameter with the service name.
 func (h *Handler) onRemoveService(req message.RequestInterface) message.ReplyInterface {
@@ -520,6 +567,9 @@ func (h *Handler) Start() error {
 	}
 	if err := h.handler.Route(SetService, h.onSetService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", SetService, err)
+	}
+	if err := h.handler.Route(SetHandler, h.onSetHandler); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", SetHandler, err)
 	}
 	if err := h.handler.Route(RemoveService, h.onRemoveService); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", RemoveService, err)

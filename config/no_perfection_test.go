@@ -264,6 +264,77 @@ func TestSetService(t *testing.T) {
 	}
 }
 
+func TestSetHandler(t *testing.T) {
+	a := mustLoadEmpty(t)
+	service := Service{
+		Name: "api",
+		Type: IndependentType,
+		Handlers: []Handler{
+			IndependentHandler{
+				Type:     ReplierType,
+				Category: "main",
+				Endpoint: message.NewEndpoint("api_1", 4101),
+			},
+		},
+	}
+	addTestService(t, &a, service)
+
+	parent := "*pkg:$?var=services[name:api].handlers"
+	handlerURL := parent + "[category:main]"
+	handler, err := a.GetHandler(handlerURL)
+	if err != nil {
+		t.Fatalf("GetHandler: %v", err)
+	}
+
+	updated, ok := handler.AsIndependentHandler()
+	if !ok {
+		t.Fatal("handler is not an independent handler")
+	}
+	updated.Endpoint = message.NewEndpoint("api_1", 4102)
+
+	if err := a.SetHandler(updated, handlerURL); err != nil {
+		t.Fatalf("SetHandler update: %v", err)
+	}
+
+	roundTrip, err := a.GetHandler(handlerURL)
+	if err != nil {
+		t.Fatalf("GetHandler after update: %v", err)
+	}
+	got, ok := roundTrip.AsIndependentHandler()
+	if !ok {
+		t.Fatal("round-trip handler is not an independent handler")
+	}
+	if got.Endpoint.Port != 4102 {
+		t.Fatalf("Endpoint.Port = %d, want 4102", got.Endpoint.Port)
+	}
+
+	serviceURL := "*pkg:$?var=services[name:api]&category=main"
+	updated.Endpoint = message.NewEndpoint("api_1", 4103)
+	if err := a.SetHandler(updated, serviceURL); err != nil {
+		t.Fatalf("SetHandler via service url with category: %v", err)
+	}
+	roundTrip, err = a.GetHandler(handlerURL)
+	if err != nil {
+		t.Fatalf("GetHandler after service url update: %v", err)
+	}
+	afterService, ok := roundTrip.AsIndependentHandler()
+	if !ok || afterService.Endpoint.Port != 4103 {
+		t.Fatalf("handler after service url update port = %d, want 4103", afterService.Endpoint.Port)
+	}
+
+	link, err := a.GetServiceLink(handlerURL)
+	if err != nil {
+		t.Fatalf("GetServiceLink: %v", err)
+	}
+	setErr := a.SetHandler(updated, link)
+	if setErr == nil {
+		t.Fatal("SetHandler with link returned nil error")
+	}
+	if !strings.Contains(setErr.Error(), "dereference") {
+		t.Fatalf("SetHandler with link error = %q, want dereference mention", setErr.Error())
+	}
+}
+
 func TestRemoveService(t *testing.T) {
 	a := mustLoadEmpty(t)
 	first := Service{Name: "api", Type: IndependentType}
