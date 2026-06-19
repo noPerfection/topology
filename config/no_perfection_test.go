@@ -748,9 +748,9 @@ func TestGetFacadeProxyChain(t *testing.T) {
 		t.Fatalf("Load app-proxy-chain example: %v", err)
 	}
 
-	hypha, err := app.GetFacade("main", "main", "authorize")
+	hypha, err := app.GetFacade("*pkg:$?var=services[name:main]&category=main", "authorize")
 	if err != nil {
-		t.Fatalf("GetFacade(main, main, authorize): %v", err)
+		t.Fatalf("GetFacade(main, authorize): %v", err)
 	}
 	if hypha.Dereference {
 		t.Fatalf("GetFacade = dereference %q, want link", hypha.String())
@@ -759,7 +759,7 @@ func TestGetFacadeProxyChain(t *testing.T) {
 		t.Fatalf("GetFacade = %q category=%q, want audit_proxy link with category audit-proxy", hypha.String(), hypha.AdditionalProps["category"])
 	}
 
-	hypha, err = app.GetFacade("*pkg:$?var=services[name:user_service]", "user-service")
+	hypha, err = app.GetFacade("*pkg:$?var=services[name:user_service]&category=user-service")
 	if err != nil {
 		t.Fatalf("GetFacade(user_service): %v", err)
 	}

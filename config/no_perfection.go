@@ -521,13 +521,26 @@ func (a *NoPerfection) GetHandler(mushroomURL string) (Handler, error) {
 	return handler, nil
 }
 
-// GetFacade resolves a service by Mushroom URL and returns its facade link for the
-// given handler category and optional command.
-func (a *NoPerfection) GetFacade(mushroomURL, category string, command ...string) (mushroom.Hypha, error) {
+// GetFacade resolves a service by Mushroom URL and returns its facade link.
+//
+// mushroomURL may be a plain service name, a dereference Mushroom URL, or a link.
+// Handler category is read from the URL additional property category (defaults to
+// DefaultCategory when omitted). command is an optional second argument for the
+// command route on that handler; resolution follows handler-deps and command-deps
+// to return the facade for the dependency target (see Service.Facade).
+//
+// Examples (see config/examples/app-proxy-chain.json):
+//
+//	app.GetFacade("*pkg:$?var=services[name:main]&category=main", "authorize")
+//	app.GetFacade("*pkg:$?var=services[name:user_service]&category=user-service")
+func (a *NoPerfection) GetFacade(mushroomURL string, command ...string) (mushroom.Hypha, error) {
 	service, err := a.GetService(mushroomURL)
 	if err != nil {
 		return mushroom.Hypha{}, fmt.Errorf("GetFacade(%q): %w", mushroomURL, err)
 	}
+
+	hypha, _ := a.toHypha(mushroomURL)
+	category := depCategory(hypha)
 
 	link, err := service.Facade(category, command...)
 	if err != nil {

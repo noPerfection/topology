@@ -161,13 +161,16 @@ func (c *Client) Handler(mushroomURL string) (config.Handler, error) {
 
 // GetFacade returns a facade Mushroom link for a service resolved by dereference URL.
 //
+// Handler category comes from the mushroom URL additional property category
+// (defaults to DefaultCategory when omitted). command is an optional second
+// argument for the command route; resolution follows handler-deps and
+// command-deps to return the facade for a command handler and its dependency target.
+//
 // Dereference Mushroom URL:
 //
-//	link, err := client.GetFacade("*pkg:$?var=services[name:main]", "main", "authorize")
-func (c *Client) GetFacade(mushroomURL, category string, command ...string) (string, error) {
-	params := datatype.New().
-		Set("service", mushroomURL).
-		Set("category", category)
+//	link, err := client.GetFacade("*pkg:$?var=services[name:main]&category=main", "authorize")
+func (c *Client) GetFacade(mushroomURL string, command ...string) (string, error) {
+	params := datatype.New().Set("service", mushroomURL)
 	if len(command) > 0 && command[0] != "" {
 		params.Set("command", command[0])
 	}

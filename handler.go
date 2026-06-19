@@ -226,7 +226,8 @@ func (h *Handler) Handler(mushroomURL string) (config.Handler, error) {
 }
 
 // GetFacade returns a facade Mushroom link before the topology handler is started.
-func (h *Handler) GetFacade(mushroomURL, category string, command ...string) (string, error) {
+// Handler category comes from the mushroom URL additional property category.
+func (h *Handler) GetFacade(mushroomURL string, command ...string) (string, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -236,7 +237,7 @@ func (h *Handler) GetFacade(mushroomURL, category string, command ...string) (st
 	topologyMutationMu.Lock()
 	defer topologyMutationMu.Unlock()
 
-	return h.topology.GetFacade(mushroomURL, category, command...)
+	return h.topology.GetFacade(mushroomURL, command...)
 }
 
 // Services returns service configurations before the topology handler is started.
@@ -401,24 +402,19 @@ func (h *Handler) onGetHandler(req message.RequestInterface) message.ReplyInterf
 }
 
 // onGetFacade returns the facade Mushroom link for a service.
-// Requires 'service' — a dereference Mushroom URL, 'category', and optional 'command'.
+// Requires 'service' — a dereference Mushroom URL with optional category additional
+// property. Optional 'command' selects a command route on that handler.
 func (h *Handler) onGetFacade(req message.RequestInterface) message.ReplyInterface {
 	mushroomURL, err := req.RouteParameters().StringValue(Service)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	category, err := req.RouteParameters().StringValue("category")
-	if err != nil {
-		return req.Fail(fmt.Sprintf("req.Parameters.GetString('category'): %v", err))
-	}
+	command, _ := req.RouteParameters().StringValue("command")
 
-	params := req.RouteParameters()
-	command, _ := params.StringValue("command")
-
-	facade, err := h.topology.GetFacade(mushroomURL, category, optionalCommand(command)...)
+	facade, err := h.topology.GetFacade(mushroomURL, optionalCommand(command)...)
 	if err != nil {
-		return req.Fail(fmt.Sprintf("h.topology.GetFacade(%q, %q): %v", mushroomURL, category, err))
+		return req.Fail(fmt.Sprintf("h.topology.GetFacade(%q): %v", mushroomURL, err))
 	}
 
 	return req.Ok(datatype.New().Set("facade", facade))
