@@ -314,11 +314,9 @@ func (tp *Topology) SetService(record config.Service, parent ...string) error {
 	}
 
 	parentURL := resolveParent(parent...)
-
 	if err := tp.config.SetService(record, parentURL); err != nil {
 		return fmt.Errorf("tp.config.SetService: %w", err)
 	}
-
 	return tp.config.Save()
 }
 
