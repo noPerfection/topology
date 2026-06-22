@@ -430,6 +430,18 @@ func depCategory(hypha mushroom.Hypha) string {
 	return DefaultCategory
 }
 
+func (a *NoPerfection) serviceNamedTargetURL(parent string, serviceName string) (string, error) {
+	parentHypha, err := a.toHypha(parent)
+	if err != nil {
+		return "", err
+	}
+	targetHypha, err := parentHypha.ChildResource("[name:" + serviceName + "]")
+	if err != nil {
+		return "", fmt.Errorf("ChildResource(%q): %w", serviceName, err)
+	}
+	return targetHypha.String(), nil
+}
+
 // Save saves the app configuration as JSON into its file path.
 func (a NoPerfection) Save() error {
 	if a.mycelium == nil {
@@ -688,7 +700,10 @@ func (a *NoPerfection) SetService(record Service, parent string) error {
 		return err
 	}
 
-	targetURL := fmt.Sprintf("%s[name:%s]", parent, record.Name)
+	targetURL, err := a.serviceNamedTargetURL(parent, record.Name)
+	if err != nil {
+		return err
+	}
 	if err := a.mycelium.Inoculate(targetURL, serviceMap); err != nil {
 		return fmt.Errorf("mycelium.Inoculate(%q): %w", targetURL, err)
 	}
@@ -806,7 +821,10 @@ func (a *NoPerfection) RemoveService(name, parent string) error {
 		return fmt.Errorf("service('%s') not found", name)
 	}
 
-	targetURL := fmt.Sprintf("%s[name:%s]", parent, name)
+	targetURL, err := a.serviceNamedTargetURL(parent, name)
+	if err != nil {
+		return err
+	}
 	if err := a.mycelium.Prune(targetURL); err != nil {
 		return fmt.Errorf("mycelium.Prune(%q): %w", targetURL, err)
 	}
