@@ -461,6 +461,9 @@ func ValidateService(service Service) error {
 			}
 		}
 		if service.Type == ProxyType {
+			if handler.Category == ServiceManagerCategory {
+				continue
+			}
 			proxyHandler, ok := h.AsProxyHandler()
 			if !ok {
 				return fmt.Errorf("handler[%d] must be a proxy handler", i)
@@ -470,6 +473,9 @@ func ValidateService(service Service) error {
 			}
 		}
 		if service.Type == ExtensionType {
+			if handler.Category == ServiceManagerCategory {
+				continue
+			}
 			if _, ok := h.AsExtensionHandler(); !ok {
 				return fmt.Errorf("handler[%d] must be an extension handler", i)
 			}
