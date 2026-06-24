@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ahmetson/mushroom"
 	"github.com/noPerfection/datatype"
 	"github.com/noPerfection/log"
 	clientSyncReplier "github.com/noPerfection/protocol/client/sync_replier"
@@ -64,8 +65,11 @@ func HandlerConfig() *handlerConfig.Handler {
 // configMushroomURL is the mushroom URL of the service to load the config from.
 // If its starts with "pkg:", then it is a mushroom URL and the config is loaded from the package.
 // Otherwise, it is a file path and the config is loaded from the file that internally converted into mushroom url.
-func NewHandler(configMushroomURL string) (*Handler, error) {
-	appConfig, err := config.Load(configMushroomURL)
+//
+// Optional substrates are passed to config.Load for dereference resolution (e.g. pkg:os#env).
+// Topology does not register built-in substrates; callers supply them.
+func NewHandler(configMushroomURL string, substrates ...mushroom.Substrate) (*Handler, error) {
+	appConfig, err := config.Load(configMushroomURL, substrates...)
 	if err != nil {
 		return nil, fmt.Errorf("config.Load('%s'): %w", configMushroomURL, err)
 	}

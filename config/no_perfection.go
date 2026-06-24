@@ -183,7 +183,10 @@ func serviceExists(services []Service, name string) bool {
 //
 // If the backing file does not exist, Load seeds an empty services list. When the file
 // already exists, Load validates the topology graph.
-func Load(mushroomURL string) (NoPerfection, error) {
+//
+// Optional substrates are registered in the json mycelium soil before germination.
+// Topology does not define built-in substrates; callers (e.g. service) pass them in.
+func Load(mushroomURL string, substrates ...mushroom.Substrate) (NoPerfection, error) {
 	linkURL, filePath, err := resolveLoadMyceliumURL(mushroomURL)
 	if err != nil {
 		return NoPerfection{}, err
@@ -202,7 +205,7 @@ func Load(mushroomURL string) (NoPerfection, error) {
 		return NoPerfection{}, fmt.Errorf("os.Stat('%s'): %w", filePath, err)
 	}
 
-	mycelium, err := json_substrate.Root(linkURL)
+	mycelium, err := json_substrate.Root(linkURL, substrates...)
 	if err != nil {
 		return NoPerfection{}, fmt.Errorf("json_substrate.Root(%q): %w", linkURL, err)
 	}
