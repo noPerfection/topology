@@ -371,6 +371,26 @@ func (s Service) IsInproc() bool {
 	return false
 }
 
+// ValidateInprocServiceManager reports an error when an inproc service has a non-inproc manager endpoint.
+// When no manager handler is configured, validation is skipped.
+func (s Service) ValidateInprocServiceManager() error {
+	if !s.IsInproc() {
+		return nil
+	}
+	managerHandler, err := s.HandlerByCategory(ServiceManagerCategory)
+	if err != nil {
+		return nil
+	}
+	handler, ok := managerHandler.AsIndependentHandler()
+	if !ok {
+		return nil
+	}
+	if !handler.Endpoint.IsInproc() {
+		return fmt.Errorf("service %q is inproc but manager endpoint %q is not inproc", s.Name, handler.Endpoint.ClientUrl())
+	}
+	return nil
+}
+
 // IsInprocHandler reports whether the handler with the given category should be
 // treated as in-process for the service. For Proxy and Extension services, a
 // handler listed in parameters.inproc-handlers is treated as inproc even when

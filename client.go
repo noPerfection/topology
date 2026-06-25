@@ -487,3 +487,50 @@ func (c *Client) StopService(mushroomURL string) error {
 
 	return nil
 }
+
+// ValidateProtocolOrder checks protocol forwarding rules for a service and its
+// reachable dependency graph.
+func (c *Client) ValidateProtocolOrder(mushroomURL string) error {
+	req := message.Request{
+		Command: ValidateProtocolOrder,
+		Parameters: datatype.New().
+			Set("service", mushroomURL),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return fmt.Errorf("socket.Request('%s'): %w", ValidateProtocolOrder, err)
+	}
+
+	if !reply.IsOK() {
+		return fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	return nil
+}
+
+// InprocessDepNumber counts inproc dependency services for the given service.
+// Deps related to ServiceManagerCategory are not counted.
+func (c *Client) InprocessDepNumber(mushroomURL string) (int, error) {
+	req := message.Request{
+		Command: InprocessDepNumber,
+		Parameters: datatype.New().
+			Set("service", mushroomURL),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return 0, fmt.Errorf("socket.Request('%s'): %w", InprocessDepNumber, err)
+	}
+
+	if !reply.IsOK() {
+		return 0, fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	count, err := reply.ReplyParameters().Uint64Value("count")
+	if err != nil {
+		return 0, fmt.Errorf("reply.Parameters.Uint64Value('count'): %w", err)
+	}
+
+	return int(count), nil
+}

@@ -151,6 +151,32 @@ type TopologyInterface interface {
 	//
 	//	err := tp.RemoveService("old_outbound", "*pkg:$?var=services[name:proxy].handlers[category:main].outbounds")
 	RemoveService(name string, parent ...string) error
+
+	// ValidateProtocolOrder checks protocol forwarding rules for a service and its
+	// reachable dependency graph.
+	// If service is inproc, but its proxy is tcp, then tcp proxy can't access it.
+	//
+	// Symbol:
+	//
+	//	err := tp.ValidateProtocolOrder("auth_proxy")
+	//
+	// Dereference Mushroom URL:
+	//
+	//	err := tp.ValidateProtocolOrder("*pkg:$?var=services[name:auth_proxy]")
+	ValidateProtocolOrder(mushroomURL string) error
+
+	// InprocessDepNumber counts inproc dependency services reachable from the given
+	// service through handler-deps and command-deps. Deps related to
+	// ServiceManagerCategory are not counted.
+	//
+	// Symbol:
+	//
+	//	count, err := tp.InprocessDepNumber("auth_proxy")
+	//
+	// Dereference Mushroom URL:
+	//
+	//	count, err := tp.InprocessDepNumber("*pkg:$?var=services[name:auth_proxy]")
+	InprocessDepNumber(mushroomURL string) (int, error)
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.
@@ -172,205 +198,26 @@ type Process struct {
 	done   chan error // signalizes when the service finished
 }
 
-// Topology runs, stops, and checks dependency services.
+// Topology runs spawned dependency service processes.
 type Topology struct {
-	config           *config.NoPerfection
 	sameServices     map[string]int
 	runningProcesses map[string]*Process
 	timeout          time.Duration
 }
 
-var _ TopologyInterface = (*Topology)(nil)
-
-// New creates a dependency topology in the Dev context.
-func New(cfg *config.NoPerfection) *Topology {
+// New creates a dependency service runtime.
+func New() *Topology {
 	return &Topology{
-		config:           cfg,
 		sameServices:     make(map[string]int),
 		runningProcesses: make(map[string]*Process, 0),
 		timeout:          DefaultTimeout,
 	}
 }
 
-// AddService registers a service in the topology configuration.
-func (tp *Topology) AddService(record config.Service, parent ...string) error {
-	if tp == nil || tp.config == nil {
-		return fmt.Errorf("nil config")
+func (tp *Topology) forgetServiceCount(name string) {
+	if tp != nil && tp.sameServices != nil {
+		delete(tp.sameServices, name)
 	}
-	if record.IsZero() {
-		return fmt.Errorf("service is empty")
-	}
-	if len(record.Name) == 0 {
-		return fmt.Errorf("service name is empty")
-	}
-	if err := config.ValidateService(record); err != nil {
-		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
-	}
-
-	parentURL := resolveParent(parent...)
-
-	if err := tp.config.AddService(record, parentURL); err != nil {
-		return fmt.Errorf("tp.config.AddService: %w", err)
-	}
-
-	return tp.config.Save()
-}
-
-// Service returns a service configuration resolved by Mushroom URL.
-func (tp *Topology) Service(mushroomURL string) (config.Service, error) {
-	if tp == nil || tp.config == nil {
-		return config.Service{}, fmt.Errorf("nil config")
-	}
-	if len(mushroomURL) == 0 {
-		return config.Service{}, fmt.Errorf("mushroom url is empty")
-	}
-
-	record, err := tp.config.GetService(mushroomURL)
-	if err != nil {
-		return config.Service{}, fmt.Errorf("tp.config.GetService(%q): %w", mushroomURL, err)
-	}
-
-	return record, nil
-}
-
-// Handler returns a handler configuration resolved by dereference Mushroom URL.
-func (tp *Topology) Handler(mushroomURL string) (config.Handler, error) {
-	if tp == nil || tp.config == nil {
-		return nil, fmt.Errorf("nil config")
-	}
-	if len(mushroomURL) == 0 {
-		return nil, fmt.Errorf("mushroom url is empty")
-	}
-
-	handler, err := tp.config.GetHandler(mushroomURL)
-	if err != nil {
-		return nil, fmt.Errorf("tp.config.GetHandler(%q): %w", mushroomURL, err)
-	}
-	return handler, nil
-}
-
-// GetFacade returns a facade Mushroom link for a service resolved by dereference URL.
-// Handler category comes from the mushroom URL additional property category.
-func (tp *Topology) GetFacade(mushroomURL string, command ...string) (string, error) {
-	if tp == nil || tp.config == nil {
-		return "", fmt.Errorf("nil config")
-	}
-	if len(mushroomURL) == 0 {
-		return "", fmt.Errorf("mushroom url is empty")
-	}
-
-	link, err := tp.config.GetFacade(mushroomURL, command...)
-	if err != nil {
-		return "", fmt.Errorf("tp.config.GetFacade(%q): %w", mushroomURL, err)
-	}
-
-	return link.AsLink().String(), nil
-}
-
-// GetLink normalizes mushroomURL into a verified full Mushroom link.
-func (tp *Topology) GetLink(mushroomURL string) (string, error) {
-	if tp == nil || tp.config == nil {
-		return "", fmt.Errorf("nil config")
-	}
-	if len(mushroomURL) == 0 {
-		return "", fmt.Errorf("mushroom url is empty")
-	}
-
-	link, err := tp.config.GetServiceLink(mushroomURL)
-	if err != nil {
-		return "", fmt.Errorf("tp.config.GetServiceLink(%q): %w", mushroomURL, err)
-	}
-
-	return link, nil
-}
-
-// Services returns all configured services.
-func (tp *Topology) Services() ([]config.Service, error) {
-	if tp == nil || tp.config == nil {
-		return nil, fmt.Errorf("nil config")
-	}
-
-	services, err := tp.config.GetServices(rootServicesParent)
-	if err != nil {
-		return nil, fmt.Errorf("tp.config.GetServices(%q): %w", rootServicesParent, err)
-	}
-
-	copied := make([]config.Service, len(services))
-	copy(copied, services)
-
-	return copied, nil
-}
-
-// SetService updates an existing service in the topology configuration.
-func (tp *Topology) SetService(record config.Service, parent ...string) error {
-	if tp == nil || tp.config == nil {
-		return fmt.Errorf("nil config")
-	}
-	if len(record.Name) == 0 {
-		return fmt.Errorf("service name is empty")
-	}
-	if err := config.ValidateService(record); err != nil {
-		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
-	}
-
-	parentURL := resolveParent(parent...)
-	if err := tp.config.SetService(record, parentURL); err != nil {
-		return fmt.Errorf("tp.config.SetService: %w", err)
-	}
-	return tp.config.Save()
-}
-
-// SetHandler updates an existing handler in the topology configuration.
-func (tp *Topology) SetHandler(record config.Handler, mushroomURL string) error {
-	if tp == nil || tp.config == nil {
-		return fmt.Errorf("nil config")
-	}
-	if record == nil {
-		return fmt.Errorf("handler is empty")
-	}
-	if _, ok := record.AsIndependentHandler(); !ok {
-		return fmt.Errorf("handler is not an independent handler")
-	}
-	if mushroomURL == "" {
-		return fmt.Errorf("mushroom url is empty")
-	}
-
-	if err := tp.config.SetHandler(record, mushroomURL); err != nil {
-		return fmt.Errorf("tp.config.SetHandler: %w", err)
-	}
-
-	return tp.config.Save()
-}
-
-// RemoveService removes a service from the topology configuration.
-func (tp *Topology) RemoveService(name string, parent ...string) error {
-	if tp == nil || tp.config == nil {
-		return fmt.Errorf("nil config")
-	}
-	if len(name) == 0 {
-		return fmt.Errorf("service name is empty")
-	}
-
-	parentURL := resolveParent(parent...)
-
-	running, err := tp.IsServiceRunning(serviceQueryURL(name, parentURL))
-	if err != nil {
-		return err
-	}
-	if running {
-		return fmt.Errorf("service('%s') is running, please stop it first", name)
-	}
-
-	if err := tp.config.RemoveService(name, parentURL); err != nil {
-		return err
-	}
-
-	if err := tp.config.Save(); err != nil {
-		return fmt.Errorf("tp.config.Save: %w", err)
-	}
-
-	delete(tp.sameServices, name)
-	return nil
 }
 
 func resolveParent(parent ...string) string {
@@ -386,25 +233,19 @@ func serviceQueryURL(name, parent string) string {
 
 //---------------------------------------------------------------------
 //
-// NodeInterface implementation
+// Dependency service runtime
 //
 //---------------------------------------------------------------------
 
 // StopService stops the dependency service.
-func (tp *Topology) StopService(mushroomURL string) error {
-	// Make sure it's running
-	if tp == nil || tp.config == nil {
-		return fmt.Errorf("nil config")
-	}
-	if len(mushroomURL) == 0 {
-		return fmt.Errorf("mushroom url is empty")
-	}
-
-	service, err := tp.config.GetService(mushroomURL)
-	if err != nil {
-		return err
+func (tp *Topology) StopService(service config.Service) error {
+	if tp == nil {
+		return fmt.Errorf("nil topology")
 	}
 	serviceName := service.Name
+	if serviceName == "" {
+		return fmt.Errorf("service name is empty")
+	}
 	if service.Type == config.IndependentType {
 		return fmt.Errorf("service('%s') is independent service, impossible to stop since you are now using it", serviceName)
 	}
@@ -445,17 +286,12 @@ func (tp *Topology) StopService(mushroomURL string) error {
 }
 
 // IsServiceRunning checks whether the given service is running or not.
-func (tp *Topology) IsServiceRunning(mushroomURL string) (bool, error) {
-	if tp == nil || tp.config == nil {
-		return false, fmt.Errorf("nil config")
+func (tp *Topology) IsServiceRunning(service config.Service) (bool, error) {
+	if tp == nil {
+		return false, fmt.Errorf("nil topology")
 	}
-	if len(mushroomURL) == 0 {
-		return false, fmt.Errorf("mushroom url is empty")
-	}
-
-	service, err := tp.config.GetService(mushroomURL)
-	if err != nil {
-		return false, err
+	if service.Name == "" {
+		return false, fmt.Errorf("service name is empty")
 	}
 	if service.Type == config.IndependentType {
 		return true, nil
@@ -597,16 +433,12 @@ func (tp *Topology) newServiceManagerClient(service *config.Service) (*NodeClien
 //
 // Note that, services can crash during the initialization.
 // In that case, you should use Topology.OnStop method.
-func (tp *Topology) StartService(mushroomURL string) (string, error) {
-	if tp == nil || tp.config == nil {
-		return "", fmt.Errorf("nil config")
+func (tp *Topology) StartService(serviceConfig config.Service) (string, error) {
+	if tp == nil {
+		return "", fmt.Errorf("nil topology")
 	}
-	if len(mushroomURL) == 0 {
-		return "", fmt.Errorf("mushroom url is empty")
-	}
-	serviceConfig, err := tp.config.GetService(mushroomURL)
-	if err != nil {
-		return "", err
+	if serviceConfig.Name == "" {
+		return "", fmt.Errorf("service name is empty")
 	}
 	if serviceConfig.Type == config.IndependentType {
 		return "", fmt.Errorf("independent service can not be started")

@@ -373,6 +373,281 @@ func (a *NoPerfection) validateExtensionHandler(extensionHandler ExtensionHandle
 	return nil
 }
 
+// ValidateInprocServiceManagers checks every registered service: if inproc, its manager must be inproc.
+func (a *NoPerfection) ValidateInprocServiceManagers() error {
+	if a == nil {
+		return fmt.Errorf("app struct is nil")
+	}
+	services, err := a.GetServices("*pkg:$?var=services")
+	if err != nil {
+		return err
+	}
+	for _, service := range services {
+		if err := service.ValidateInprocServiceManager(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// InprocessDepNumber counts inproc services reachable from serviceConfig through
+// handler-deps and command-deps. Deps related to ServiceManagerCategory are not counted.
+func (a *NoPerfection) InprocessDepNumber(serviceConfig Service) (int, error) {
+	if a == nil {
+		return 0, fmt.Errorf("app struct is nil")
+	}
+
+	seen := make(map[string]struct{})
+	count := 0
+
+	for _, dep := range serviceConfig.HandlerDeps {
+		if dep.Name == ServiceManagerCategory {
+			continue
+		}
+		n, err := a.countInprocDepService(dep, seen)
+		if err != nil {
+			return 0, fmt.Errorf("handler dep %q: %w", dep.Name, err)
+		}
+		count += n
+	}
+
+	for _, variant := range serviceConfig.Handlers {
+		handler, ok := variant.AsIndependentHandler()
+		if !ok {
+			continue
+		}
+		if handler.Category == ServiceManagerCategory {
+			continue
+		}
+		for _, dep := range handler.CommandDeps {
+			if dep.Name == ServiceManagerCategory {
+				continue
+			}
+			n, err := a.countInprocDepService(dep, seen)
+			if err != nil {
+				return 0, fmt.Errorf("handler %q command %q: %w", handler.Category, dep.Name, err)
+			}
+			count += n
+		}
+	}
+
+	return count, nil
+}
+
+func (a *NoPerfection) countInprocDepService(dep DepService, seen map[string]struct{}) (int, error) {
+	count := 0
+	for _, link := range dep.Proxies {
+		n, err := a.countInprocDepLink(link, seen)
+		if err != nil {
+			return 0, err
+		}
+		count += n
+	}
+	for _, link := range dep.Extensions {
+		n, err := a.countInprocDepLink(link, seen)
+		if err != nil {
+			return 0, err
+		}
+		count += n
+	}
+	return count, nil
+}
+
+func (a *NoPerfection) countInprocDepLink(link string, seen map[string]struct{}) (int, error) {
+	service, _, err := a.ResolveDep(link)
+	if err != nil {
+		return 0, fmt.Errorf("%q: %w", link, err)
+	}
+	if !service.IsInproc() {
+		return 0, nil
+	}
+	if _, ok := seen[service.Name]; ok {
+		return 0, nil
+	}
+	seen[service.Name] = struct{}{}
+	return 1, nil
+}
+
+// ValidateManagerDeps returns how many inproc services the service manager depends on.
+// If the service has dependencies for its managers, then they should be inproc.
+func (a *NoPerfection) ValidateManagerDeps(serviceConfig Service) (int, error) {
+	if a == nil {
+		return 0, fmt.Errorf("app struct is nil")
+	}
+
+	managerDeps := 0
+	for _, dep := range serviceConfig.HandlerDeps {
+		if dep.Name != ServiceManagerCategory {
+			continue
+		}
+		for _, link := range dep.Proxies {
+			depService, _, err := a.ResolveDep(link)
+			if err != nil {
+				return 0, fmt.Errorf("handler dep %q proxy %q: %w", dep.Name, link, err)
+			}
+			if !depService.IsInproc() {
+				return 0, fmt.Errorf(
+					"handler dep %q target %q: service %q must be inproc",
+					ServiceManagerCategory,
+					link,
+					depService.Name,
+				)
+			}
+			managerDeps++
+		}
+		for _, link := range dep.Extensions {
+			depService, _, err := a.ResolveDep(link)
+			if err != nil {
+				return 0, fmt.Errorf("handler dep %q extension %q: %w", dep.Name, link, err)
+			}
+			if !depService.IsInproc() {
+				return 0, fmt.Errorf(
+					"handler dep %q target %q: service %q must be inproc",
+					ServiceManagerCategory,
+					link,
+					depService.Name,
+				)
+			}
+			managerDeps++
+		}
+	}
+	return managerDeps, nil
+}
+
+// ValidateProtocolOrdersFor checks protocol forwarding rules starting from serviceConfig.
+func (a *NoPerfection) ValidateProtocolOrdersFor(serviceConfig Service) error {
+	if a == nil {
+		return fmt.Errorf("app struct is nil")
+	}
+	if serviceConfig.Type == ProxyType {
+		for _, variant := range serviceConfig.Handlers {
+			proxyHandler, _ := variant.AsProxyHandler()
+			if len(proxyHandler.Outbounds) == 0 {
+				continue
+			}
+
+			for _, outboundURL := range proxyHandler.Outbounds {
+				outboundService, outboundHandler, err := a.serviceAndHandlerFromDep(outboundURL)
+				if err != nil {
+					return fmt.Errorf("proxy %q handler %q outbound %q: %w", serviceConfig.Name, proxyHandler.Category, outboundURL, err)
+				}
+				if err := validateProtocolOrder(serviceConfig, variant, outboundService, outboundHandler); err != nil {
+					return fmt.Errorf("proxy %q handler %q outbound %q: %w", serviceConfig.Name, proxyHandler.Category, outboundURL, err)
+				}
+			}
+		}
+	}
+
+	for _, dep := range serviceConfig.HandlerDeps {
+		for _, proxyURL := range dep.Proxies {
+			proxyService, _, err := a.serviceAndHandlerFromDep(proxyURL)
+			if err != nil {
+				return fmt.Errorf("handler dep %q proxy %q: %w", dep.Name, proxyURL, err)
+			}
+			if err := a.ValidateProtocolOrdersFor(proxyService); err != nil {
+				return fmt.Errorf("handler dep %q proxy %q: %w", dep.Name, proxyURL, err)
+			}
+		}
+
+		for _, extensionURL := range dep.Extensions {
+			extensionService, _, err := a.serviceAndHandlerFromDep(extensionURL)
+			if err != nil {
+				return fmt.Errorf("handler dep %q extension %q: %w", dep.Name, extensionURL, err)
+			}
+			if err := a.ValidateProtocolOrdersFor(extensionService); err != nil {
+				return fmt.Errorf("handler dep %q extension %q: %w", dep.Name, extensionURL, err)
+			}
+		}
+	}
+
+	for _, variant := range serviceConfig.Handlers {
+		handler, ok := variant.AsIndependentHandler()
+		if !ok {
+			continue
+		}
+		if handler.Category == ServiceManagerCategory || len(handler.CommandDeps) == 0 {
+			continue
+		}
+
+		for _, dep := range handler.CommandDeps {
+			for _, proxyURL := range dep.Proxies {
+				proxyService, _, err := a.serviceAndHandlerFromDep(proxyURL)
+				if err != nil {
+					return fmt.Errorf("handler %q command %q proxy %q: %w", handler.Category, dep.Name, proxyURL, err)
+				}
+				if err := a.ValidateProtocolOrdersFor(proxyService); err != nil {
+					return fmt.Errorf("handler %q command %q proxy %q: %w", handler.Category, dep.Name, proxyURL, err)
+				}
+			}
+			for _, extensionURL := range dep.Extensions {
+				extensionService, _, err := a.serviceAndHandlerFromDep(extensionURL)
+				if err != nil {
+					return fmt.Errorf("handler %q command %q extension %q: %w", handler.Category, dep.Name, extensionURL, err)
+				}
+				if err := a.ValidateProtocolOrdersFor(extensionService); err != nil {
+					return fmt.Errorf("handler %q command %q extension %q: %w", handler.Category, dep.Name, extensionURL, err)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (a *NoPerfection) serviceAndHandlerFromDep(mushroomURL string) (Service, Handler, error) {
+	service, category, err := a.ResolveDep(mushroomURL)
+	if err != nil {
+		return Service{}, nil, err
+	}
+	handler, err := service.HandlerByCategory(category)
+	if err != nil {
+		return Service{}, nil, err
+	}
+	return service, handler, nil
+}
+
+func validateProtocolOrder(callerService Service, caller Handler, outboundService Service, outbound Handler) error {
+	callerHandler, ok := caller.AsIndependentHandler()
+	if !ok {
+		return fmt.Errorf("caller handler is not an independent handler")
+	}
+	outboundHandler, ok := outbound.AsIndependentHandler()
+	if !ok {
+		return fmt.Errorf("outbound handler is not an independent handler")
+	}
+
+	callerInproc, err := callerService.IsInprocHandler(callerHandler.Category)
+	if err != nil {
+		return err
+	}
+	if callerInproc {
+		return nil
+	}
+
+	outboundInproc, err := outboundService.IsInprocHandler(outboundHandler.Category)
+	if err != nil {
+		return err
+	}
+	callerProtocol := "tcp"
+	if callerHandler.Endpoint.IsIpc() {
+		callerProtocol = "ipc"
+	}
+	outboundProtocol := "tcp"
+	if outboundInproc {
+		outboundProtocol = "inproc"
+	} else if outboundHandler.Endpoint.IsIpc() {
+		outboundProtocol = "ipc"
+	}
+
+	if callerProtocol == "ipc" && !outboundInproc {
+		return nil
+	}
+	if callerProtocol == "tcp" && outboundProtocol == "tcp" {
+		return nil
+	}
+	return fmt.Errorf("can not access from %s to %s", callerProtocol, outboundProtocol)
+}
+
 func (a *NoPerfection) validateDepLink(link string) error {
 	if _, _, err := a.ResolveDep(link); err != nil {
 		return fmt.Errorf("dep link %q: %w", link, err)

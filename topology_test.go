@@ -22,26 +22,33 @@ type TestDepManagerSuite struct {
 	suite.Suite
 
 	logger       *log.Logger
-	topology     *Topology // the topology to test
-	currentDir   string    // executable to store the binaries and source codes
-	url          string    // dependency source code
-	id           string    // the id of the dependency
-	parent       string    // the service name that dependency should connect back to
+	appConfig    *config.NoPerfection
+	topology     *Topology
+	currentDir   string
+	url          string
+	id           string
+	parent       string
 	localTestDir string
 }
 
+func (test *TestDepManagerSuite) service(name string) config.Service {
+	service, err := test.appConfig.GetService(name)
+	test.Require().NoError(err)
+	return service
+}
+
 func (test *TestDepManagerSuite) setServiceStartCommand(name string, startCommand string) {
-	services, err := test.topology.config.GetServices(rootServicesParent)
+	services, err := test.appConfig.GetServices(rootServicesParent)
 	test.Require().NoError(err)
 	for i := range services {
 		if services[i].Name == name {
 			services[i].StartCommand = startCommand
-			test.Require().NoError(test.topology.config.SetService(services[i], rootServicesParent))
+			test.Require().NoError(test.appConfig.SetService(services[i], rootServicesParent))
 			return
 		}
 	}
 
-	test.Require().NoError(test.topology.config.AddService(config.Service{
+	test.Require().NoError(test.appConfig.AddService(config.Service{
 		Name:         name,
 		StartCommand: startCommand,
 	}, rootServicesParent))
@@ -85,12 +92,8 @@ func (test *TestDepManagerSuite) SetupTest() {
 		},
 	}, rootServicesParent))
 
-	test.topology = &Topology{
-		config:           &cfg,
-		sameServices:     make(map[string]int),
-		runningProcesses: make(map[string]*Process, 0),
-		timeout:          DefaultTimeout,
-	}
+	test.appConfig = &cfg
+	test.topology = New()
 
 	// A valid source code that we want to download
 	test.url = "github.com/noPerfection/test-manager"
@@ -105,12 +108,8 @@ func (test *TestDepManagerSuite) SetupTest() {
 func (test *TestDepManagerSuite) Test_0_New() {
 	s := test.Require
 
-	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
-	cfg, err := config.Load(cfgPath)
-	s().NoError(err)
-	depTopology := New(&cfg)
+	depTopology := New()
 	s().NotNil(depTopology)
-	s().Same(&cfg, depTopology.config)
 	s().NotNil(depTopology.sameServices)
 	s().NotNil(depTopology.runningProcesses)
 	s().Equal(DefaultTimeout, depTopology.timeout)
@@ -126,8 +125,7 @@ func (test *TestDepManagerSuite) Test_10_GenerateId() {
 	s().Equal("test-manager1", id)
 	s().Equal(1, test.topology.sameServices[test.id])
 
-	service, err := test.topology.config.GetService("test-manager")
-	s().NoError(err)
+	service := test.service("test-manager")
 	test.topology.runningProcesses[id] = &Process{
 		config: &service,
 		id:     id,
@@ -149,7 +147,8 @@ func (test *TestDepManagerSuite) Test_12_AddRemoveService() {
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
 	cfg, err := config.Load(cfgPath)
 	s().NoError(err)
-	test.topology = New(&cfg)
+	handler, err := newHandler(&cfg)
+	s().NoError(err)
 
 	service := config.Service{
 		Type:         config.ProxyType,
@@ -165,29 +164,29 @@ func (test *TestDepManagerSuite) Test_12_AddRemoveService() {
 			},
 		},
 	}
-	err = test.topology.AddService(service)
+	err = handler.AddService(service)
 	s().NoError(err)
 
-	got, err := test.topology.config.GetService("extra-service")
+	got, err := cfg.GetService("extra-service")
 	s().NoError(err)
 	s().Equal("echo extra", got.StartCommand)
 
-	err = test.topology.RemoveService("extra-service")
+	err = handler.RemoveService("extra-service")
 	s().NoError(err)
 
-	_, err = test.topology.config.GetService("extra-service")
+	_, err = cfg.GetService("extra-service")
 	s().Error(err)
 
-	err = test.topology.RemoveService("missing")
+	err = handler.RemoveService("missing")
 	s().Error(err)
 
-	err = test.topology.AddService(config.Service{
+	err = handler.AddService(config.Service{
 		Type:         config.ProxyType,
 		Name:         "plain-service",
 		StartCommand: "echo plain",
 	})
 	s().NoError(err)
-	err = test.topology.RemoveService("plain-service")
+	err = handler.RemoveService("plain-service")
 	s().Error(err)
 }
 
@@ -197,15 +196,15 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 	cfgPath := filepath.Join(test.T().TempDir(), "app.json")
 	cfg, err := config.Load(cfgPath)
 	s().NoError(err)
-	service, err := test.topology.config.GetService("test-manager")
+	service, err := test.appConfig.GetService("test-manager")
 	s().NoError(err)
 	s().NoError(cfg.AddService(service, rootServicesParent))
-	test.topology = New(&cfg)
+	test.appConfig = &cfg
 
-	err = test.topology.AddService(config.Service{})
+	err = cfg.AddService(config.Service{}, rootServicesParent)
 	s().Error(err)
 
-	err = test.topology.AddService(config.Service{
+	err = cfg.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "duplicate-socket",
 		Handlers: []config.Handler{
@@ -217,10 +216,10 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				},
 			},
 		},
-	})
+	}, rootServicesParent)
 	s().NoError(err)
 
-	err = test.topology.AddService(config.Service{
+	err = cfg.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "nested-parent",
 		Handlers: []config.Handler{
@@ -238,15 +237,15 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				},
 			},
 		},
-	})
+	}, rootServicesParent)
 	s().NoError(err)
 
-	_, err = test.topology.config.GetService("nested-parent")
+	_, err = cfg.GetService("nested-parent")
 	s().NoError(err)
-	_, err = test.topology.config.GetService("test-manager")
+	_, err = cfg.GetService("test-manager")
 	s().NoError(err)
 
-	err = test.topology.AddService(config.Service{
+	err = cfg.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "service-level-parent",
 		HandlerDeps: []config.DepService{
@@ -264,15 +263,15 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				},
 			},
 		},
-	})
+	}, rootServicesParent)
 	s().NoError(err)
 
-	_, err = test.topology.config.GetService("service-level-parent")
+	_, err = cfg.GetService("service-level-parent")
 	s().NoError(err)
-	_, err = test.topology.config.GetService("test-manager")
+	_, err = cfg.GetService("test-manager")
 	s().NoError(err)
 
-	err = test.topology.AddService(config.Service{
+	err = cfg.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "proxy-outbound-child",
 		Handlers: []config.Handler{
@@ -284,10 +283,10 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				},
 			},
 		},
-	})
+	}, rootServicesParent)
 	s().NoError(err)
 
-	err = test.topology.AddService(config.Service{
+	err = cfg.AddService(config.Service{
 		Type: config.ProxyType,
 		Name: "proxy-parent",
 		Handlers: []config.Handler{
@@ -302,12 +301,12 @@ func (test *TestDepManagerSuite) Test_13_AddServiceTargetValidation() {
 				},
 			},
 		},
-	})
+	}, rootServicesParent)
 	s().NoError(err)
 
-	_, err = test.topology.config.GetService("proxy-parent")
+	_, err = cfg.GetService("proxy-parent")
 	s().NoError(err)
-	_, err = test.topology.config.GetService("proxy-outbound-child")
+	_, err = cfg.GetService("proxy-outbound-child")
 	s().NoError(err)
 }
 
@@ -325,24 +324,24 @@ func (test *TestDepManagerSuite) Test_20_Run() {
 
 	// running nil values must exist
 	var depTopology *Topology
-	_, err := depTopology.StartService(test.id)
+	_, err := depTopology.StartService(test.service(test.id))
 	s().Error(err)
 
-	_, err = test.topology.StartService("")
+	_, err = test.topology.StartService(config.Service{})
 	s().Error(err) // missing service name
 
 	test.setServiceStartCommand("no-command", "")
-	_, err = test.topology.StartService("no-command")
+	_, err = test.topology.StartService(test.service("no-command"))
 	s().Error(err) // no start command
 
 	// the binary doesn't exist
 	test.setServiceStartCommand(test.id, invalidBin)
-	_, err = test.topology.StartService(test.id)
+	_, err = test.topology.StartService(test.service(test.id))
 	s().Error(err) // no binary
 
 	// Let's run it, it should exit immediately
 	test.setServiceStartCommand(test.id, localBin)
-	id, err := test.topology.StartService(test.id)
+	id, err := test.topology.StartService(test.service(test.id))
 	s().NoError(err)
 
 	_, ok = test.topology.runningProcesses[id]
@@ -370,7 +369,7 @@ func (test *TestDepManagerSuite) Test_21_RunError() {
 	test.setServiceStartCommand(test.id, localBin)
 
 	// Let's run it
-	id, err := test.topology.StartService(test.id)
+	id, err := test.topology.StartService(test.service(test.id))
 	s().NoError(err)
 
 	// make sure that it exists
@@ -399,12 +398,12 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 
 	// First, install the manager
 	// Let's run it
-	id, err := test.topology.StartService(test.id)
+	id, err := test.topology.StartService(test.service(test.id))
 	s().NoError(err)
 	s().NotNil(test.topology.runningProcesses[id]) // cmd == nil indicates that the program was closed
 
 	// Check is the service running
-	running, err := test.topology.IsServiceRunning(test.id)
+	running, err := test.topology.IsServiceRunning(test.service(test.id))
 	s().NoError(err)
 	s().True(running)
 
@@ -415,7 +414,7 @@ func (test *TestDepManagerSuite) Test_22_Running() {
 	s().NoError(err)
 
 	s().Nil(test.topology.runningProcesses[id]) // cmd == nil indicates that the program was closed
-	running, err = test.topology.IsServiceRunning(test.id)
+	running, err = test.topology.IsServiceRunning(test.service(test.id))
 	s().NoError(err)
 	s().False(running)
 }
@@ -450,15 +449,16 @@ func TestStartServiceProceedsWhenManagerUnreachable(t *testing.T) {
 		t.Fatalf("AddService: %v", err)
 	}
 
-	tp := &Topology{
-		config:           &cfg,
-		sameServices:     make(map[string]int),
-		runningProcesses: make(map[string]*Process),
-		timeout:          time.Millisecond * 100,
+	service, err := cfg.GetService("ipc-proxy")
+	if err != nil {
+		t.Fatalf("GetService: %v", err)
 	}
 
+	tp := New()
+	tp.timeout = time.Millisecond * 100
+
 	startedAt := time.Now()
-	id, err := tp.StartService("ipc-proxy")
+	id, err := tp.StartService(service)
 	if err != nil {
 		t.Fatalf("StartService: %v", err)
 	}

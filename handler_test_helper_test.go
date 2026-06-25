@@ -26,7 +26,8 @@ func newHandler(appConfig *config.NoPerfection) (*Handler, error) {
 	}
 
 	return &Handler{
-		topology: New(appConfig),
+		config:   appConfig,
+		topology: New(),
 		handler:  handler,
 	}, nil
 }
