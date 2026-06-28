@@ -391,7 +391,7 @@ func (a *NoPerfection) ValidateInprocServiceManagers() error {
 }
 
 // InprocessDepNumber counts inproc services reachable from serviceConfig through
-// handler-deps and command-deps. Deps related to ServiceManagerCategory are not counted.
+// handler-deps and command-deps.
 func (a *NoPerfection) InprocessDepNumber(serviceConfig Service) (int, error) {
 	if a == nil {
 		return 0, fmt.Errorf("app struct is nil")
@@ -401,12 +401,9 @@ func (a *NoPerfection) InprocessDepNumber(serviceConfig Service) (int, error) {
 	count := 0
 
 	for _, dep := range serviceConfig.HandlerDeps {
-		if dep.Name == ServiceManagerCategory {
-			continue
-		}
 		n, err := a.countInprocDepService(dep, seen)
 		if err != nil {
-			return 0, fmt.Errorf("handler dep %q: %w", dep.Name, err)
+			return 0, fmt.Errorf("handler dep %q: %w", dep, err)
 		}
 		count += n
 	}
@@ -416,13 +413,7 @@ func (a *NoPerfection) InprocessDepNumber(serviceConfig Service) (int, error) {
 		if !ok {
 			continue
 		}
-		if handler.Category == ServiceManagerCategory {
-			continue
-		}
 		for _, dep := range handler.CommandDeps {
-			if dep.Name == ServiceManagerCategory {
-				continue
-			}
 			n, err := a.countInprocDepService(dep, seen)
 			if err != nil {
 				return 0, fmt.Errorf("handler %q command %q: %w", handler.Category, dep.Name, err)
@@ -466,52 +457,6 @@ func (a *NoPerfection) countInprocDepLink(link string, seen map[string]struct{})
 	}
 	seen[service.Name] = struct{}{}
 	return 1, nil
-}
-
-// ValidateManagerDeps returns how many inproc services the service manager depends on.
-// If the service has dependencies for its managers, then they should be inproc.
-func (a *NoPerfection) ValidateManagerDeps(serviceConfig Service) (int, error) {
-	if a == nil {
-		return 0, fmt.Errorf("app struct is nil")
-	}
-
-	managerDeps := 0
-	for _, dep := range serviceConfig.HandlerDeps {
-		if dep.Name != ServiceManagerCategory {
-			continue
-		}
-		for _, link := range dep.Proxies {
-			depService, _, err := a.ResolveDep(link)
-			if err != nil {
-				return 0, fmt.Errorf("handler dep %q proxy %q: %w", dep.Name, link, err)
-			}
-			if !depService.IsInproc() {
-				return 0, fmt.Errorf(
-					"handler dep %q target %q: service %q must be inproc",
-					ServiceManagerCategory,
-					link,
-					depService.Name,
-				)
-			}
-			managerDeps++
-		}
-		for _, link := range dep.Extensions {
-			depService, _, err := a.ResolveDep(link)
-			if err != nil {
-				return 0, fmt.Errorf("handler dep %q extension %q: %w", dep.Name, link, err)
-			}
-			if !depService.IsInproc() {
-				return 0, fmt.Errorf(
-					"handler dep %q target %q: service %q must be inproc",
-					ServiceManagerCategory,
-					link,
-					depService.Name,
-				)
-			}
-			managerDeps++
-		}
-	}
-	return managerDeps, nil
 }
 
 // ValidateProtocolOrdersFor checks protocol forwarding rules starting from serviceConfig.

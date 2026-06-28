@@ -323,7 +323,8 @@ func (h *Handler) ValidateProtocolOrder(mushroomURL string) error {
 	return h.config.ValidateProtocolOrdersFor(service)
 }
 
-// ValidateInprocServiceManagers checks every registered service before the topology handler is started.
+// ValidateInprocServiceManagers checks if the service is inproc, then its manager must be inproc too.
+// *pkg:golang/github.com/noPerfection/topology/config?var=NoPerfection.ValidateInprocServiceManagers&comment=true
 func (h *Handler) ValidateInprocServiceManagers() error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -336,7 +337,6 @@ func (h *Handler) ValidateInprocServiceManagers() error {
 }
 
 // InprocessDepNumber counts inproc dependency services for the given service.
-// Deps related to ServiceManagerCategory are not counted.
 // *pkg:golang/github.com/noPerfection/topology/config?var=NoPerfection.InprocessDepNumber&comment=true
 func (h *Handler) InprocessDepNumber(mushroomURL string) (int, error) {
 	h.mu.Lock()
@@ -350,22 +350,6 @@ func (h *Handler) InprocessDepNumber(mushroomURL string) (int, error) {
 		return 0, err
 	}
 	return h.config.InprocessDepNumber(service)
-}
-
-// ValidateManagerDeps validates manager handler dependencies for the given service.
-// *pkg:golang/github.com/noPerfection/topology/config#config?var=NoPerfection.ValidateManagerDeps&comment=true
-func (h *Handler) ValidateManagerDeps(mushroomURL string) (int, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.config == nil {
-		return 0, fmt.Errorf("nil config")
-	}
-	service, err := h.service(mushroomURL)
-	if err != nil {
-		return 0, err
-	}
-	return h.config.ValidateManagerDeps(service)
 }
 
 func (h *Handler) addService(record config.Service, parent ...string) error {
