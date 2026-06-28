@@ -510,7 +510,6 @@ func (c *Client) ValidateProtocolOrder(mushroomURL string) error {
 }
 
 // InprocessDepNumber counts inproc dependency services for the given service.
-// Deps related to ServiceManagerCategory are not counted.
 func (c *Client) InprocessDepNumber(mushroomURL string) (int, error) {
 	req := message.Request{
 		Command: InprocessDepNumber,

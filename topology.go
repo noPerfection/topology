@@ -166,8 +166,7 @@ type TopologyInterface interface {
 	ValidateProtocolOrder(mushroomURL string) error
 
 	// InprocessDepNumber counts inproc dependency services reachable from the given
-	// service through handler-deps and command-deps. Deps related to
-	// ServiceManagerCategory are not counted.
+	// service through handler-deps and command-deps.
 	//
 	// Symbol:
 	//
