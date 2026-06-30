@@ -434,23 +434,23 @@ func serviceParameterHasInprocHandler(service Service, category string) bool {
 }
 
 // ValidateService validates the service metadata and endpoint bootstrap settings.
-func ValidateService(service Service) error {
-	if len(service.Name) == 0 {
+func (s *Service) Validate() error {
+	if len(s.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
-	if err := ValidateServiceType(service.Type); err != nil {
+	if err := ValidateServiceType(s.Type); err != nil {
 		return fmt.Errorf("identity.ValidateServiceType: %v", err)
 	}
 
 	needsModuleURL := false
 	needsStartCommand := false
-	for i, dep := range service.HandlerDeps {
+	for i, dep := range s.HandlerDeps {
 		if err := ValidateDepService(dep); err != nil {
 			return fmt.Errorf("ValidateHandlerDep[%d]: %v", i, err)
 		}
 	}
 
-	for i, h := range service.Handlers {
+	for i, h := range s.Handlers {
 		if h == nil {
 			return fmt.Errorf("handler[%d] is empty", i)
 		}
@@ -480,7 +480,7 @@ func ValidateService(service Service) error {
 				return fmt.Errorf("ValidateCommandDepService[%d]: %v", i, err)
 			}
 		}
-		if service.Type == ProxyType {
+		if s.Type == ProxyType {
 			if handler.Category == ServiceManagerCategory {
 				continue
 			}
@@ -492,7 +492,7 @@ func ValidateService(service Service) error {
 				return fmt.Errorf("handler[%d] forward: %w", i, err)
 			}
 		}
-		if service.Type == ExtensionType {
+		if s.Type == ExtensionType {
 			if handler.Category == ServiceManagerCategory {
 				continue
 			}
@@ -502,11 +502,11 @@ func ValidateService(service Service) error {
 		}
 	}
 
-	if needsModuleURL && len(service.ModuleUrl) == 0 {
-		return fmt.Errorf("service('%s') has inproc endpoint and requires module-url", service.Name)
+	if needsModuleURL && len(s.ModuleUrl) == 0 {
+		return fmt.Errorf("service('%s') has inproc endpoint and requires module-url", s.Name)
 	}
-	if needsStartCommand && len(service.StartCommand) == 0 {
-		return fmt.Errorf("service('%s') has ipc endpoint and requires start-command", service.Name)
+	if needsStartCommand && len(s.StartCommand) == 0 {
+		return fmt.Errorf("service('%s') has ipc endpoint and requires start-command", s.Name)
 	}
 	return nil
 }

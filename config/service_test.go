@@ -32,7 +32,7 @@ func testService() (*Service, IndependentHandler, IndependentHandler, Independen
 	}, handlerOfType, handler2OfType, handlerOfType2
 }
 
-func TestValidateService(t *testing.T) {
+func TestServiceValidate(t *testing.T) {
 	_, handlerOfType, _, _ := testService()
 
 	invalidHandler := IndependentHandler{Type: HandlerType("invalid_handler_type")}
@@ -43,22 +43,22 @@ func TestValidateService(t *testing.T) {
 		Handlers: []Handler{handlerOfType},
 	}
 
-	if err := ValidateService(*generatedService); err == nil {
+	if err := generatedService.Validate(); err == nil {
 		t.Fatal("ValidateService with invalid service type returned nil error")
 	}
 
 	generatedService.Type = IndependentType
-	if err := ValidateService(*generatedService); err != nil {
+	if err := generatedService.Validate(); err != nil {
 		t.Fatalf("ValidateService valid service: %v", err)
 	}
 
 	generatedService.Handlers = []Handler{IndependentHandler{Type: ReplierType}}
-	if err := ValidateService(*generatedService); err == nil {
+	if err := generatedService.Validate(); err == nil {
 		t.Fatal("ValidateService with empty handler category returned nil error")
 	}
 
 	generatedService.Handlers = []Handler{invalidHandler}
-	if err := ValidateService(*generatedService); err == nil {
+	if err := generatedService.Validate(); err == nil {
 		t.Fatal("ValidateService with invalid handler type returned nil error")
 	}
 }
@@ -77,12 +77,12 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 			},
 		},
 	}
-	if err := ValidateService(service); err == nil {
+	if err := service.Validate(); err == nil {
 		t.Fatal("ValidateService with inproc endpoint and no module-url returned nil error")
 	}
 
 	service.ModuleUrl = "github.com/noPerfection/inproc-service"
-	if err := ValidateService(service); err != nil {
+	if err := service.Validate(); err != nil {
 		t.Fatalf("ValidateService with module-url: %v", err)
 	}
 
@@ -99,12 +99,12 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 			},
 		},
 	}
-	if err := ValidateService(service); err == nil {
+	if err := service.Validate(); err == nil {
 		t.Fatal("ValidateService with ipc endpoint and no start-command returned nil error")
 	}
 
 	service.StartCommand = "go run ./cmd/tmp-service"
-	if err := ValidateService(service); err != nil {
+	if err := service.Validate(); err != nil {
 		t.Fatalf("ValidateService with start-command: %v", err)
 	}
 
@@ -121,7 +121,7 @@ func TestServiceValidateSocketBootstrap(t *testing.T) {
 			},
 		},
 	}
-	if err := ValidateService(service); err != nil {
+	if err := service.Validate(); err != nil {
 		t.Fatalf("ValidateService with tcp endpoint and no bootstrap fields: %v", err)
 	}
 }
@@ -377,13 +377,13 @@ func TestValidateProxyForwards(t *testing.T) {
 		ModuleUrl: "github.com/noPerfection/proxy",
 		Handlers:  []Handler{proxyHandler},
 	}
-	if err := ValidateService(service); err != nil {
+	if err := service.Validate(); err != nil {
 		t.Fatalf("ValidateService with forward mappings: %v", err)
 	}
 
 	proxyHandler.Forward = map[string]string{"missing-route": helloWorldOutbound}
 	service.Handlers = []Handler{proxyHandler}
-	if err := ValidateService(service); err == nil {
+	if err := service.Validate(); err == nil {
 		t.Fatal("ValidateService with forward route missing from routes returned nil error")
 	}
 
@@ -590,7 +590,7 @@ func TestServiceParametersNotValidated(t *testing.T) {
 	serviceConfig.Handlers = []Handler{handlerOfType}
 	serviceConfig.Parameters = datatype.New().Set("region", "eu-west")
 
-	if err := ValidateService(*serviceConfig); err != nil {
+	if err := serviceConfig.Validate(); err != nil {
 		t.Fatalf("ValidateService with parameters: %v", err)
 	}
 }
@@ -653,7 +653,7 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 	serviceConfig.Handlers = []Handler{handlerOfType}
 	serviceConfig.HandlerDeps = []DepService{{Name: "orphan"}}
 
-	if err := ValidateService(*serviceConfig); err == nil {
+	if err := serviceConfig.Validate(); err == nil {
 		t.Fatal("ValidateService with invalid handler-deps returned nil error")
 	}
 
@@ -665,7 +665,7 @@ func TestServiceValidateHandlerDeps(t *testing.T) {
 			},
 		},
 	}
-	if err := ValidateService(*serviceConfig); err != nil {
+	if err := serviceConfig.Validate(); err != nil {
 		t.Fatalf("ValidateService with handler-deps: %v", err)
 	}
 }

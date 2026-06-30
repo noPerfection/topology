@@ -409,6 +409,49 @@ func TestLoadSave(t *testing.T) {
 	}
 }
 
+func TestSnapshotRollback(t *testing.T) {
+	filePath := filepath.Join(t.TempDir(), "app.json")
+	appConfig, err := Load(filePath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	original, err := appConfig.Snapshot()
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+
+	sample := Service{
+		Name: "api",
+		Type: IndependentType,
+		Handlers: []Handler{
+			IndependentHandler{
+				Type:     ReplierType,
+				Category: "api",
+				Endpoint: message.NewEndpoint("api_1", 4101),
+			},
+		},
+	}
+	addTestService(t, &appConfig, sample)
+
+	if err := appConfig.Rollback(original); err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+
+	services := listTestServices(t, &appConfig)
+	if len(services) != 0 {
+		t.Fatalf("len(Services) after rollback = %d, want 0", len(services))
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("os.ReadFile: %v", err)
+	}
+	if strings.Contains(string(data), `"name": "api"`) {
+		t.Fatalf("file still contains rolled-back service: %s", string(data))
+	}
+}
+
 func TestSaveWithoutFilePath(t *testing.T) {
 	if err := (NoPerfection{}).Save(); err == nil {
 		t.Fatal("Save without file path returned nil error")

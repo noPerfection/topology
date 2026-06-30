@@ -490,6 +490,13 @@ func (c *Client) StopService(mushroomURL string) error {
 
 // ValidateProtocolOrder checks protocol forwarding rules for a service and its
 // reachable dependency graph.
+//
+// Allowed forwarding (caller handler transport → outbound):
+//
+//	Caller → TCP  → IPC  → inproc
+//	inproc   ✅     ✅     ✅
+//	ipc      ✅     ✅     ❌
+//	tcp      ✅     ❌     ❌
 func (c *Client) ValidateProtocolOrder(mushroomURL string) error {
 	req := message.Request{
 		Command: ValidateProtocolOrder,
@@ -500,6 +507,25 @@ func (c *Client) ValidateProtocolOrder(mushroomURL string) error {
 	reply, err := c.socket.Request(&req)
 	if err != nil {
 		return fmt.Errorf("socket.Request('%s'): %w", ValidateProtocolOrder, err)
+	}
+
+	if !reply.IsOK() {
+		return fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	return nil
+}
+
+// ValidateInprocServiceManagers checks every registered service: if inproc, its manager must be inproc.
+func (c *Client) ValidateInprocServiceManagers() error {
+	req := message.Request{
+		Command:    ValidateInprocServiceManagers,
+		Parameters: datatype.New(),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return fmt.Errorf("socket.Request('%s'): %w", ValidateInprocServiceManagers, err)
 	}
 
 	if !reply.IsOK() {
@@ -532,4 +558,48 @@ func (c *Client) InprocessDepNumber(mushroomURL string) (int, error) {
 	}
 
 	return int(count), nil
+}
+
+// Snapshot returns the topology JSON document as a compact JSON string.
+func (c *Client) Snapshot() (string, error) {
+	req := message.Request{
+		Command:    Snapshot,
+		Parameters: datatype.New(),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return "", fmt.Errorf("socket.Request('%s'): %w", Snapshot, err)
+	}
+
+	if !reply.IsOK() {
+		return "", fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	snapshot, err := reply.ReplyParameters().StringValue("snapshot")
+	if err != nil {
+		return "", fmt.Errorf("reply.Parameters.StringValue('snapshot'): %w", err)
+	}
+
+	return snapshot, nil
+}
+
+// Rollback restores the topology from a prior Snapshot.
+func (c *Client) Rollback(snapshot string) error {
+	req := message.Request{
+		Command: Rollback,
+		Parameters: datatype.New().
+			Set("snapshot", snapshot),
+	}
+
+	reply, err := c.socket.Request(&req)
+	if err != nil {
+		return fmt.Errorf("socket.Request('%s'): %w", Rollback, err)
+	}
+
+	if !reply.IsOK() {
+		return fmt.Errorf("reply.Message: %s", reply.ErrorMessage())
+	}
+
+	return nil
 }

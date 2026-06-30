@@ -19,23 +19,26 @@ import (
 )
 
 const (
-	TopologyHandlerCategory = "service_topology" // handler category
-	TopologySocketType      = handlerConfig.ReplierType
-	IsRunning               = "is-running"
-	IsServiceRunning        = "is-service-running"
-	StartService            = "start-service"
-	StopService             = "stop-service"
-	Service                 = "service"
-	Services                = "services"
-	GetHandler              = "get-handler"
-	GetFacade               = "get-facade"
-	GetLink                 = "get-link"
-	AddService              = "add-service"
-	SetService              = "set-service"
-	SetHandler              = "set-handler"
-	RemoveService           = "remove-service"
-	ValidateProtocolOrder   = "validate-protocol-order"
-	InprocessDepNumber      = "inprocess-dep-number"
+	TopologyHandlerCategory       = "service_topology" // handler category
+	TopologySocketType            = handlerConfig.ReplierType
+	IsRunning                     = "is-running"
+	IsServiceRunning              = "is-service-running"
+	StartService                  = "start-service"
+	StopService                   = "stop-service"
+	Service                       = "service"
+	Services                      = "services"
+	GetHandler                    = "get-handler"
+	GetFacade                     = "get-facade"
+	GetLink                       = "get-link"
+	AddService                    = "add-service"
+	SetService                    = "set-service"
+	SetHandler                    = "set-handler"
+	RemoveService                 = "remove-service"
+	ValidateProtocolOrder         = "validate-protocol-order"
+	ValidateInprocServiceManagers = "validate-inproc-service-managers"
+	InprocessDepNumber            = "inprocess-dep-number"
+	Snapshot                      = "snapshot"
+	Rollback                      = "rollback"
 )
 
 // Handler acts as the router from other app processes to the topology.
@@ -130,8 +133,6 @@ func (h *Handler) AddService(record config.Service, parent ...string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.addService(record, parent...)
 }
@@ -145,8 +146,6 @@ func (h *Handler) SetService(record config.Service, parent ...string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.setService(record, parent...)
 }
@@ -160,8 +159,6 @@ func (h *Handler) SetHandler(record config.Handler, mushroomURL string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.setHandler(record, mushroomURL)
 }
@@ -175,8 +172,6 @@ func (h *Handler) RemoveService(name string, parent ...string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.removeService(name, parent...)
 }
@@ -184,27 +179,23 @@ func (h *Handler) RemoveService(name string, parent ...string) error {
 // StartService starts a dependency service before the topology handler is
 // started.
 func (h *Handler) StartService(mushroomURL string) (string, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	service, err := h.service(mushroomURL)
 	if err != nil {
 		return "", err
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	return h.topology.StartService(service)
 }
 
 // IsServiceRunning checks a dependency service before the topology handler is
 // started.
 func (h *Handler) IsServiceRunning(mushroomURL string) (bool, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	if err := h.requireNotStarted(); err != nil {
 		return false, err
@@ -214,13 +205,14 @@ func (h *Handler) IsServiceRunning(mushroomURL string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	return h.topology.IsServiceRunning(service)
 }
 
 // StopService stops a dependency service before the topology handler is started.
 func (h *Handler) StopService(mushroomURL string) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
 
 	if err := h.requireNotStarted(); err != nil {
 		return err
@@ -230,6 +222,9 @@ func (h *Handler) StopService(mushroomURL string) error {
 	if err != nil {
 		return err
 	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	return h.topology.StopService(service)
 }
 
@@ -241,8 +236,6 @@ func (h *Handler) Service(mushroomURL string) (config.Service, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return config.Service{}, err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.service(mushroomURL)
 }
@@ -255,8 +248,6 @@ func (h *Handler) Handler(mushroomURL string) (config.Handler, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return nil, err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.handlerConfig(mushroomURL)
 }
@@ -270,8 +261,6 @@ func (h *Handler) GetFacade(mushroomURL string, command ...string) (string, erro
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.getFacade(mushroomURL, command...)
 }
@@ -284,8 +273,6 @@ func (h *Handler) GetLink(mushroomURL string) (string, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return "", err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.getLink(mushroomURL)
 }
@@ -298,14 +285,19 @@ func (h *Handler) Services() ([]config.Service, error) {
 	if err := h.requireNotStarted(); err != nil {
 		return nil, err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	return h.services()
 }
 
 // ValidateProtocolOrder checks protocol forwarding rules for a service and its
 // reachable dependency graph before the topology handler is started.
+//
+// Allowed forwarding (caller handler transport → outbound):
+//
+//	Caller → TCP  → IPC  → inproc
+//	inproc   ✅     ✅     ✅
+//	ipc      ✅     ✅     ❌
+//	tcp      ✅     ❌     ❌
 func (h *Handler) ValidateProtocolOrder(mushroomURL string) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -313,13 +305,15 @@ func (h *Handler) ValidateProtocolOrder(mushroomURL string) error {
 	if err := h.requireNotStarted(); err != nil {
 		return err
 	}
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	service, err := h.service(mushroomURL)
 	if err != nil {
 		return err
 	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	return h.config.ValidateProtocolOrdersFor(service)
 }
 
@@ -352,6 +346,42 @@ func (h *Handler) InprocessDepNumber(mushroomURL string) (int, error) {
 	return h.config.InprocessDepNumber(service)
 }
 
+// Snapshot returns the topology JSON document as a compact JSON string.
+func (h *Handler) Snapshot() (string, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.requireNotStarted(); err != nil {
+		return "", err
+	}
+	if h.config == nil {
+		return "", fmt.Errorf("nil config")
+	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	return h.config.Snapshot()
+}
+
+// Rollback restores the topology from a prior Snapshot.
+func (h *Handler) Rollback(snapshot string) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if err := h.requireNotStarted(); err != nil {
+		return err
+	}
+	if h.config == nil {
+		return fmt.Errorf("nil config")
+	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	return h.config.Rollback(snapshot)
+}
+
 func (h *Handler) addService(record config.Service, parent ...string) error {
 	if h.config == nil {
 		return fmt.Errorf("nil config")
@@ -362,11 +392,14 @@ func (h *Handler) addService(record config.Service, parent ...string) error {
 	if len(record.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
-	if err := config.ValidateService(record); err != nil {
-		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("config.Validate('%s'): %w", record.Name, err)
 	}
 
 	parentURL := resolveParent(parent...)
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	if err := h.config.AddService(record, parentURL); err != nil {
 		return fmt.Errorf("config.AddService: %w", err)
 	}
@@ -380,11 +413,15 @@ func (h *Handler) setService(record config.Service, parent ...string) error {
 	if len(record.Name) == 0 {
 		return fmt.Errorf("service name is empty")
 	}
-	if err := config.ValidateService(record); err != nil {
-		return fmt.Errorf("config.ValidateService('%s'): %w", record.Name, err)
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("config.Validate('%s'): %w", record.Name, err)
 	}
 
 	parentURL := resolveParent(parent...)
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	if err := h.config.SetService(record, parentURL); err != nil {
 		return fmt.Errorf("config.SetService: %w", err)
 	}
@@ -404,6 +441,10 @@ func (h *Handler) setHandler(record config.Handler, mushroomURL string) error {
 	if mushroomURL == "" {
 		return fmt.Errorf("mushroom url is empty")
 	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	if err := h.config.SetHandler(record, mushroomURL); err != nil {
 		return fmt.Errorf("config.SetHandler: %w", err)
 	}
@@ -434,6 +475,10 @@ func (h *Handler) removeService(name string, parent ...string) error {
 		return fmt.Errorf("service('%s') is running, please stop it first", name)
 	}
 
+	// Removing from the configuration should be locking
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	if err := h.config.RemoveService(name, parentURL); err != nil {
 		return err
 	}
@@ -452,6 +497,10 @@ func (h *Handler) service(mushroomURL string) (config.Service, error) {
 	if len(mushroomURL) == 0 {
 		return config.Service{}, fmt.Errorf("mushroom url is empty")
 	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	record, err := h.config.GetService(mushroomURL)
 	if err != nil {
 		return config.Service{}, fmt.Errorf("config.GetService(%q): %w", mushroomURL, err)
@@ -466,6 +515,10 @@ func (h *Handler) handlerConfig(mushroomURL string) (config.Handler, error) {
 	if len(mushroomURL) == 0 {
 		return nil, fmt.Errorf("mushroom url is empty")
 	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	handler, err := h.config.GetHandler(mushroomURL)
 	if err != nil {
 		return nil, fmt.Errorf("config.GetHandler(%q): %w", mushroomURL, err)
@@ -480,6 +533,10 @@ func (h *Handler) getFacade(mushroomURL string, command ...string) (string, erro
 	if len(mushroomURL) == 0 {
 		return "", fmt.Errorf("mushroom url is empty")
 	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	link, err := h.config.GetFacade(mushroomURL, command...)
 	if err != nil {
 		return "", fmt.Errorf("config.GetFacade(%q): %w", mushroomURL, err)
@@ -494,6 +551,10 @@ func (h *Handler) getLink(mushroomURL string) (string, error) {
 	if len(mushroomURL) == 0 {
 		return "", fmt.Errorf("mushroom url is empty")
 	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	link, err := h.config.GetServiceLink(mushroomURL)
 	if err != nil {
 		return "", fmt.Errorf("config.GetServiceLink(%q): %w", mushroomURL, err)
@@ -505,6 +566,9 @@ func (h *Handler) services() ([]config.Service, error) {
 	if h.config == nil {
 		return nil, fmt.Errorf("nil config")
 	}
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	services, err := h.config.GetServices(rootServicesParent)
 	if err != nil {
 		return nil, fmt.Errorf("config.GetServices(%q): %w", rootServicesParent, err)
@@ -548,9 +612,6 @@ func (h *Handler) onStartService(req message.RequestInterface) message.ReplyInte
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	service, err := h.service(mushroomURL)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.service(%q): %v", mushroomURL, err))
@@ -577,9 +638,6 @@ func (h *Handler) onAddService(req message.RequestInterface) message.ReplyInterf
 		return req.Fail(fmt.Sprintf("kv.Interface('config.Service'): %v", err))
 	}
 
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	if err := h.addService(record, optionalParent(req.RouteParameters())...); err != nil {
 		return req.Fail(fmt.Sprintf("h.addService('%s'): %v", record.Name, err))
 	}
@@ -600,9 +658,6 @@ func (h *Handler) onSetService(req message.RequestInterface) message.ReplyInterf
 	if err != nil {
 		return req.Fail(fmt.Sprintf("kv.Interface: %v", err))
 	}
-
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	err = h.setService(record, optionalParent(req.RouteParameters())...)
 	if err != nil {
@@ -635,9 +690,6 @@ func (h *Handler) onSetHandler(req message.RequestInterface) message.ReplyInterf
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('mushroomURL'): %v", err))
 	}
 
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	if err := h.setHandler(record, mushroomURL); err != nil {
 		base, _ := record.AsIndependentHandler()
 		return req.Fail(fmt.Sprintf("h.setHandler(%q): %v", base.Category, err))
@@ -653,9 +705,6 @@ func (h *Handler) onRemoveService(req message.RequestInterface) message.ReplyInt
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
-
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	err = h.removeService(serviceName, optionalParent(req.RouteParameters())...)
 	if err != nil {
@@ -694,9 +743,6 @@ func (h *Handler) onService(req message.RequestInterface) message.ReplyInterface
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	record, err := h.service(mushroomURL)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.service(%q): %v", mushroomURL, err))
@@ -712,9 +758,6 @@ func (h *Handler) onGetHandler(req message.RequestInterface) message.ReplyInterf
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('handler'): %v", err))
 	}
-
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	record, err := h.handlerConfig(mushroomURL)
 	if err != nil {
@@ -739,9 +782,6 @@ func (h *Handler) onGetFacade(req message.RequestInterface) message.ReplyInterfa
 
 	command, _ := req.RouteParameters().StringValue("command")
 
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	facade, err := h.getFacade(mushroomURL, optionalCommand(command)...)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.getFacade(%q): %v", mushroomURL, err))
@@ -757,9 +797,6 @@ func (h *Handler) onGetLink(req message.RequestInterface) message.ReplyInterface
 	if err != nil {
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('link'): %v", err))
 	}
-
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
 
 	link, err := h.getLink(mushroomURL)
 	if err != nil {
@@ -778,9 +815,6 @@ func optionalCommand(command string) []string {
 
 // onServices returns the configuration for all services.
 func (h *Handler) onServices(req message.RequestInterface) message.ReplyInterface {
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	records, err := h.services()
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.services: %v", err))
@@ -797,16 +831,28 @@ func (h *Handler) onValidateProtocolOrder(req message.RequestInterface) message.
 		return req.Fail(fmt.Sprintf("req.Parameters.GetString('service'): %v", err))
 	}
 
-	topologyMutationMu.Lock()
-	defer topologyMutationMu.Unlock()
-
 	service, err := h.service(mushroomURL)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.service(%q): %v", mushroomURL, err))
 	}
 
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	if err := h.config.ValidateProtocolOrdersFor(service); err != nil {
 		return req.Fail(fmt.Sprintf("h.config.ValidateProtocolOrdersFor(%q): %v", mushroomURL, err))
+	}
+
+	return req.Ok(datatype.New())
+}
+
+// onValidateInprocServiceManagers checks every registered service: if inproc, its manager must be inproc.
+func (h *Handler) onValidateInprocServiceManagers(req message.RequestInterface) message.ReplyInterface {
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	if err := h.config.ValidateInprocServiceManagers(); err != nil {
+		return req.Fail(fmt.Sprintf("h.config.ValidateInprocServiceManagers: %v", err))
 	}
 
 	return req.Ok(datatype.New())
@@ -825,12 +871,45 @@ func (h *Handler) onInprocessDepNumber(req message.RequestInterface) message.Rep
 		return req.Fail(fmt.Sprintf("h.service(%q): %v", mushroomURL, err))
 	}
 
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
 	count, err := h.config.InprocessDepNumber(service)
 	if err != nil {
 		return req.Fail(fmt.Sprintf("h.config.InprocessDepNumber(%q): %v", mushroomURL, err))
 	}
 
 	return req.Ok(datatype.New().Set("count", count))
+}
+
+// onSnapshot returns the topology JSON document.
+func (h *Handler) onSnapshot(req message.RequestInterface) message.ReplyInterface {
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	snapshot, err := h.config.Snapshot()
+	if err != nil {
+		return req.Fail(fmt.Sprintf("h.config.Snapshot: %v", err))
+	}
+
+	return req.Ok(datatype.New().Set("snapshot", snapshot))
+}
+
+// onRollback restores the topology from a prior Snapshot.
+func (h *Handler) onRollback(req message.RequestInterface) message.ReplyInterface {
+	snapshot, err := req.RouteParameters().StringValue("snapshot")
+	if err != nil {
+		return req.Fail(fmt.Sprintf("req.Parameters.StringValue('snapshot'): %v", err))
+	}
+
+	topologyMutationMu.Lock()
+	defer topologyMutationMu.Unlock()
+
+	if err := h.config.Rollback(snapshot); err != nil {
+		return req.Fail(fmt.Sprintf("h.config.Rollback: %v", err))
+	}
+
+	return req.Ok(datatype.New())
 }
 
 // Start starts the dependency handler with the available operations.
@@ -895,8 +974,17 @@ func (h *Handler) Start() error {
 	if err := h.handler.Route(ValidateProtocolOrder, h.onValidateProtocolOrder); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", ValidateProtocolOrder, err)
 	}
+	if err := h.handler.Route(ValidateInprocServiceManagers, h.onValidateInprocServiceManagers); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", ValidateInprocServiceManagers, err)
+	}
 	if err := h.handler.Route(InprocessDepNumber, h.onInprocessDepNumber); err != nil {
 		return fmt.Errorf("h.handler.Route('%s'): %v", InprocessDepNumber, err)
+	}
+	if err := h.handler.Route(Snapshot, h.onSnapshot); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", Snapshot, err)
+	}
+	if err := h.handler.Route(Rollback, h.onRollback); err != nil {
+		return fmt.Errorf("h.handler.Route('%s'): %v", Rollback, err)
 	}
 
 	if err := h.handler.Start(); err != nil {

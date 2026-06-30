@@ -153,10 +153,17 @@ type TopologyInterface interface {
 	RemoveService(name string, parent ...string) error
 
 	// ValidateProtocolOrder checks protocol forwarding rules for a service and its
-	// reachable dependency graph.
-	// If service is inproc, but its proxy is tcp, then tcp proxy can't access it.
+	// reachable dependency graph. Caller transport is the handler endpoint (tcp, ipc,
+	// or inproc via inproc-handlers).
 	//
-	// Symbol:
+	// Allowed forwarding:
+	//
+	//	Caller → TCP  → IPC  → inproc
+	//	inproc   ✅     ✅     ✅
+	//	ipc      ✅     ✅     ❌
+	//	tcp      ✅     ❌     ❌
+	//
+	// Symbolic url:
 	//
 	//	err := tp.ValidateProtocolOrder("auth_proxy")
 	//
@@ -164,6 +171,10 @@ type TopologyInterface interface {
 	//
 	//	err := tp.ValidateProtocolOrder("*pkg:$?var=services[name:auth_proxy]")
 	ValidateProtocolOrder(mushroomURL string) error
+
+	// ValidateInprocServiceManagers checks every registered service: if inproc,
+	// its manager must be inproc.
+	ValidateInprocServiceManagers() error
 
 	// InprocessDepNumber counts inproc dependency services reachable from the given
 	// service through handler-deps and command-deps.
@@ -176,6 +187,13 @@ type TopologyInterface interface {
 	//
 	//	count, err := tp.InprocessDepNumber("*pkg:$?var=services[name:auth_proxy]")
 	InprocessDepNumber(mushroomURL string) (int, error)
+
+	// Snapshot returns the topology JSON document as a compact JSON string.
+	Snapshot() (string, error)
+
+	// Rollback restores the topology from a prior Snapshot by replacing the
+	// entire module document.
+	Rollback(snapshot string) error
 }
 
 // DefaultTimeout is the default time to wait before considering the message is not delivered.

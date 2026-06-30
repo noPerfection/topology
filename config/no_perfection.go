@@ -16,6 +16,10 @@ import (
 	"github.com/ahmetson/mushroom/substrates/json_substrate"
 )
 
+// ModuleRootMushroomPath addresses the entire JSON module document when mutating
+// topology through Inoculate (pkg:$ with wildcards resolved from the colony).
+const ModuleRootMushroomPath = "pkg:$#$"
+
 // NoPerfection is the configuration of the entire application.
 // Consists the supported services.
 type NoPerfection struct {
@@ -280,7 +284,7 @@ func (a *NoPerfection) validateTopology(servicesURL string) error {
 
 	visiting := make(map[string]bool)
 	for i := range services {
-		if err := ValidateService(services[i]); err != nil {
+		if err := services[i].Validate(); err != nil {
 			return fmt.Errorf("service %q: %w", services[i].Name, err)
 		}
 		if err := a.validateServiceTopology(services[i], visiting); err != nil {
@@ -663,6 +667,41 @@ func (a *NoPerfection) serviceNamedTargetURL(parent string, serviceName string) 
 		return "", fmt.Errorf("ChildResource(%q): %w", serviceName, err)
 	}
 	return targetHypha.String(), nil
+}
+
+// Snapshot returns the topology JSON document as a compact JSON string.
+func (a NoPerfection) Snapshot() (string, error) {
+	if a.mycelium == nil {
+		return "", fmt.Errorf("topology mycelium not set, call config.Load()")
+	}
+
+	raw, err := a.mycelium.Mineralize()
+	if err != nil {
+		return "", fmt.Errorf("mycelium.Mineralize: %w", err)
+	}
+
+	jsonText, ok := raw.(string)
+	if !ok {
+		return "", fmt.Errorf("mycelium.Mineralize returned %T, want string", raw)
+	}
+
+	return jsonText, nil
+}
+
+// Rollback restores the topology from a prior Snapshot.
+func (a NoPerfection) Rollback(snapshot string) error {
+	if a.mycelium == nil {
+		return fmt.Errorf("topology mycelium not set, call config.Load()")
+	}
+	if snapshot == "" {
+		return fmt.Errorf("snapshot is empty")
+	}
+
+	if err := a.mycelium.Inoculate(ModuleRootMushroomPath, snapshot); err != nil {
+		return fmt.Errorf("mycelium.Inoculate(%q): %w", ModuleRootMushroomPath, err)
+	}
+
+	return a.Save()
 }
 
 // Save saves the app configuration as JSON into its file path.
