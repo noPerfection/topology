@@ -577,15 +577,25 @@ func validateProtocolOrder(callerService Service, caller Handler, outboundServic
 	if err != nil {
 		return err
 	}
+	callerIpc, err := callerService.IsIpcHandler(callerHandler.Category)
+	if err != nil {
+		return err
+	}
 	callerProtocol := "tcp"
-	if callerHandler.Endpoint.IsIpc() {
+	if callerIpc {
 		callerProtocol = "ipc"
 	}
 	outboundProtocol := "tcp"
 	if outboundInproc {
 		outboundProtocol = "inproc"
-	} else if outboundHandler.Endpoint.IsIpc() {
-		outboundProtocol = "ipc"
+	} else {
+		outboundIpc, err := outboundService.IsIpcHandler(outboundHandler.Category)
+		if err != nil {
+			return err
+		}
+		if outboundIpc {
+			outboundProtocol = "ipc"
+		}
 	}
 
 	if callerProtocol == "ipc" && !outboundInproc {

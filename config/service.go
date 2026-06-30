@@ -17,9 +17,12 @@ const (
 	ServiceManagerCategory = "manager"
 	// DefaultCategory is the handler category used when a Mushroom URL resolves to a service.
 	DefaultCategory = "main"
-	// For proxy or extension services, use "inproc-handlers" to list handler categories that should be treated as inproc.
+	// Use "inproc-handlers" to list handler categories that should be treated as inproc.
 	// Its in the service parameters: parameters.inproc-handlers: [list of handler categories]
 	InprocHandlersParameter = "inproc-handlers"
+	// Use "ipc-handlers" to list handler categories that should be treated in ipc protocol but endpoint is tcp.
+	// Its in the service parameters: parameters.ipc-handlers: [list of handler categories]
+	IpcHandlersParameter = "ipc-handlers"
 )
 
 // Command Deps or Service deps per handler of service.
@@ -321,6 +324,7 @@ func endpointsEqual(a, b message.Endpoint) bool {
 
 // If service is not Inproc, and any handler is IPC except the ServiceManagerCategory,
 // then the service is IPC.
+// A handler category listed in parameters.ipc-handlers is also treated as ipc.
 func (s Service) IsIpc() bool {
 	if s.IsInproc() {
 		return false
@@ -336,6 +340,11 @@ func (s Service) IsIpc() bool {
 		if handler.Category == ServiceManagerCategory {
 			continue
 		}
+
+		if serviceParameterHasIpcHandler(s, handler.Category) {
+			return true
+		}
+
 		if handler.Endpoint.IsIpc() {
 			return true
 		}
@@ -344,7 +353,7 @@ func (s Service) IsIpc() bool {
 }
 
 // If any handler except ServiceManagerCategory is inproc, then the service is inproc.
-// For proxy or extension type, the service is inproc if the handler category is listed in parameters.inproc-handlers.
+// A handler category listed in parameters.inproc-handlers is also treated as inproc.
 func (s Service) IsInproc() bool {
 	for _, variant := range s.Handlers {
 		if variant == nil {
@@ -358,10 +367,8 @@ func (s Service) IsInproc() bool {
 			continue
 		}
 
-		if s.Type == ProxyType || s.Type == ExtensionType {
-			if serviceParameterHasInprocHandler(s, handler.Category) {
-				return true
-			}
+		if serviceParameterHasInprocHandler(s, handler.Category) {
+			return true
 		}
 
 		if handler.Endpoint.IsInproc() {
@@ -392,9 +399,9 @@ func (s Service) ValidateInprocServiceManager() error {
 }
 
 // IsInprocHandler reports whether the handler with the given category should be
-// treated as in-process for the service. For Proxy and Extension services, a
-// handler listed in parameters.inproc-handlers is treated as inproc even when
-// its endpoint is IPC or TCP. Otherwise the handler endpoint is used.
+// treated as in-process for the service. A handler listed in parameters.inproc-handlers
+// is treated as inproc even when its endpoint is IPC or TCP. Otherwise the handler
+// endpoint is used.
 func (s Service) IsInprocHandler(category string) (bool, error) {
 	handlerVariant, err := s.HandlerByCategory(category)
 	if err != nil {
@@ -404,12 +411,31 @@ func (s Service) IsInprocHandler(category string) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("handler of '%s' category is not an independent handler", category)
 	}
-	if s.Type == ProxyType || s.Type == ExtensionType {
-		if serviceParameterHasInprocHandler(s, category) {
-			return true, nil
-		}
+	if serviceParameterHasInprocHandler(s, category) {
+		return true, nil
 	}
 	return handler.Endpoint.IsInproc(), nil
+}
+
+// IsIpcHandler reports whether the handler with the given category should be
+// treated as IPC for the service. A handler listed in parameters.ipc-handlers is
+// treated as ipc even when its endpoint is TCP. Otherwise the handler endpoint is used.
+func (s Service) IsIpcHandler(category string) (bool, error) {
+	handlerVariant, err := s.HandlerByCategory(category)
+	if err != nil {
+		return false, err
+	}
+	handler, ok := handlerVariant.AsIndependentHandler()
+	if !ok {
+		return false, fmt.Errorf("handler of '%s' category is not an independent handler", category)
+	}
+	if serviceParameterHasInprocHandler(s, category) {
+		return false, nil
+	}
+	if serviceParameterHasIpcHandler(s, category) {
+		return true, nil
+	}
+	return handler.Endpoint.IsIpc(), nil
 }
 
 func serviceParameterHasInprocHandler(service Service, category string) bool {
@@ -417,6 +443,27 @@ func serviceParameterHasInprocHandler(service Service, category string) bool {
 		return false
 	}
 	raw, exists := service.Parameters[InprocHandlersParameter]
+	if !exists {
+		return false
+	}
+	switch categories := raw.(type) {
+	case []string:
+		return slices.Contains(categories, category)
+	case []interface{}:
+		for _, item := range categories {
+			if name, ok := item.(string); ok && name == category {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func serviceParameterHasIpcHandler(service Service, category string) bool {
+	if service.Parameters == nil || category == "" {
+		return false
+	}
+	raw, exists := service.Parameters[IpcHandlersParameter]
 	if !exists {
 		return false
 	}
@@ -472,6 +519,12 @@ func (s *Service) Validate() error {
 			needsModuleURL = true
 		}
 		if handler.Endpoint.IsIpc() {
+			needsStartCommand = true
+		}
+		if serviceParameterHasInprocHandler(*s, handler.Category) {
+			needsModuleURL = true
+		}
+		if serviceParameterHasIpcHandler(*s, handler.Category) {
 			needsStartCommand = true
 		}
 

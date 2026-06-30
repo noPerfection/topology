@@ -312,7 +312,7 @@ func TestServiceIsInprocHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("independent ignores parameter", func(t *testing.T) {
+	t.Run("independent parameter override", func(t *testing.T) {
 		service := Service{
 			Name:       "service",
 			Type:       IndependentType,
@@ -326,10 +326,157 @@ func TestServiceIsInprocHandler(t *testing.T) {
 		if err != nil {
 			t.Fatalf("IsInprocHandler: %v", err)
 		}
-		if inproc {
-			t.Fatal("IsInprocHandler returned true for IPC handler on Independent with inproc-handlers parameter")
+		if !inproc {
+			t.Fatal("IsInprocHandler returned false for handler listed in inproc-handlers on Independent")
 		}
 	})
+}
+
+func TestServiceIsIpcHandler(t *testing.T) {
+	t.Run("missing handler", func(t *testing.T) {
+		service := Service{Name: "proxy", Type: ProxyType}
+		if _, err := service.IsIpcHandler("main"); err == nil {
+			t.Fatal("IsIpcHandler with missing handler returned nil error")
+		}
+	})
+
+	t.Run("ipc endpoint", func(t *testing.T) {
+		service := Service{
+			Name: "proxy",
+			Type: ProxyType,
+			Handlers: []Handler{IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("tmp/proxy", 0),
+			}},
+		}
+		ipc, err := service.IsIpcHandler("main")
+		if err != nil {
+			t.Fatalf("IsIpcHandler: %v", err)
+		}
+		if !ipc {
+			t.Fatal("IsIpcHandler returned false for ipc endpoint")
+		}
+	})
+
+	t.Run("proxy parameter override", func(t *testing.T) {
+		service := Service{
+			Name:       "proxy",
+			Type:       ProxyType,
+			Parameters: datatype.New().Set(IpcHandlersParameter, []string{"main"}),
+			Handlers: []Handler{IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("proxy", 4101),
+			}},
+		}
+		ipc, err := service.IsIpcHandler("main")
+		if err != nil {
+			t.Fatalf("IsIpcHandler: %v", err)
+		}
+		if !ipc {
+			t.Fatal("IsIpcHandler returned false for handler listed in ipc-handlers")
+		}
+	})
+
+	t.Run("independent parameter override", func(t *testing.T) {
+		service := Service{
+			Name:       "service",
+			Type:       IndependentType,
+			Parameters: datatype.New().Set(IpcHandlersParameter, []string{"main"}),
+			Handlers: []Handler{IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("service", 4101),
+			}},
+		}
+		ipc, err := service.IsIpcHandler("main")
+		if err != nil {
+			t.Fatalf("IsIpcHandler: %v", err)
+		}
+		if !ipc {
+			t.Fatal("IsIpcHandler returned false for handler listed in ipc-handlers on Independent")
+		}
+	})
+
+	t.Run("inproc parameter takes precedence", func(t *testing.T) {
+		service := Service{
+			Name: "proxy",
+			Type: ProxyType,
+			Parameters: datatype.New().
+				Set(InprocHandlersParameter, []string{"main"}).
+				Set(IpcHandlersParameter, []string{"main"}),
+			Handlers: []Handler{IndependentHandler{
+				Category: "main",
+				Endpoint: message.NewEndpoint("proxy", 4101),
+			}},
+		}
+		ipc, err := service.IsIpcHandler("main")
+		if err != nil {
+			t.Fatalf("IsIpcHandler: %v", err)
+		}
+		if ipc {
+			t.Fatal("IsIpcHandler returned true when handler is listed in inproc-handlers")
+		}
+	})
+}
+
+func TestServiceIsIpcWithIpcHandlersParameter(t *testing.T) {
+	service := Service{
+		Name:       "proxy",
+		Type:       ProxyType,
+		Parameters: datatype.New().Set(IpcHandlersParameter, []string{"main"}),
+		Handlers: []Handler{IndependentHandler{
+			Category: "main",
+			Endpoint: message.NewEndpoint("proxy", 4101),
+		}},
+	}
+	if !service.IsIpc() {
+		t.Fatal("Service.IsIpc returned false for TCP handler listed in ipc-handlers")
+	}
+}
+
+func TestServiceValidateIpcHandlersRequiresStartCommand(t *testing.T) {
+	service := Service{
+		Type: ProxyType,
+		Name: "tcp-ipc-proxy",
+		Parameters: datatype.New().Set(IpcHandlersParameter, []string{"main"}),
+		Handlers: []Handler{
+			ProxyHandler{
+				IndependentHandler: IndependentHandler{
+					Type:     ReplierType,
+					Category: "main",
+					Endpoint: message.NewEndpoint("tcp-ipc-proxy", 4101),
+				},
+			},
+		},
+	}
+	if err := service.Validate(); err == nil {
+		t.Fatal("ValidateService with ipc-handlers and no start-command returned nil error")
+	}
+
+	service.StartCommand = "go run ./cmd/tcp-ipc-proxy"
+	if err := service.Validate(); err != nil {
+		t.Fatalf("ValidateService with ipc-handlers and start-command: %v", err)
+	}
+}
+
+func TestServiceValidateInprocHandlersRequiresModuleURL(t *testing.T) {
+	service := Service{
+		Type:      IndependentType,
+		Name:      "tcp-inproc-service",
+		Parameters: datatype.New().Set(InprocHandlersParameter, []string{"main"}),
+		Handlers: []Handler{IndependentHandler{
+			Type:     ReplierType,
+			Category: "main",
+			Endpoint: message.NewEndpoint("tcp-inproc-service", 4101),
+		}},
+	}
+	if err := service.Validate(); err == nil {
+		t.Fatal("ValidateService with inproc-handlers and no module-url returned nil error")
+	}
+
+	service.ModuleUrl = "github.com/noPerfection/tcp-inproc-service"
+	if err := service.Validate(); err != nil {
+		t.Fatalf("ValidateService with inproc-handlers and module-url: %v", err)
+	}
 }
 
 func TestValidateDepService(t *testing.T) {
